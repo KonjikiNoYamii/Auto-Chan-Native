@@ -7,17 +7,11 @@ class WaifuExpressionController(
     private val imageView: ImageView
 ) {
 
-    private var currentState: WaifuState = WaifuState.IDLE
+    fun update() {
 
-    fun setState(state: WaifuState) {
-        if (currentState == state) return
-
-        currentState = state
-        update()
-    }
-
-    private fun update() {
-        val resId = when (currentState) {
+        val resId = when (
+            WaifuStateManager.currentState
+        ) {
 
             WaifuState.IDLE ->
                 R.drawable.mybinik
