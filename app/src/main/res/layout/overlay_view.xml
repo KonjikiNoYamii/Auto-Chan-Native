@@ -6,10 +6,31 @@
     android:focusable="true"
     android:focusableInTouchMode="true">
 
-    <ImageView
-        android:id="@+id/waifuImage"
-        android:layout_width="120dp"
-        android:layout_height="120dp"
-        android:src="@drawable/mybinik"
-        android:scaleType="fitCenter"/>
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Speech Bubble -->
+        <TextView
+            android:id="@+id/bubbleText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:padding="10dp"
+            android:textColor="#FFFFFF"
+            android:background="#AA000000"
+            android:visibility="gone"
+            android:text="..."
+            android:textSize="14sp" />
+
+        <!-- Waifu Image -->
+        <ImageView
+            android:id="@+id/waifuImage"
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:src="@drawable/mybinik"
+            android:scaleType="fitCenter"/>
+
+    </LinearLayout>
+
 </FrameLayout>

@@ -8,7 +8,6 @@ object CommandAliases {
             "open_spotify",
             "spotify",
             "buka spotify",
-            "play music",
             "putar lagu",
             "musik",
             "play lagu"
@@ -42,6 +41,30 @@ object CommandAliases {
             "overlay",
             "waifu",
             "start overlay"
-        )
+        ),
+
+        "media_play_pause" to listOf(
+            "play musik",
+            "pause musik",
+            "play music",
+            "pause music",
+            "putar musik",
+            "hentikan musik",
+            "lanjutkan musik",
+            "resume music"
+        ),
+
+        "media_next" to listOf(
+            "lagu berikutnya",
+            "next song",
+            "musik selanjutnya",
+            "skip lagu"
+        ),
+
+        "media_previous" to listOf(
+            "lagu sebelumnya",
+            "previous song",
+            "musik sebelumnya"
+        ),
     )
 }

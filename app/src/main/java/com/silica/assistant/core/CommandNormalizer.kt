@@ -1,12 +1,43 @@
 package com.silica.assistant.core
 
+import com.silica.assistant.core.model.CommandResult
+
 object CommandNormalizer {
 
-    fun normalize(input: String): String? {
+    private fun normalizeText(input: String): String {
+        return input.lowercase()
+                .trim()
+                .replace(Regex("[^a-z0-9\\s]"), "") // hapus simbol
+                .replace(Regex("\\s+"), " ") // rapikan spasi
+    }
 
-        val cleanInput = input
-            .lowercase()
-            .trim()
+    private fun tokenize(input: String): List<String> {
+        return input.split(" ").filter { it.isNotBlank() }
+    }
+
+    private fun score(inputTokens: List<String>, alias: String): Int {
+        val aliasTokens = alias.split(" ")
+
+        var score = 0
+
+        for (token in aliasTokens) {
+            if (inputTokens.contains(token)) {
+                score += 2
+            }
+        }
+
+        // bonus jika alias muncul full phrase
+        if (inputTokens.joinToString(" ").contains(alias)) {
+            score += 5
+        }
+
+        return score
+    }
+
+    fun normalize(input: String): CommandResult? {
+
+        val clean = normalizeText(input)
+        val tokens = tokenize(clean)
 
         var bestCommand: String? = null
         var bestScore = 0
@@ -15,19 +46,18 @@ object CommandNormalizer {
 
             for (alias in aliases) {
 
-                if (cleanInput.contains(alias)) {
+                val aliasClean = normalizeText(alias)
+                val currentScore = score(tokens, aliasClean)
 
-                    val score = alias.length
-
-                    if (score > bestScore) {
-
-                        bestScore = score
-                        bestCommand = command
-                    }
+                if (currentScore > bestScore) {
+                    bestScore = currentScore
+                    bestCommand = command
                 }
             }
         }
 
-        return bestCommand
+        return if (bestCommand != null) {
+            CommandResult(command = bestCommand, confidence = bestScore, rawInput = input)
+        } else null
     }
 }
