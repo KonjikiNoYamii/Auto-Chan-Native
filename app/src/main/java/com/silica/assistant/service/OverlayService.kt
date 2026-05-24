@@ -20,6 +20,7 @@ import android.widget.TextView
 import com.silica.assistant.R
 import com.silica.assistant.core.CommandManager
 import com.silica.assistant.core.overlay.OverlayEventBus
+import com.silica.assistant.core.voice.VoiceManager
 import com.silica.assistant.overlay.WaifuExpressionController
 import com.silica.assistant.overlay.WaifuState
 import com.silica.assistant.overlay.WaifuStateManager
@@ -55,16 +56,17 @@ class OverlayService : Service() {
 
     private var bubbleHideRunnable: Runnable? = null
 
-    private val expressionUpdater =
-            object : Runnable {
+private val expressionUpdater =
+    object : Runnable {
+        override fun run() {
 
-                override fun run() {
-
-                    controller.update()
-
-                    handler.postDelayed(this, 200)
-                }
+            if (::controller.isInitialized && overlayView.windowToken != null) {
+                controller.update()
             }
+
+            handler.postDelayed(this, 100) // 🔥 lebih smooth dari 200
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -81,9 +83,16 @@ class OverlayService : Service() {
 
         controller = WaifuExpressionController(waifuImage)
 
+        handler.post(expressionUpdater)
+
         OverlayEventBus.onBubble = { text -> showBubble(text) }
 
-        handler.post(expressionUpdater)
+        VoiceManager.init(this)
+
+        VoiceManager.onResult = { text ->
+            OverlayEventBus.onBubble?.invoke("🎤 $text")
+            CommandManager.execute(this, text)
+        }
 
         WaifuStateManager.currentState = WaifuState.IDLE
 
@@ -120,7 +129,7 @@ class OverlayService : Service() {
                     longPressHandler.postDelayed(
                             {
                                 longPressTriggered = true
-                                startListening()
+                                VoiceManager.start()
                             },
                             600
                     )
@@ -130,18 +139,16 @@ class OverlayService : Service() {
                 MotionEvent.ACTION_MOVE -> {
 
                     val dx = (event.rawX - touchX).toInt()
-
                     val dy = (event.rawY - touchY).toInt()
 
                     if (dx * dx + dy * dy > 400) {
-
                         isMoving = true
-
                         longPressHandler.removeCallbacksAndMessages(null)
                     }
 
                     params.x = initialX + dx
                     params.y = initialY + dy
+                    WaifuStateManager.currentState = WaifuState.IDLE
 
                     windowManager.updateViewLayout(overlayView, params)
 
@@ -151,17 +158,14 @@ class OverlayService : Service() {
 
                     longPressHandler.removeCallbacksAndMessages(null)
 
-                    if (longPressTriggered) {
-
-                        stopListening()
-                    } else {
-
-                        WaifuStateManager.currentState = WaifuState.HAPPY
-
-                        handler.postDelayed(
-                                { WaifuStateManager.currentState = WaifuState.IDLE },
-                                800
-                        )
+                    if (!isMoving) {
+                        if (!isListening) {
+                            VoiceManager.start()
+                            WaifuStateManager.currentState = WaifuState.LISTENING
+                        } else {
+                            VoiceManager.stop()
+                            WaifuStateManager.currentState = WaifuState.IDLE
+                        }
                     }
 
                     true
@@ -184,9 +188,6 @@ class OverlayService : Service() {
 
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, "id-ID")
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-
-                    // matikan beep bawaan
-                    putExtra("android.speech.extra.DICTATION_MODE", true)
                 }
 
         speechRecognizer?.setRecognitionListener(

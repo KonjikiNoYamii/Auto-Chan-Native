@@ -80,4 +80,19 @@ object IntentController {
 
         context.startActivity(intent)
     }
+
+    fun searchGoogle(context: Context, query: String) {
+
+        val encodedQuery = Uri.encode(query)
+
+        val intent =
+                Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse("https://www.google.com/search?q=$encodedQuery")
+                )
+
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        context.startActivity(intent)
+    }
 }

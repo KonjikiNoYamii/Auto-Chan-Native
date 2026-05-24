@@ -7,12 +7,24 @@ import com.silica.assistant.core.knowledge.KnowledgeEngine
 import com.silica.assistant.core.knowledge.KnowledgeParser
 import com.silica.assistant.core.media.MediaController
 import com.silica.assistant.core.overlay.OverlayEventBus
+import com.silica.assistant.core.parser.SearchCommandParser
 import com.silica.assistant.service.OverlayService
 
 object CommandManager {
 
     fun execute(context: Context, rawInput: String) {
         CommandHistoryManager.add(rawInput)
+
+        val searchQuery = SearchCommandParser.parse(rawInput)
+
+        if (searchQuery != null) {
+
+            OverlayEventBus.onBubble?.invoke("🔎 Searching $searchQuery")
+
+            IntentController.searchGoogle(context, searchQuery)
+
+            return
+        }
 
         val result = CommandNormalizer.normalize(rawInput)
         val knowledgeQuery = KnowledgeParser.parse(rawInput)
