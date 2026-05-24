@@ -57,6 +57,7 @@ object CommandAliases {
         "media_next" to listOf(
             "lagu berikutnya",
             "next song",
+            "next music",
             "musik selanjutnya",
             "skip lagu"
         ),

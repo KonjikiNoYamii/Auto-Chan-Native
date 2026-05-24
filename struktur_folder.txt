@@ -1,0 +1,56 @@
+app/src/main/
+├── AndroidManifest.xml
+├── java/com/silica/assistant/
+│   ├── MainActivity.kt
+│   ├── core/
+│   │   ├── CommandAliases.kt
+│   │   ├── CommandHistoryManager.kt
+│   │   ├── CommandManager.kt
+│   │   ├── CommandNormalizer.kt
+│   │   ├── IntentController.kt
+│   │   ├── actions/
+│   │   │   ├── Action.kt
+│   │   │   ├── ActionExecutor.kt
+│   │   │   └── ActionMapper.kt
+│   │   ├── knowlegde/
+│   │   │   ├── KnowledgeEngine.kt
+│   │   │   ├── KnowledgeParser.kt
+│   │   │   └── KnowledgeQuery.kt
+│   │   ├── media/
+│   │   │   └── MediaController.kt
+│   │   ├── overlay/
+│   │   │   └── OverlayEventBus.kt
+│   │   ├── parser/
+│   │   │   └── SearchCommandParser.kt
+│   │   └── voice/
+│   │       ├── VoiceForegroundService.kt
+│   │       └── VoiceManager.kt
+│   ├── model/
+│   │   ├── CommandLog.kt
+│   │   └── CommandResult.kt
+│   ├── overlay/
+│   │   ├── WaifuExpressionController.kt
+│   │   ├── WaifuState.kt
+│   │   └── WaifuStateManager.kt
+│   ├── service/
+│   │   └── OverlayService.kt
+│   └── ui/
+│       ├── MainScreen.kt
+│       ├── components/
+│       │   ├── CommandHistorySection.kt
+│       │   ├── CommandInputSection.kt
+│       │   ├── QuickActionsSection.kt
+│       │   └── VoiceCommandSection.kt
+│       ├── state/
+│       │   └── AssistantUiState.kt
+│       └── viewmodel/
+│           └── AssistantViewModel.kt.kt
+└── res/
+    ├── drawable/
+    │   ├── mybinik.png
+    │   ├── mybinikmangap.png
+    │   └── mybinikmendengarkan.png
+    ├── layout/
+    │   └── overlay_view.xml
+    └── raw/
+        └── pop.mp3

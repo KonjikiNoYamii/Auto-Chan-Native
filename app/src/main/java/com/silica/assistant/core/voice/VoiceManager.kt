@@ -3,25 +3,70 @@ package com.silica.assistant.core.voice
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
 
 object VoiceManager {
 
+    private const val TAG = "VoiceManager"
+
+    private var appContext: Context? = null
     private var speechRecognizer: SpeechRecognizer? = null
     private var speechIntent: Intent? = null
 
     private var isListening = false
+    private var isDestroyed = false
 
     var onResult: ((String) -> Unit)? = null
     var onStateChange: ((Boolean) -> Unit)? = null
+
+    // 🧠 watchdog untuk detect silent death
+    private val handler = Handler(Looper.getMainLooper())
+
+    private var lastStartTime = 0L
+
+    private val watchdog = object : Runnable {
+        override fun run() {
+
+            if (isDestroyed) return
+
+            val now = System.currentTimeMillis()
+
+            // 🔥 kalau terlalu lama tanpa hasil → dianggap mati
+            if (isListening && now - lastStartTime > 15000) {
+                Log.w(TAG, "Watchdog triggered restart (silent death suspected)")
+                restartRecognizer()
+            }
+
+            handler.postDelayed(this, 8000)
+        }
+    }
 
     fun init(context: Context) {
 
         if (speechRecognizer != null) return
 
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
+        appContext = context.applicationContext
+
+        createRecognizer()
+
+        handler.post(watchdog)
+
+        Log.d(TAG, "VoiceManager initialized")
+    }
+
+    // =========================
+    // CORE RECOGNIZER
+    // =========================
+    private fun createRecognizer() {
+
+        val ctx = appContext ?: return
+
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(ctx)
 
         speechIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(
@@ -34,7 +79,35 @@ object VoiceManager {
 
         speechRecognizer?.setRecognitionListener(object : RecognitionListener {
 
+            override fun onReadyForSpeech(params: Bundle?) {
+                Log.d(TAG, "Ready for speech")
+            }
+
+            override fun onBeginningOfSpeech() {
+                Log.d(TAG, "Speech started")
+            }
+
+            override fun onRmsChanged(rmsdB: Float) {}
+
+            override fun onBufferReceived(buffer: ByteArray?) {}
+
+            override fun onEndOfSpeech() {
+                Log.d(TAG, "End of speech")
+            }
+
+            override fun onError(error: Int) {
+
+                Log.e(TAG, "Error: $error")
+
+                isListening = false
+                onStateChange?.invoke(false)
+
+                // 🔥 critical fix: always recover
+                restartRecognizer()
+            }
+
             override fun onResults(results: Bundle?) {
+
                 val text =
                     results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         ?.firstOrNull()
@@ -44,43 +117,100 @@ object VoiceManager {
                 }
 
                 stop()
+
+                // 🔥 siap lagi tanpa delay manual
+                restartRecognizer()
             }
 
-            override fun onError(error: Int) {
-                stop()
-            }
-
-            override fun onReadyForSpeech(params: Bundle?) {}
-            override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {}
-            override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {}
             override fun onPartialResults(partialResults: Bundle?) {}
+
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
     }
 
+    // =========================
+    // PUBLIC API
+    // =========================
     fun start() {
+
         if (isListening) return
 
-        isListening = true
-        onStateChange?.invoke(true)
+        val recognizer = speechRecognizer ?: run {
+            restartRecognizer()
+            return
+        }
 
-        speechRecognizer?.startListening(speechIntent)
+        try {
+            isListening = true
+            lastStartTime = System.currentTimeMillis()
+
+            onStateChange?.invoke(true)
+
+            recognizer.startListening(speechIntent)
+
+            Log.d(TAG, "startListening() called")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "start failed", e)
+            restartRecognizer()
+        }
     }
 
     fun stop() {
+
         if (!isListening) return
 
         isListening = false
         onStateChange?.invoke(false)
 
-        speechRecognizer?.stopListening()
+        try {
+            speechRecognizer?.stopListening()
+            speechRecognizer?.cancel()
+        } catch (e: Exception) {
+            Log.e(TAG, "stop error", e)
+        }
+
+        Log.d(TAG, "stopped")
     }
 
+    // =========================
+    // 🔥 RECOVERY SYSTEM
+    // =========================
+    private fun restartRecognizer() {
+
+        try {
+            Log.w(TAG, "Restarting SpeechRecognizer...")
+
+            isListening = false
+
+            speechRecognizer?.cancel()
+            speechRecognizer?.destroy()
+            speechRecognizer = null
+
+            createRecognizer()
+
+        } catch (e: Exception) {
+            Log.e(TAG, "restart failed", e)
+        }
+    }
+
+    // =========================
+    // CLEANUP
+    // =========================
     fun destroy() {
-        speechRecognizer?.destroy()
+
+        isDestroyed = true
+
+        handler.removeCallbacks(watchdog)
+
+        try {
+            speechRecognizer?.cancel()
+            speechRecognizer?.destroy()
+        } catch (_: Exception) {}
+
         speechRecognizer = null
         isListening = false
+
+        Log.d(TAG, "VoiceManager destroyed")
     }
 }

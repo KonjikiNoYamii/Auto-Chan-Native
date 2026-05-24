@@ -32,8 +32,12 @@
 
         <service
             android:name=".service.OverlayService"
+            android:exported="false" />
+    
+        <service
+            android:name=".service.VoiceForegroundService"
             android:exported="false"
-            android:foregroundServiceType="mediaProjection" />
+            android:foregroundServiceType="microphone" />
 
     </application>
 
