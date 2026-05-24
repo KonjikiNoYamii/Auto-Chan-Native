@@ -2,6 +2,8 @@ package com.silica.assistant.core
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.widget.Toast
 import com.silica.assistant.core.knowledge.KnowledgeEngine
 import com.silica.assistant.core.knowledge.KnowledgeParser
@@ -57,9 +59,17 @@ object CommandManager {
             }
             "start_overlay" -> {
 
-                val intent = Intent(context, OverlayService::class.java)
-
-                context.startService(intent)
+                if (Settings.canDrawOverlays(context)) {
+                    val intent = Intent(context, OverlayService::class.java)
+                    context.startService(intent)
+                } else {
+                    val intent = Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:${context.packageName}")
+                    )
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                }
             }
             "media_play_pause" -> {
                 MediaController.playPause(context)
