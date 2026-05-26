@@ -27,24 +27,28 @@ object VoiceManager {
     // 🧠 watchdog untuk detect silent death
     private val handler = Handler(Looper.getMainLooper())
 
-    private var lastStartTime = 0L
+    private var lastRealSpeechTime = 0L
+    private var resultCount = 0
+    private var isRestarting = false
 
-    private val watchdog = object : Runnable {
-        override fun run() {
+    private val watchdog =
+            object : Runnable {
+                override fun run() {
 
-            if (isDestroyed) return
+                    if (isDestroyed) return
 
-            val now = System.currentTimeMillis()
+                    if (isListening) {
+                        val now = System.currentTimeMillis()
+                        if (now - lastRealSpeechTime > 15000) {
+                            Log.w(TAG, "Watchdog triggered restart (no real speech for 15s)")
+                            resultCount = 0
+                            restartRecognizer()
+                        }
+                    }
 
-            // 🔥 kalau terlalu lama tanpa hasil → dianggap mati
-            if (isListening && now - lastStartTime > 15000) {
-                Log.w(TAG, "Watchdog triggered restart (silent death suspected)")
-                restartRecognizer()
+                    handler.postDelayed(this, 8000)
+                }
             }
-
-            handler.postDelayed(this, 8000)
-        }
-    }
 
     fun init(context: Context) {
 
@@ -68,64 +72,76 @@ object VoiceManager {
 
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(ctx)
 
-        speechIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(
-                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-            )
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "id-ID")
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-        }
-
-        speechRecognizer?.setRecognitionListener(object : RecognitionListener {
-
-            override fun onReadyForSpeech(params: Bundle?) {
-                Log.d(TAG, "Ready for speech")
-            }
-
-            override fun onBeginningOfSpeech() {
-                Log.d(TAG, "Speech started")
-            }
-
-            override fun onRmsChanged(rmsdB: Float) {}
-
-            override fun onBufferReceived(buffer: ByteArray?) {}
-
-            override fun onEndOfSpeech() {
-                Log.d(TAG, "End of speech")
-            }
-
-            override fun onError(error: Int) {
-
-                Log.e(TAG, "Error: $error")
-
-                isListening = false
-                onStateChange?.invoke(false)
-
-                // 🔥 critical fix: always recover
-                restartRecognizer()
-            }
-
-            override fun onResults(results: Bundle?) {
-
-                val text =
-                    results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        ?.firstOrNull()
-
-                if (text != null) {
-                    onResult?.invoke(text)
+        speechIntent =
+                Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(
+                            RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                            RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                    )
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "id-ID")
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 }
 
-                stop()
+        speechRecognizer?.setRecognitionListener(
+                object : RecognitionListener {
 
-                // 🔥 siap lagi tanpa delay manual
-                restartRecognizer()
-            }
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        Log.d(TAG, "Ready for speech")
+                    }
 
-            override fun onPartialResults(partialResults: Bundle?) {}
+                    override fun onBeginningOfSpeech() {
+                        lastRealSpeechTime = System.currentTimeMillis()
+                        Log.d(TAG, "Speech started")
+                    }
 
-            override fun onEvent(eventType: Int, params: Bundle?) {}
-        })
+                    override fun onRmsChanged(rmsdB: Float) {}
+
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+
+                    override fun onEndOfSpeech() {
+                        Log.d(TAG, "End of speech")
+                    }
+
+                    override fun onError(error: Int) {
+
+                        Log.e(TAG, "Error: $error")
+
+                        isListening = false
+                        onStateChange?.invoke(false)
+                        lastRealSpeechTime = System.currentTimeMillis()
+
+                        // 🔥 critical fix: always recover
+                        resultCount = 0
+                        restartRecognizer()
+                    }
+
+                    override fun onResults(results: Bundle?) {
+
+                        lastRealSpeechTime = System.currentTimeMillis()
+
+                        val text =
+                                results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                                        ?.firstOrNull()
+
+                        if (text != null) {
+                            onResult?.invoke(text)
+                        }
+
+                        stop()
+
+                        // restart periodik tiap 5 hasil sukses
+                        resultCount++
+                        if (resultCount >= 5) {
+                            resultCount = 0
+                            restartRecognizer()
+                        }
+                    }
+
+                    override fun onPartialResults(partialResults: Bundle?) {}
+
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
+                }
+        )
     }
 
     // =========================
@@ -135,21 +151,22 @@ object VoiceManager {
 
         if (isListening) return
 
-        val recognizer = speechRecognizer ?: run {
-            restartRecognizer()
-            return
-        }
+        val recognizer =
+                speechRecognizer
+                        ?: run {
+                            restartRecognizer()
+                            return
+                        }
 
         try {
             isListening = true
-            lastStartTime = System.currentTimeMillis()
+            lastRealSpeechTime = System.currentTimeMillis()
 
             onStateChange?.invoke(true)
 
             recognizer.startListening(speechIntent)
 
             Log.d(TAG, "startListening() called")
-
         } catch (e: Exception) {
             Log.e(TAG, "start failed", e)
             restartRecognizer()
@@ -165,7 +182,6 @@ object VoiceManager {
 
         try {
             speechRecognizer?.stopListening()
-            speechRecognizer?.cancel()
         } catch (e: Exception) {
             Log.e(TAG, "stop error", e)
         }
@@ -178,6 +194,10 @@ object VoiceManager {
     // =========================
     private fun restartRecognizer() {
 
+        if (isRestarting) return
+
+        isRestarting = true
+
         try {
             Log.w(TAG, "Restarting SpeechRecognizer...")
 
@@ -188,9 +208,12 @@ object VoiceManager {
             speechRecognizer = null
 
             createRecognizer()
-
         } catch (e: Exception) {
             Log.e(TAG, "restart failed", e)
+            
+        } finally {
+
+            isRestarting = false
         }
     }
 

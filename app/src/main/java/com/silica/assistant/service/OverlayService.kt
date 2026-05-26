@@ -35,6 +35,7 @@ class OverlayService : Service() {
     private var popPlayer: MediaPlayer? = null
 
     private var isMoving = false
+    private var longPressTriggered = false
 
     private var initialX = 0
     private var initialY = 0
@@ -56,7 +57,7 @@ class OverlayService : Service() {
                         controller.update()
                     }
 
-                    handler.postDelayed(this, 100)
+                    handler.postDelayed(this, 500)
                 }
             }
 
@@ -119,6 +120,7 @@ class OverlayService : Service() {
                 MotionEvent.ACTION_DOWN -> {
 
                     isMoving = false
+                    longPressTriggered = false
 
                     initialX = params.x
                     initialY = params.y
@@ -127,7 +129,10 @@ class OverlayService : Service() {
                     touchY = event.rawY
 
                     // long press → voice start
-                    longPressHandler.postDelayed({ VoiceManager.start() }, 600)
+                    longPressHandler.postDelayed({
+                        longPressTriggered = true
+                        VoiceManager.start()
+                    }, 600)
 
                     true
                 }
@@ -154,7 +159,7 @@ class OverlayService : Service() {
 
                     longPressHandler.removeCallbacksAndMessages(null)
 
-                    if (!isMoving) {
+                    if (!isMoving && !longPressTriggered) {
 
                         // toggle voice via SINGLE SYSTEM
                         VoiceManager.start()
@@ -210,6 +215,8 @@ class OverlayService : Service() {
         super.onDestroy()
 
         OverlayEventBus.onBubble = null
+        VoiceManager.onResult = null
+        VoiceManager.onStateChange = null
 
         handler.removeCallbacks(expressionUpdater)
         longPressHandler.removeCallbacksAndMessages(null)

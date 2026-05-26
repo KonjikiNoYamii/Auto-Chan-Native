@@ -16,6 +16,12 @@ object ActionMapper {
             "open_settings" -> Action.OpenSettings
             "start_overlay" -> Action.StartOverlay
 
+            // 🔥 VOLUME COMMANDS
+            "volume_up" -> Action.VolumeUp
+            "volume_down" -> Action.VolumeDown
+            "mute_volume" -> Action.MuteVolume
+            "max_volume" -> Action.MaxVolume
+
             else -> Action.Unknown(result.rawInput)
         }
     }

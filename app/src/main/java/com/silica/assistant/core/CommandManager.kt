@@ -83,6 +83,22 @@ object CommandManager {
                 MediaController.previous(context)
                 OverlayEventBus.onBubble?.invoke("⏮ Previous Song")
             }
+            "volume_up" -> {
+                com.silica.assistant.core.system.VolumeController.volumeUp(context)
+                OverlayEventBus.onBubble?.invoke("🔊 Volume Naik")
+            }
+            "volume_down" -> {
+                com.silica.assistant.core.system.VolumeController.volumeDown(context)
+                OverlayEventBus.onBubble?.invoke("🔉 Volume Turun")
+            }
+            "mute_volume" -> {
+                com.silica.assistant.core.system.VolumeController.mute(context)
+                OverlayEventBus.onBubble?.invoke("🔇 Mute")
+            }
+            "max_volume" -> {
+                com.silica.assistant.core.system.VolumeController.maxVolume(context)
+                OverlayEventBus.onBubble?.invoke("📢 Volume Maksimal")
+            }
             else -> {
                 Toast.makeText(
                                 context,

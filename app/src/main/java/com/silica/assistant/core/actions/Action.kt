@@ -9,5 +9,11 @@ sealed class Action {
 
     object StartOverlay : Action()
 
+    // 🔥 VOLUME ACTIONS
+    object VolumeUp : Action()
+    object VolumeDown : Action()
+    object MuteVolume : Action()
+    object MaxVolume : Action()
+
     data class Unknown(val raw: String) : Action()
 }

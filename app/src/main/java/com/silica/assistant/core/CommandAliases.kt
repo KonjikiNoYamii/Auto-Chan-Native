@@ -67,5 +67,33 @@ object CommandAliases {
             "previous song",
             "musik sebelumnya"
         ),
+
+        "volume_up" to listOf(
+            "naikkan volume",
+            "volume naik",
+            "besarkan suara",
+            "suara lebih keras"
+        ),
+        
+        "volume_down" to listOf(
+            "turunkan volume",
+            "kecilkan volume",
+            "volume turun",
+            "pelankan suara"
+        ),
+        
+        "mute_volume" to listOf(
+            "mute",
+            "matikan suara",
+            "diamkan hp"
+        ),
+        
+        "max_volume" to listOf(
+            "volume maksimal",
+            "full volume",
+            "suara maksimal"
+        )
+
+        
     )
 }
