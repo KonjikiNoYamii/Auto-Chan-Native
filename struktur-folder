@@ -1,0 +1,69 @@
+📁 SilicaAssistant — Android Voice Assistant
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+app/src/main/java/com/silica/assistant/
+│
+├── 📄 MainActivity.kt
+│
+├── 📁 core/
+│   ├── 📄 CommandAliases.kt         # Daftar alias perintah suara
+│   ├── 📄 CommandHistoryManager.kt  # Riwayat perintah
+│   ├── 📄 CommandManager.kt         # Router utama voice → aksi
+│   ├── 📄 CommandNormalizer.kt      # Token-scoring normalizer
+│   ├── 📄 IntentController.kt       # Intent untuk buka app/setting/search
+│   ├── 📄 WakeWord.kt               # Filter wake word "silica"/"silika"
+│   │
+│   ├── 📁 actions/                  # Action system (tidak dipakai langsung)
+│   │   ├── 📄 Action.kt
+│   │   ├── 📄 ActionExecutor.kt
+│   │   └── 📄 ActionMapper.kt
+│   │
+│   ├── 📁 knowlegde/               # [typo] Q&A game (Genshin, ML, Valorant)
+│   │   ├── 📄 KnowledgeEngine.kt
+│   │   ├── 📄 KnowledgeParser.kt
+│   │   └── 📄 KnowledgeQuery.kt
+│   │
+│   ├── 📁 media/
+│   │   └── 📄 MediaController.kt    # Simulasi tombol media (play/pause/next)
+│   │
+│   ├── 📁 overlay/
+│   │   └── 📄 OverlayEventBus.kt    # Bus callback sederhana ke overlay
+│   │
+│   ├── 📁 parser/
+│   │   └── 📄 SearchCommandParser.kt # Deteksi "search/cari" prefix
+│   │
+│   ├── 📁 system/                   # Kontrol sistem
+│   │   ├── 📄 AppLauncher.kt        # [baru] Buka app dinamis
+│   │   ├── 📄 BrightnessController.kt
+│   │   └── 📄 VolumeController.kt
+│   │
+│   └── 📁 voice/                    # Speech recognition engine
+│       ├── 📄 VoiceForegroundService.kt
+│       └── 📄 VoiceManager.kt
+│
+├── 📁 model/
+│   ├── 📄 CommandLog.kt
+│   └── 📄 CommandResult.kt
+│
+├── 📁 overlay/                      # Waifu expression/state
+│   ├── 📄 WaifuExpressionController.kt
+│   ├── 📄 WaifuState.kt
+│   └── 📄 WaifuStateManager.kt
+│
+├── 📁 service/
+│   └── 📄 OverlayService.kt         # System overlay (TYPE_APPLICATION_OVERLAY)
+│
+└── 📁 ui/                           # Jetpack Compose UI
+    ├── 📄 MainScreen.kt
+    ├── 📁 components/
+    │   ├── 📄 CommandHistorySection.kt
+    │   ├── 📄 CommandInputSection.kt
+    │   ├── 📄 QuickActionsSection.kt
+    │   └── 📄 VoiceCommandSection.kt
+    ├── 📁 state/
+    │   └── 📄 AssistantUiState.kt
+    └── 📁 viewmodel/
+        └── 📄 AssistantViewModel.kt
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Total: 34 file Kotlin

@@ -5,20 +5,42 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
+import com.silica.assistant.core.config.AssistantConfig
 import com.silica.assistant.core.knowledge.KnowledgeEngine
 import com.silica.assistant.core.knowledge.KnowledgeParser
 import com.silica.assistant.core.media.MediaController
 import com.silica.assistant.core.overlay.OverlayEventBus
 import com.silica.assistant.core.parser.SearchCommandParser
+import com.silica.assistant.core.system.AppLauncher
 import com.silica.assistant.core.system.BrightnessController
 import com.silica.assistant.service.OverlayService
 
 object CommandManager {
 
     fun execute(context: Context, rawInput: String) {
-        CommandHistoryManager.add(rawInput)
+        // direct command keys (from button clicks) bypass wake word filter
+        val commandKeys = CommandAliases.aliases.keys
+        
+        val effectiveInput =
+                if (rawInput.trim().lowercase() in commandKeys) {
 
-        val searchQuery = SearchCommandParser.parse(rawInput)
+                    rawInput.lowercase().trim()
+                } else {
+
+                    if (AssistantConfig.requireWakeWord) {
+
+                        val wake = WakeWord.extractCommand(rawInput) ?: return
+
+                        wake
+                    } else {
+
+                        rawInput.lowercase().trim()
+                    }
+                }
+
+        CommandHistoryManager.add(effectiveInput)
+
+        val searchQuery = SearchCommandParser.parse(effectiveInput)
 
         if (searchQuery != null) {
 
@@ -29,8 +51,25 @@ object CommandManager {
             return
         }
 
-        val result = CommandNormalizer.normalize(rawInput)
-        val knowledgeQuery = KnowledgeParser.parse(rawInput)
+        // dynamic app launcher: "buka discord", "buka whatsapp", etc.
+        val normalized = effectiveInput.lowercase().trim()
+        if (normalized.startsWith("buka ") &&
+                        !normalized.matches(
+                                Regex("buka (aplikasi|app|spotify|youtube|browser|pengaturan)")
+                        )
+        ) {
+
+            val appName = normalized.removePrefix("buka ").trim()
+
+            AppLauncher.open(context, appName)
+
+            OverlayEventBus.onBubble?.invoke("📱 Membuka $appName")
+
+            return
+        }
+
+        val result = CommandNormalizer.normalize(effectiveInput)
+        val knowledgeQuery = KnowledgeParser.parse(effectiveInput)
 
         if (knowledgeQuery != null) {
 
@@ -84,6 +123,9 @@ object CommandManager {
             "media_previous" -> {
                 MediaController.previous(context)
                 OverlayEventBus.onBubble?.invoke("⏮ Previous Song")
+            }
+            "open_app" -> {
+                OverlayEventBus.onBubble?.invoke("Aplikasi apa yang ingin dibuka?")
             }
             "volume_up" -> {
                 com.silica.assistant.core.system.VolumeController.volumeUp(context)

@@ -114,6 +114,12 @@ object CommandAliases {
         "brightness_min" to listOf(
             "brightness minimum",
             "layar paling redup"
+        ),
+
+        "open_app" to listOf(
+            "buka aplikasi",
+            "buka app",
+            "jalankan aplikasi"
         )
     )
 }

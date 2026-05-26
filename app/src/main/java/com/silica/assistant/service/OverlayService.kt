@@ -129,10 +129,13 @@ class OverlayService : Service() {
                     touchY = event.rawY
 
                     // long press → voice start
-                    longPressHandler.postDelayed({
-                        longPressTriggered = true
-                        VoiceManager.start()
-                    }, 600)
+                    longPressHandler.postDelayed(
+                            {
+                                longPressTriggered = true
+                                VoiceManager.start()
+                            },
+                            600
+                    )
 
                     true
                 }

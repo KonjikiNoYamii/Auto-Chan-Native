@@ -17,7 +17,7 @@ object VoiceManager {
     private var appContext: Context? = null
     private var speechRecognizer: SpeechRecognizer? = null
     private var speechIntent: Intent? = null
-
+    
     private var isListening = false
     private var isDestroyed = false
 
