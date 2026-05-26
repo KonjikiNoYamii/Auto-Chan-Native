@@ -10,6 +10,7 @@ import com.silica.assistant.core.knowledge.KnowledgeParser
 import com.silica.assistant.core.media.MediaController
 import com.silica.assistant.core.overlay.OverlayEventBus
 import com.silica.assistant.core.parser.SearchCommandParser
+import com.silica.assistant.core.system.BrightnessController
 import com.silica.assistant.service.OverlayService
 
 object CommandManager {
@@ -63,10 +64,11 @@ object CommandManager {
                     val intent = Intent(context, OverlayService::class.java)
                     context.startService(intent)
                 } else {
-                    val intent = Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:${context.packageName}")
-                    )
+                    val intent =
+                            Intent(
+                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:${context.packageName}")
+                            )
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     context.startActivity(intent)
                 }
@@ -98,6 +100,22 @@ object CommandManager {
             "max_volume" -> {
                 com.silica.assistant.core.system.VolumeController.maxVolume(context)
                 OverlayEventBus.onBubble?.invoke("📢 Volume Maksimal")
+            }
+            "brightness_up" -> {
+                BrightnessController.increase(context)
+                OverlayEventBus.onBubble?.invoke("☀️ Brightness Naik")
+            }
+            "brightness_down" -> {
+                BrightnessController.decrease(context)
+                OverlayEventBus.onBubble?.invoke("🌙 Brightness Turun")
+            }
+            "brightness_max" -> {
+                BrightnessController.max(context)
+                OverlayEventBus.onBubble?.invoke("🔆 Brightness Maksimal")
+            }
+            "brightness_min" -> {
+                BrightnessController.min(context)
+                OverlayEventBus.onBubble?.invoke("🌑 Brightness Minimum")
             }
             else -> {
                 Toast.makeText(

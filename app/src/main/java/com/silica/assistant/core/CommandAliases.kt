@@ -74,26 +74,46 @@ object CommandAliases {
             "besarkan suara",
             "suara lebih keras"
         ),
-        
+
         "volume_down" to listOf(
             "turunkan volume",
             "kecilkan volume",
             "volume turun",
             "pelankan suara"
         ),
-        
+
         "mute_volume" to listOf(
             "mute",
             "matikan suara",
             "diamkan hp"
         ),
-        
+
         "max_volume" to listOf(
             "volume maksimal",
             "full volume",
             "suara maksimal"
-        )
+        ),
 
-        
+        "brightness_up" to listOf(
+            "brightness naik",
+            "cerahkan layar",
+            "tambah brightness"
+        ),
+
+        "brightness_down" to listOf(
+            "brightness turun",
+            "gelapkan layar",
+            "kurangi brightness"
+        ),
+
+        "brightness_max" to listOf(
+            "brightness maksimal",
+            "layar paling terang"
+        ),
+
+        "brightness_min" to listOf(
+            "brightness minimum",
+            "layar paling redup"
+        )
     )
 }

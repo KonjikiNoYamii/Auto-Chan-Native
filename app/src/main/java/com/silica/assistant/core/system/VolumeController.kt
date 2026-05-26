@@ -11,9 +11,14 @@ object VolumeController {
             context.getSystemService(Context.AUDIO_SERVICE)
                     as AudioManager
 
-        audioManager.adjustStreamVolume(
+        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val step = (max * 0.2).toInt().coerceAtLeast(1)
+        val current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val next = (current + step).coerceAtMost(max)
+
+        audioManager.setStreamVolume(
             AudioManager.STREAM_MUSIC,
-            AudioManager.ADJUST_RAISE,
+            next,
             AudioManager.FLAG_SHOW_UI
         )
     }
@@ -24,9 +29,14 @@ object VolumeController {
             context.getSystemService(Context.AUDIO_SERVICE)
                     as AudioManager
 
-        audioManager.adjustStreamVolume(
+        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val step = (max * 0.2).toInt().coerceAtLeast(1)
+        val current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val next = (current - step).coerceAtLeast(0)
+
+        audioManager.setStreamVolume(
             AudioManager.STREAM_MUSIC,
-            AudioManager.ADJUST_LOWER,
+            next,
             AudioManager.FLAG_SHOW_UI
         )
     }
