@@ -2,7 +2,7 @@ package com.silica.assistant.ui.components
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -18,11 +18,14 @@ fun CommandInputSection(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+        ),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Execute Command",
+                text = "Command",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -32,15 +35,17 @@ fun CommandInputSection(
                 onValueChange = onCommandChange,
                 label = { Text("Enter command...") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                shape = MaterialTheme.shapes.small,
             )
             Spacer(modifier = Modifier.height(8.dp))
             Button(
                 onClick = onExecute,
                 modifier = Modifier.fillMaxWidth(),
-                enabled = commandText.isNotBlank()
+                enabled = commandText.isNotBlank(),
+                shape = MaterialTheme.shapes.small,
             ) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                Icon(Icons.Filled.Send, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Execute")
             }

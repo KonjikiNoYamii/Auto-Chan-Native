@@ -12,18 +12,32 @@ import com.silica.assistant.core.CommandHistoryManager
 fun CommandHistorySection(modifier: Modifier = Modifier) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+        ),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Command History",
+                text = "History",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(8.dp))
-            CommandHistoryManager.logs.forEach { log ->
-                Text("• ${log.text}")
-                Spacer(modifier = Modifier.height(4.dp))
+            if (CommandHistoryManager.logs.isEmpty()) {
+                Text(
+                    text = "No commands yet",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                )
+            } else {
+                CommandHistoryManager.logs.takeLast(10).forEach { log ->
+                    Text(
+                        text = "◈ ${log.text}",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
             }
         }
     }

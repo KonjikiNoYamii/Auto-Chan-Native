@@ -1,0 +1,24 @@
+Tolong perbaiki dan perbarui skema warna (theme colors) pada file kode UI aplikasi saya (seperti file colors.xml, tailwind.config.js, stylesheet, atau variabel kode UI terkait). 
+
+Saat ini warna aplikasi terlalu terang dan pucat (light pastel krem dan dusty pink), sehingga tidak cocok dengan gambar karakter anime overlay yang memiliki bobot visual kuat (outline hitam tegas, rambut pirang pekat, dan mata merah tua). Saya ingin mengubah palet warnanya menjadi lebih gelap, pekat, dan harmonis mengikuti elemen warna pada karakter tersebut.
+
+Tolong ganti atau buatkan variabel warna baru dengan rekomendasi kode HEX berikut:
+
+1. BACKGROUND & CONTAINER COLORS:
+- bg_main (Latar Belakang Aplikasi): #F2EAE1 (Krem Susu Hangat, menggantikan putih/krem pucat agar rambut pirang karakter menonjol)
+- bg_card (Latar Belakang Kartu/Kontainer): #D7C4B1 (Cokelat Taupe Muda, diambil dari bayangan rambut karakter untuk mengikat outline hitamnya)
+
+2. ACCENT & BUTTON COLORS:
+- btn_active (Tombol Aktif seperti Start/Start Listening): #A64B54 (Deep Rose / Marun Pastel, diambil dari warna mata dan pita karakter)
+- btn_text (Teks di dalam tombol aktif): #FFFFFF (Putih bersih untuk kontras maksimal)
+- btn_disabled (Tombol Disabled seperti Execute sebelum ada input): #A69E98 (Abu-abu hangat dengan rona cokelat pastel)
+
+3. TYPOGRAPHY & TEXT COLORS:
+- text_primary (Judul Menu seperti Command, History, Overlay): #2C221E (Cokelat Espresso/Kopi Gelap untuk mengimbangi garis outline hitam pada karakter)
+- text_placeholder (Teks petunjuk "Enter command..."): #8C7A70 (Cokelat Abu-abu redup)
+
+4. SECONDARY ACTION (Tombol Close):
+- btn_close_outline (Garis tepi tombol close): #2C221E
+- icon_close (Ikon di dalam tombol close): #A64B54 (Ganti warna merah terang saat ini dengan marun pastel ini agar tidak tabrakan)
+
+Mohon berikan struktur kodenya dengan bersih. Jika ada efek elevasi (shadow) atau border radius yang cocok untuk tema anime/waifu assistant yang premium, silakan tambahkan atau rekomendasikan dalam kodenya.

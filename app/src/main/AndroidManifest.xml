@@ -14,11 +14,12 @@
     </queries>
 
     <application
-        android:label="Silica Assistant">
+        android:label="Silica">
 
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
             <intent-filter>
 

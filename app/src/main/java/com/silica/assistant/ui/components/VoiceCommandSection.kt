@@ -2,7 +2,7 @@ package com.silica.assistant.ui.components
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -18,10 +18,10 @@ fun VoiceCommandSection(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
-        )
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+        ),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -37,12 +37,10 @@ fun VoiceCommandSection(
                 enabled = !isListening,
                 onClick = onStartListening,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
-                )
+                shape = MaterialTheme.shapes.small,
             ) {
                 Icon(
-                    Icons.Filled.Face,
+                    Icons.Filled.Mic,
                     contentDescription = "Voice",
                     modifier = Modifier.size(20.dp)
                 )

@@ -7,8 +7,12 @@ object SearchCommandParser {
                     "search ",
                     "cari ",
                     "carikan ",
+                    "cariin ",
                     "google ",
-                    "searching "
+                    "searching ",
+                    "tolong cari ",
+                    "cari tau ",
+                    "cari tahu ",
             )
 
     fun parse(input: String): String? {

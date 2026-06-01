@@ -6,3 +6,9 @@ build
 
 # Ignore Kotlin plugin data
 .kotlin
+
+# Ignore local SDK config
+local.properties
+
+# Ignore heap dumps
+*.hprof

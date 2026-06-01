@@ -120,6 +120,15 @@ object CommandAliases {
             "buka aplikasi",
             "buka app",
             "jalankan aplikasi"
+        ),
+
+        "stop_overlay" to listOf(
+            "stop_overlay",
+            "close overlay",
+            "tutup overlay",
+            "matikan overlay",
+            "stop waifu",
+            "sembunyikan waifu"
         )
     )
 }

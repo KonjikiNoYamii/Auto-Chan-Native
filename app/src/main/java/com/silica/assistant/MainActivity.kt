@@ -7,6 +7,7 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import com.silica.assistant.ui.MainScreen
+import com.silica.assistant.ui.theme.SilicaTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -14,7 +15,7 @@ class MainActivity : ComponentActivity() {
 
         checkWriteSettingsPermission()
 
-        setContent { MainScreen() }
+        setContent { SilicaTheme(darkTheme = false) { MainScreen() } }
     }
 
     private fun checkWriteSettingsPermission() {

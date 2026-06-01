@@ -81,7 +81,9 @@ object CommandManager {
         }
 
         if (result == null) {
-            Toast.makeText(context, "Command not recognized", Toast.LENGTH_SHORT).show()
+            // fallback: treat unrecognized input as a Google search
+            OverlayEventBus.onBubble?.invoke("🔎 Searching $effectiveInput")
+            IntentController.searchGoogle(context, effectiveInput)
             return
         }
         when (result.command) {
@@ -102,6 +104,7 @@ object CommandManager {
                 if (Settings.canDrawOverlays(context)) {
                     val intent = Intent(context, OverlayService::class.java)
                     context.startService(intent)
+                    OverlayEventBus.onBubble?.invoke("🌸 Waifu activated!")
                 } else {
                     val intent =
                             Intent(
@@ -111,6 +114,12 @@ object CommandManager {
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     context.startActivity(intent)
                 }
+            }
+
+            "stop_overlay" -> {
+                val intent = Intent(context, OverlayService::class.java)
+                context.stopService(intent)
+                Toast.makeText(context, "Overlay closed", Toast.LENGTH_SHORT).show()
             }
             "media_play_pause" -> {
                 MediaController.playPause(context)
