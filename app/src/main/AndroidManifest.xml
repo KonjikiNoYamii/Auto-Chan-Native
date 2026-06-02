@@ -17,7 +17,9 @@
     </queries>
 
     <application
-        android:label="Silica">
+        android:label="Silica"
+        android:icon="@drawable/favicon"
+        android:roundIcon="@drawable/favicon">
 
         <activity
             android:name=".MainActivity"
@@ -35,6 +37,11 @@
             </intent-filter>
 
         </activity>
+
+        <activity
+            android:name="com.yalantis.ucrop.UCropActivity"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
         <service
             android:name=".service.OverlayService"
