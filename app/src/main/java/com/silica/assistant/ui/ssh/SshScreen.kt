@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.silica.assistant.core.config.AssistantConfig
 import com.silica.assistant.core.ssh.SshConnection
 import com.silica.assistant.core.ssh.SshFile
 import com.silica.assistant.core.ssh.SshManager
@@ -71,6 +72,9 @@ fun SshScreen(
     var passwordVisible by remember { mutableStateOf(false) }
     var showUploadPicker by remember { mutableStateOf(false) }
     var pendingDownloadPath by remember { mutableStateOf("") }
+    var showSecurityWarning by remember { mutableStateOf(false) }
+    var warningAccepted by remember { mutableStateOf(false) }
+    var pendingConnection by remember { mutableStateOf<SshConnection?>(null) }
     val isActive = remember { mutableStateOf(true) }
     DisposableEffect(Unit) {
         onDispose { isActive.value = false }
@@ -190,7 +194,6 @@ fun SshScreen(
                             Toast.makeText(context, "Host and username required", Toast.LENGTH_SHORT).show()
                             return@ConnectionForm
                         }
-                        connecting = true
                         val portNum = port.toIntOrNull() ?: 22
                         val conn = SshConnection(
                             name = "$username@$host",
@@ -199,24 +202,71 @@ fun SshScreen(
                             username = username,
                             password = password
                         )
-                        Thread {
-                            SshManager.connect(conn, context)
-                                .onSuccess {
-                                    connected = true
-                                    terminalDir = SshManager.homePath
-                                    currentPath = SshManager.homePath
-                                    refreshFiles(currentPath, { files = it }, { filesLoading = it })
-                                }
-                                .onFailure { e ->
-                                    handler.post {
-                                        Toast.makeText(context, "Failed: ${e.message}", Toast.LENGTH_LONG).show()
-                                    }
-                                }
-                            connecting = false
-                        }.start()
+                        if (!AssistantConfig.sshWarningAcknowledged && !warningAccepted) {
+                            pendingConnection = conn
+                            showSecurityWarning = true
+                        } else {
+                            connecting = true
+                            doConnect(context, handler, conn, { connected = true }, { connecting = false },
+                                { terminalDir = it }, { currentPath = it })
+                        }
                     }
                 )
             } else {
+                // security bar
+                val connId = remember { SshManager.getConnectionId() }
+                var showUntrustDialog by remember { mutableStateOf(false) }
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color(0xFF00FF88).copy(alpha = 0.1f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.Lock,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = Color(0xFF00FF88)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Terhubung ke $connId",
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = Color(0xFF00FF88),
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = { showUntrustDialog = true }) {
+                            Text("Lupakan", fontSize = 10.sp, color = Color(0xFF00FF88))
+                        }
+                    }
+                }
+                if (showUntrustDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showUntrustDialog = false },
+                        title = { Text("Lupakan Host Ini?") },
+                        text = {
+                            Text(
+                                "Hapus status tepercaya host $connId.\n\n" +
+                                "Gunakan ini SETELAH Anda reinstall OS laptop, " +
+                                "agar koneksi berikutnya dianggap sebagai host baru."
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                SshManager.clearKnownHost(context, host, port.toIntOrNull() ?: 22)
+                                showUntrustDialog = false
+                                Toast.makeText(context, "Host dilupakan", Toast.LENGTH_SHORT).show()
+                            }) { Text("Lupakan") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showUntrustDialog = false }) { Text("Batal") }
+                        }
+                    )
+                }
+
                 TabRow(selectedTabIndex = tab) {
                     Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Terminal") })
                     Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Files") })
@@ -297,6 +347,92 @@ fun SshScreen(
         uploadLauncher.launch("*/*")
         showUploadPicker = false
     }
+
+    // security warning dialog
+    if (showSecurityWarning) {
+        AlertDialog(
+            onDismissRequest = {
+                showSecurityWarning = false
+                pendingConnection = null
+            },
+            icon = { Icon(Icons.Filled.Security, contentDescription = null, tint = DeepRose) },
+            title = { Text("⚠️ Peringatan Keamanan SSH") },
+            text = {
+                Column {
+                    Text(
+                        "SSH akan memberikan akses penuh terminal ke laptop Anda. " +
+                        "Harap perhatikan:",
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("• Hanya terhubung ke laptop Anda sendiri", fontSize = 13.sp)
+                    Text("• Jangan gunakan di WiFi publik / tidak dikenal", fontSize = 13.sp)
+                    Text("• Host key tidak diverifikasi penuh (MITM risk)", fontSize = 13.sp)
+                    Text("• Pastikan laptop tujuan benar-benar milik Anda", fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = warningAccepted,
+                            onCheckedChange = { warningAccepted = it }
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Jangan tampilkan lagi", fontSize = 13.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (warningAccepted) {
+                            AssistantConfig.sshWarningAcknowledged = true
+                        }
+                        showSecurityWarning = false
+                        pendingConnection?.let { conn ->
+                            connecting = true
+                            doConnect(context, handler, conn, { connected = true }, { connecting = false },
+                                { terminalDir = it }, { currentPath = it })
+                        }
+                        pendingConnection = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = DeepRose)
+                ) { Text("Saya Mengerti, Lanjutkan") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showSecurityWarning = false
+                    pendingConnection = null
+                }) { Text("Batal") }
+            }
+        )
+    }
+}
+
+private fun doConnect(
+    context: android.content.Context,
+    handler: android.os.Handler,
+    conn: SshConnection,
+    onConnected: (Boolean) -> Unit,
+    onFinish: () -> Unit,
+    setTerminalDir: (String) -> Unit,
+    setCurrentPath: (String) -> Unit
+) {
+    Thread {
+        SshManager.connect(conn, context)
+            .onSuccess {
+                handler.post {
+                    onConnected(true)
+                    setTerminalDir(SshManager.homePath)
+                    setCurrentPath(SshManager.homePath)
+                    refreshFiles(SshManager.homePath, { _ -> }, { _ -> })
+                }
+            }
+            .onFailure { e ->
+                handler.post {
+                    Toast.makeText(context, "Gagal: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        handler.post { onFinish() }
+    }.start()
 }
 
 @Composable

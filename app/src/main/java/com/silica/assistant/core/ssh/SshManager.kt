@@ -18,6 +18,21 @@ object SshManager {
     private var currentConnection: SshConnection? = null
     var homePath: String = "/"
 
+    // known hosts tracking
+    var knownHostsMatch: Boolean = true
+    private var connectionId: String = ""
+
+    private fun getHostPrefs(context: Context) =
+        context.getSharedPreferences("ssh_known_hosts", Context.MODE_PRIVATE)
+
+    private fun isHostKnown(context: Context, host: String, port: Int): Boolean {
+        return getHostPrefs(context).getBoolean("${host}:${port}", false)
+    }
+
+    private fun markHostKnown(context: Context, host: String, port: Int) {
+        getHostPrefs(context).edit().putBoolean("${host}:${port}", true).apply()
+    }
+
     private var monitorThread: Thread? = null
     private var monitorChannel: ChannelExec? = null
     private var monitorCallback: ((String) -> Unit)? = null
@@ -99,10 +114,20 @@ object SshManager {
         if (connection.password.isNotBlank()) {
             s.setPassword(connection.password)
         }
+
+        knownHostsMatch = true
+        connectionId = "${connection.host}:${connection.port}"
+
         s.setConfig("StrictHostKeyChecking", "no")
         s.setConfig("ServerAliveInterval", "15")
         s.setConfig("ServerAliveCountMax", "3")
         s.connect(10000)
+
+        // Tandai host sebagai pernah terhubung (untuk tracking "Lupakan")
+        if (context != null && !isHostKnown(context, connection.host, connection.port)) {
+            markHostKnown(context, connection.host, connection.port)
+        }
+
         session = s
         currentConnection = connection
         homePath = resolveHome()
@@ -211,4 +236,16 @@ object SshManager {
             try { channel.disconnect() } catch (_: Exception) {}
         }
     }
+
+    fun clearKnownHost(context: Context, host: String, portNum: Int) {
+        getHostPrefs(context).edit().remove("${host}:${portNum}").apply()
+        knownHostsMatch = true
+    }
+
+    fun clearAllKnownHosts(context: Context) {
+        getHostPrefs(context).edit().clear().apply()
+        knownHostsMatch = true
+    }
+
+    fun getConnectionId(): String = connectionId
 }

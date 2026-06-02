@@ -13,4 +13,7 @@ object AssistantConfig {
 
     // bubble overlay
     var enableBubble = true
+
+    // SSH: apakah user sudah pernah konfirmasi warning keamanan
+    var sshWarningAcknowledged = false
 }
