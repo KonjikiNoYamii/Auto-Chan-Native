@@ -15,6 +15,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import com.silica.assistant.R
 import com.silica.assistant.core.CommandManager
+import com.silica.assistant.core.CustomAssetManager
 import com.silica.assistant.core.overlay.OverlayEventBus
 import com.silica.assistant.core.voice.VoiceManager
 import com.silica.assistant.overlay.WaifuExpressionController
@@ -74,7 +75,7 @@ class OverlayService : Service() {
         waifuImage = overlayView.findViewById(R.id.waifuImage)
         bubbleText = overlayView.findViewById(R.id.bubbleText)
 
-        controller = WaifuExpressionController(waifuImage)
+        controller = WaifuExpressionController(waifuImage, this)
 
         handler.post(expressionUpdater)
 
@@ -183,10 +184,17 @@ class OverlayService : Service() {
         try {
             popPlayer?.release()
 
-            popPlayer = MediaPlayer.create(this, R.raw.pop)
+            val customPop = CustomAssetManager.getCustomPath(this, CustomAssetManager.AssetType.POP_SOUND)
+            popPlayer = if (customPop != null) {
+                MediaPlayer().apply {
+                    setDataSource(customPop)
+                    prepare()
+                }
+            } else {
+                MediaPlayer.create(this, R.raw.pop)
+            }
             popPlayer?.setVolume(0.6f, 0.6f)
             popPlayer?.start()
-
             popPlayer?.setOnCompletionListener { it.release() }
         } catch (e: Exception) {
             e.printStackTrace()

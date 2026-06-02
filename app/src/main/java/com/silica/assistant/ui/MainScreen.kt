@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -29,6 +30,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -40,10 +43,12 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.silica.assistant.R
 import com.silica.assistant.core.CommandManager
+import com.silica.assistant.core.CustomAssetManager
 import com.silica.assistant.core.ssh.SshManager
 import com.silica.assistant.ui.ssh.LaptopInfoScreen
 import com.silica.assistant.ui.ssh.SshScreen
 import com.silica.assistant.ui.guide.GuideScreen
+import com.silica.assistant.ui.customize.CustomizeScreen
 import com.silica.assistant.overlay.WaifuState
 import com.silica.assistant.overlay.WaifuStateManager
 import com.silica.assistant.core.overlay.OverlayEventBus
@@ -62,6 +67,7 @@ private sealed class Screen {
     data class Ssh(val tab: Int = 0) : Screen()
     data object Info : Screen()
     data object Guide : Screen()
+    data object Customize : Screen()
 }
 
 @Composable
@@ -112,7 +118,7 @@ fun MainScreen() {
     val greeting = remember {
         val cal = Calendar.getInstance()
         val hour = cal.get(Calendar.HOUR_OF_DAY)
-        when {
+        CustomAssetManager.getCustomGreeting(context, hour) ?: when {
             hour < 12 -> "Selamat pagi"
             hour < 15 -> "Selamat siang"
             hour < 18 -> "Selamat sore"
@@ -141,11 +147,11 @@ fun MainScreen() {
                         results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     val text = matches?.get(0) ?: ""
                     Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
-                    WaifuStateManager.currentState = WaifuState.HAPPY
+                    WaifuStateManager.currentState = WaifuState.TALK
                     CommandManager.execute(context, text)
                     handler.postDelayed(
-                        { WaifuStateManager.currentState = WaifuState.IDLE },
-                        1000
+                        { WaifuStateManager.currentState = WaifuState.RELAX },
+                        3000
                     )
                 }
                 override fun onEndOfSpeech() {
@@ -217,11 +223,11 @@ fun MainScreen() {
                             onCommandChange = { viewModel.updateCommandText(it) },
                             onExecute = {
                                 if (uiState.commandText.isNotBlank()) {
-                                    WaifuStateManager.currentState = WaifuState.HAPPY
+                                    WaifuStateManager.currentState = WaifuState.TALK
                                     CommandManager.execute(context, uiState.commandText)
                                     handler.postDelayed(
-                                        { WaifuStateManager.currentState = WaifuState.IDLE },
-                                        1000
+                                        { WaifuStateManager.currentState = WaifuState.RELAX },
+                                        3000
                                     )
                                     viewModel.clearCommand()
                                 }
@@ -341,15 +347,27 @@ private fun HeaderSection(greeting: String) {
                 .padding(20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.icon),
-                contentDescription = "Waifu",
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentScale = ContentScale.Crop
-            )
+            if (iconBitmap != null) {
+                Image(
+                    painter = BitmapPainter(iconBitmap),
+                    contentDescription = "Waifu",
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Image(
+                    painter = painterResource(id = R.drawable.icon),
+                    contentDescription = "Waifu",
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentScale = ContentScale.Crop
+                )
+            }
 
             Spacer(modifier = Modifier.width(12.dp))
 
@@ -378,18 +396,21 @@ private fun QuickActionChips(onChipClick: (String) -> Unit = {}) {
         ChipData("SSH", Icons.Filled.Lan, DeepRose),
         ChipData("Info", Icons.Filled.Info, DeepRose),
         ChipData("Guide", Icons.AutoMirrored.Filled.MenuBook, DeepRose),
+        ChipData("Customize", Icons.Filled.Palette, DeepRose),
     )
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
             .padding(top = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         chips.forEach { chip ->
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.padding(horizontal = 8.dp)
             ) {
                 FilledIconButton(
                     onClick = { onChipClick(chip.label) },
