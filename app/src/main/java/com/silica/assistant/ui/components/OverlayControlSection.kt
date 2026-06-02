@@ -1,5 +1,9 @@
 package com.silica.assistant.ui.components
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
@@ -18,6 +22,10 @@ fun OverlayControlSection(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+
+    val notifLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -43,7 +51,12 @@ fun OverlayControlSection(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Button(
-                    onClick = { CommandManager.execute(context, "start_overlay") },
+                    onClick = {
+                        if (Build.VERSION.SDK_INT >= 33) {
+                            notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                        CommandManager.execute(context, "start_overlay")
+                    },
                     modifier = Modifier.weight(1f),
                     shape = MaterialTheme.shapes.small,
                 ) {

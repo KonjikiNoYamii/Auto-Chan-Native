@@ -11,7 +11,11 @@ class VoiceForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
 
-        startForeground(1, createNotification())
+        try {
+            startForeground(1, createNotification())
+        } catch (_: SecurityException) {
+            // Android 13+ requires POST_NOTIFICATIONS; fallback silently
+        }
     }
 
     // =========================
