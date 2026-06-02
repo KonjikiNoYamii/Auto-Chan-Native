@@ -34,6 +34,8 @@ android {
 }
 
 dependencies {
+    implementation("com.jcraft:jsch:0.1.55")
+
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.2")
 
     implementation(
