@@ -141,9 +141,15 @@ private fun VoiceCommandsSection() {
 
                 CommandItem("brightness [up/down/set]", "Kontrol kecerahan layar")
 
-                CommandItem("open [nama app]", "Buka app terinstall (WhatsApp, Telegram, game, dll)")
+                CommandItem("open / buka [nama app]", "Buka app apapun (WhatsApp, Telegram, game, dll)")
 
-                CommandItem("silica", "Panggil asisten (nama opsional)")
+                CommandItem("search / cari / google [query]", "Cari sesuatu di Google")
+
+                CommandItem("tier list genshin / ml / valorant", "Info tier list game")
+
+                CommandItem("play musik / next song / previous song", "Kontrol media player")
+
+                CommandItem("silica", "Wake word (opsional, bisa dimatikan)")
             }
         }
     }
@@ -157,7 +163,7 @@ private fun FiturUtamaSection() {
         "SSH Terminal" to "Akses terminal laptop via SSH. Support command linux + cd resolve lokal.",
         "SSH File Manager" to "Browse, upload, download file laptop via SFTP.",
         "Laptop Info" to "Monitor uptime, RAM, disk real-time (polling 3 detik).",
-        "Buka Aplikasi" to "Buka app apa saja yang terinstall di HP via voice command."
+        "Buka Aplikasi" to "Buka app apa saja yang terinstall di HP. Support label + packageName matching + alias (wa, ig, fb). Bahasa Indonesia & English."
     )
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
