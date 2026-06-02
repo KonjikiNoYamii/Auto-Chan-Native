@@ -1,6 +1,14 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     kotlin("android")
+}
+
+val keystoreFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties()
+if (keystoreFile.exists()) {
+    keystoreProps.load(keystoreFile.inputStream())
 }
 
 android {
@@ -11,14 +19,37 @@ android {
         applicationId = "com.silica.assistant"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
+        versionCode = 2
         versionName = "1.0"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = keystoreProps["storeFile"]?.toString()?.let { rootProject.file(it) }
+            storePassword = keystoreProps["storePassword"]?.toString()
+            keyAlias = keystoreProps["keyAlias"]?.toString()
+            keyPassword = keystoreProps["keyPassword"]?.toString()
+        }
+    }
+
+    buildTypes {
+        debug {
+            isDebuggable = true
+        }
+        release {
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+
     compileOptions {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
-}
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
 
     buildFeatures {
         compose = true
@@ -35,6 +66,8 @@ android {
 
 dependencies {
     implementation("com.jcraft:jsch:0.1.55")
+
+    implementation("com.github.yalantis:ucrop:2.2.8")
 
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.2")
 

@@ -12,3 +12,7 @@ local.properties
 
 # Ignore heap dumps
 *.hprof
+
+# Ignore keystore
+silica.jks
+keystore.properties
