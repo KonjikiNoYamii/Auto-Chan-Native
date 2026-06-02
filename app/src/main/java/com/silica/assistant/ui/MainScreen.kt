@@ -8,6 +8,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -27,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,6 +36,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.silica.assistant.R
 import com.silica.assistant.core.CommandManager
+import com.silica.assistant.core.ssh.SshManager
+import com.silica.assistant.ui.ssh.LaptopInfoScreen
+import com.silica.assistant.ui.ssh.SshScreen
 import com.silica.assistant.overlay.WaifuState
 import com.silica.assistant.overlay.WaifuStateManager
 import com.silica.assistant.ui.components.*
@@ -45,11 +50,22 @@ import com.silica.assistant.ui.viewmodel.AssistantViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
+private sealed class Screen {
+    data object Main : Screen()
+    data class Ssh(val tab: Int = 0) : Screen()
+    data object Info : Screen()
+}
+
 @Composable
 fun MainScreen() {
     val context = LocalContext.current
     val viewModel: AssistantViewModel = viewModel()
     val uiState = viewModel.uiState
+    var currentScreen by remember { mutableStateOf<Screen>(Screen.Main) }
+
+    BackHandler(enabled = currentScreen !is Screen.Main) {
+        currentScreen = Screen.Main
+    }
 
     val speechIntent = remember {
         Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -120,83 +136,113 @@ fun MainScreen() {
     }
     DisposableEffect(Unit) { onDispose { speechRecognizer.destroy() } }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-        ) {
-            HeaderSection(greeting = greeting)
-
-            Column(
+    when (currentScreen) {
+        is Screen.Main -> {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
             ) {
-                QuickActionChips()
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    HeaderSection(greeting = greeting)
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                StatusBar()
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                CommandInputSection(
-                    commandText = uiState.commandText,
-                    onCommandChange = { viewModel.updateCommandText(it) },
-                    onExecute = {
-                        if (uiState.commandText.isNotBlank()) {
-                            WaifuStateManager.currentState = WaifuState.HAPPY
-                            CommandManager.execute(context, uiState.commandText)
-                            handler.postDelayed(
-                                { WaifuStateManager.currentState = WaifuState.IDLE },
-                                1000
-                            )
-                            viewModel.clearCommand()
-                        }
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                VoiceCommandSection(
-                    isListening = uiState.isListening,
-                    onStartListening = {
-                        if (ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.RECORD_AUDIO
-                            ) == PackageManager.PERMISSION_GRANTED
-                        ) {
-                            try {
-                                WaifuStateManager.currentState = WaifuState.LISTENING
-                                viewModel.setListening(true)
-                                speechRecognizer.startListening(speechIntent)
-                            } catch (e: Exception) {
-                                Toast.makeText(
-                                    context,
-                                    "Exception: ${e.message}",
-                                    Toast.LENGTH_LONG
-                                ).show()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        QuickActionChips(
+                            onChipClick = { label ->
+                                when (label) {
+                                    "Terminal" -> currentScreen = Screen.Ssh(tab = 0)
+                                    "File" -> currentScreen = Screen.Ssh(tab = 1)
+                                    "SSH" -> currentScreen = Screen.Ssh(tab = 0)
+                                    "Info" -> {
+                                        if (!SshManager.isConnected()) {
+                                            Toast.makeText(context, "SSH not connected", Toast.LENGTH_SHORT).show()
+                                            return@QuickActionChips
+                                        }
+                                        currentScreen = Screen.Info
+                                    }
+                                }
                             }
-                        }
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        StatusBar()
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        CommandInputSection(
+                            commandText = uiState.commandText,
+                            onCommandChange = { viewModel.updateCommandText(it) },
+                            onExecute = {
+                                if (uiState.commandText.isNotBlank()) {
+                                    WaifuStateManager.currentState = WaifuState.HAPPY
+                                    CommandManager.execute(context, uiState.commandText)
+                                    handler.postDelayed(
+                                        { WaifuStateManager.currentState = WaifuState.IDLE },
+                                        1000
+                                    )
+                                    viewModel.clearCommand()
+                                }
+                            }
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        VoiceCommandSection(
+                            isListening = uiState.isListening,
+                            onStartListening = {
+                                if (ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.RECORD_AUDIO
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    try {
+                                        WaifuStateManager.currentState = WaifuState.LISTENING
+                                        viewModel.setListening(true)
+                                        speechRecognizer.startListening(speechIntent)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(
+                                            context,
+                                            "Exception: ${e.message}",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                }
+                            }
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        CommandHistorySection()
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        OverlayControlSection()
+
+                        Spacer(modifier = Modifier.height(48.dp))
                     }
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                CommandHistorySection()
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                OverlayControlSection()
-
-                Spacer(modifier = Modifier.height(48.dp))
+                }
             }
+        }
+        is Screen.Ssh -> {
+            SshScreen(
+                onBack = { currentScreen = Screen.Main },
+                defaultTab = (currentScreen as Screen.Ssh).tab
+            )
+        }
+        is Screen.Info -> {
+            LaptopInfoScreen(
+                onBack = { currentScreen = Screen.Main }
+            )
         }
     }
 }
@@ -236,7 +282,7 @@ private fun HeaderSection(greeting: String) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Image(
-                painter = painterResource(id = R.drawable.mybinik),
+                painter = painterResource(id = R.drawable.icon),
                 contentDescription = "Waifu",
                 modifier = Modifier
                     .size(64.dp)
@@ -265,12 +311,12 @@ private fun HeaderSection(greeting: String) {
 }
 
 @Composable
-private fun QuickActionChips() {
+private fun QuickActionChips(onChipClick: (String) -> Unit = {}) {
     val chips = listOf(
         ChipData("Terminal", Icons.Filled.Terminal, DeepRose),
         ChipData("File", Icons.Filled.Folder, DeepRose),
         ChipData("SSH", Icons.Filled.Lan, DeepRose),
-        ChipData("Screenshot", Icons.Filled.Screenshot, DeepRose),
+        ChipData("Info", Icons.Filled.Info, DeepRose),
     )
 
     Row(
@@ -285,7 +331,7 @@ private fun QuickActionChips() {
                 modifier = Modifier.weight(1f)
             ) {
                 FilledIconButton(
-                    onClick = { },
+                    onClick = { onChipClick(chip.label) },
                     modifier = Modifier.size(48.dp),
                     shape = CircleShape,
                     colors = IconButtonDefaults.filledIconButtonColors(
@@ -308,6 +354,14 @@ private fun QuickActionChips() {
 
 @Composable
 private fun StatusBar() {
+    val sshConnected = SshManager.isConnected()
+    val sshLabel = if (sshConnected) {
+        val conn = SshManager.getCurrentConnection()
+        "Laptop: ${conn?.host ?: "online"}"
+    } else {
+        "Laptop: offline"
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -323,8 +377,8 @@ private fun StatusBar() {
             verticalAlignment = Alignment.CenterVertically
         ) {
             StatusItem(Icons.Filled.Wifi, "WiFi")
-            StatusItem(Icons.Filled.Computer, "Laptop: offline")
-            StatusItem(Icons.Filled.Storage, "SSH: --")
+            StatusItem(Icons.Filled.Computer, sshLabel)
+            StatusItem(Icons.Filled.Storage, if (sshConnected) "SSH: ✓" else "SSH: --")
         }
     }
 }
