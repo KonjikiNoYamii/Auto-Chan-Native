@@ -127,12 +127,14 @@ fun MainScreen() {
     }
 
     val speechRecognizer = remember {
-        val component =
+        val googleComponent =
             android.content.ComponentName(
                 "com.google.android.googlequicksearchbox",
                 "com.google.android.voicesearch.serviceapi.GoogleRecognitionService"
             )
-        val recognizer = SpeechRecognizer.createSpeechRecognizer(context, component)
+        val recognizer =
+            SpeechRecognizer.createSpeechRecognizer(context, googleComponent)
+                ?: SpeechRecognizer.createSpeechRecognizer(context)
         recognizer.setRecognitionListener(
             object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {

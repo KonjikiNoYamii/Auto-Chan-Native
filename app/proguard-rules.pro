@@ -10,3 +10,6 @@
 
 # Keep your app models
 -keep class com.silica.assistant.model.** { *; }
+
+# Keep all app classes (prevents R8 from stripping/obfuscating)
+-keep class com.silica.assistant.** { *; }
