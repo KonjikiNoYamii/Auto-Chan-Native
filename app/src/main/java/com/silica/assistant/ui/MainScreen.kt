@@ -155,7 +155,7 @@ fun MainScreen() {
                 override fun onError(error: Int) {
                     viewModel.setListening(false)
                     Toast.makeText(context, "Speech Error: $error", Toast.LENGTH_LONG).show()
-                    WaifuStateManager.currentState = WaifuState.IDLE
+                    WaifuStateManager.currentState = WaifuState.RELAX
                 }
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
@@ -201,6 +201,7 @@ fun MainScreen() {
                                         currentScreen = Screen.Info
                                     }
                                     "Guide" -> currentScreen = Screen.Guide
+                                    "Customize" -> currentScreen = Screen.Customize
                                 }
                             }
                         )
@@ -238,7 +239,7 @@ fun MainScreen() {
                                     ) == PackageManager.PERMISSION_GRANTED
                                 ) {
                                     try {
-                                        WaifuStateManager.currentState = WaifuState.LISTENING
+                                        WaifuStateManager.currentState = WaifuState.LISTEN
                                         viewModel.setListening(true)
                                         speechRecognizer.startListening(speechIntent)
                                     } catch (e: Exception) {
@@ -281,22 +282,44 @@ fun MainScreen() {
                 onBack = { currentScreen = Screen.Main }
             )
         }
+        is Screen.Customize -> {
+            CustomizeScreen(
+                onBack = { currentScreen = Screen.Main }
+            )
+        }
     }
 }
 
 @Composable
 private fun HeaderSection(greeting: String) {
+    val context = LocalContext.current
+    val headerBitmap = remember {
+        CustomAssetManager.loadImageBitmap(context, CustomAssetManager.AssetType.HEADER)
+    }
+    val iconBitmap = remember {
+        CustomAssetManager.loadImageBitmap(context, CustomAssetManager.AssetType.ICON)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(240.dp)
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.header),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
+        if (headerBitmap != null) {
+            Image(
+                painter = BitmapPainter(headerBitmap),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Image(
+                painter = painterResource(id = R.drawable.header),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        }
 
         Box(
             modifier = Modifier

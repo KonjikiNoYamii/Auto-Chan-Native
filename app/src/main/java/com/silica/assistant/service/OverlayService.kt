@@ -90,10 +90,10 @@ class OverlayService : Service() {
 
         VoiceManager.onStateChange = { listening ->
             WaifuStateManager.currentState =
-                    if (listening) WaifuState.LISTENING else WaifuState.IDLE
+                    if (listening) WaifuState.LISTEN else WaifuState.RELAX
         }
 
-        WaifuStateManager.currentState = WaifuState.IDLE
+        WaifuStateManager.currentState = WaifuState.RELAX
 
         params =
                 WindowManager.LayoutParams(
@@ -152,7 +152,7 @@ class OverlayService : Service() {
                     params.x = initialX + dx
                     params.y = initialY + dy
 
-                    WaifuStateManager.currentState = WaifuState.IDLE
+                    WaifuStateManager.currentState = WaifuState.RELAX
 
                     windowManager.updateViewLayout(overlayView, params)
 
