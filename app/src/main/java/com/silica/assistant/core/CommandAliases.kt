@@ -129,6 +129,35 @@ object CommandAliases {
             "matikan overlay",
             "stop waifu",
             "sembunyikan waifu"
+        ),
+
+        "ssh_status" to listOf(
+            "ssh status",
+            "status ssh",
+            "cek ssh",
+            "koneksi laptop"
+        ),
+
+        "ssh_connect" to listOf(
+            "ssh connect",
+            "konek ssh",
+            "hubungkan laptop",
+            "sambungkan laptop",
+            "konek laptop"
+        ),
+
+        "ssh_disconnect" to listOf(
+            "ssh disconnect",
+            "putuskan ssh",
+            "disconnect ssh",
+            "putus koneksi laptop"
+        ),
+
+        "laptop_info" to listOf(
+            "info laptop",
+            "laptop info",
+            "status laptop",
+            "kondisi laptop"
         )
     )
 }

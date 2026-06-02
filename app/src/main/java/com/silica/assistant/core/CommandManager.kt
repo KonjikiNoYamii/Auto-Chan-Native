@@ -11,6 +11,7 @@ import com.silica.assistant.core.knowledge.KnowledgeParser
 import com.silica.assistant.core.media.MediaController
 import com.silica.assistant.core.overlay.OverlayEventBus
 import com.silica.assistant.core.parser.SearchCommandParser
+import com.silica.assistant.core.ssh.SshManager
 import com.silica.assistant.core.system.AppLauncher
 import com.silica.assistant.core.system.BrightnessController
 import com.silica.assistant.service.OverlayService
@@ -167,6 +168,42 @@ object CommandManager {
             "brightness_min" -> {
                 BrightnessController.min(context)
                 OverlayEventBus.onBubble?.invoke("🌑 Brightness Minimum")
+            }
+            "ssh_status" -> {
+                val connected = SshManager.isConnected()
+                val msg = if (connected) {
+                    val conn = SshManager.getCurrentConnection()
+                    "✅ SSH terhubung ke ${conn?.name ?: "laptop"}"
+                } else {
+                    "❌ SSH tidak terhubung"
+                }
+                OverlayEventBus.onBubble?.invoke(msg)
+                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            }
+            "ssh_connect" -> {
+                OverlayEventBus.onBubble?.invoke("🔌 Buka menu SSH untuk koneksi")
+                Toast.makeText(context, "Buka menu SSH di aplikasi untuk koneksi", Toast.LENGTH_LONG).show()
+            }
+            "ssh_disconnect" -> {
+                SshManager.disconnect()
+                OverlayEventBus.onBubble?.invoke("🔌 SSH terputus")
+                Toast.makeText(context, "SSH disconnected", Toast.LENGTH_SHORT).show()
+            }
+            "laptop_info" -> {
+                if (!SshManager.isConnected()) {
+                    OverlayEventBus.onBubble?.invoke("❌ SSH tidak terhubung")
+                    return
+                }
+                Thread {
+                    SshManager.executeCommand("uptime && echo '---' && free -h | head -3 && echo '---' && df -h / | tail -1")
+                        .onSuccess { result ->
+                            val lines = result.lines().take(8)
+                            OverlayEventBus.onBubble?.invoke("📊 " + lines.joinToString(" | "))
+                        }
+                        .onFailure { e ->
+                            OverlayEventBus.onBubble?.invoke("❌ Gagal: ${e.message}")
+                        }
+                }.start()
             }
             else -> {
                 Toast.makeText(
