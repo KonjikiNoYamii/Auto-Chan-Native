@@ -195,20 +195,23 @@ class OverlayService : Service() {
 
     fun showBubble(text: String) {
 
-        if (!::bubbleText.isInitialized) return
+        handler.post {
 
-        bubbleText.text = text
-        bubbleText.visibility = View.VISIBLE
+            if (!::bubbleText.isInitialized) return@post
 
-        playPopSound()
+            bubbleText.text = text
+            bubbleText.visibility = View.VISIBLE
 
-        val duration = (2000L + text.length * 50L).coerceAtMost(8000L)
+            playPopSound()
 
-        bubbleHideRunnable?.let { handler.removeCallbacks(it) }
+            val duration = (2000L + text.length * 50L).coerceAtMost(8000L)
 
-        bubbleHideRunnable = Runnable { bubbleText.visibility = View.GONE }
+            bubbleHideRunnable?.let { handler.removeCallbacks(it) }
 
-        handler.postDelayed(bubbleHideRunnable!!, duration)
+            bubbleHideRunnable = Runnable { bubbleText.visibility = View.GONE }
+
+            handler.postDelayed(bubbleHideRunnable!!, duration)
+        }
     }
 
     // =========================

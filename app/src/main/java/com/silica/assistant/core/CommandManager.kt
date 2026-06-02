@@ -52,19 +52,23 @@ object CommandManager {
             return
         }
 
-        // dynamic app launcher: "buka discord", "buka whatsapp", etc.
+        // dynamic app launcher: "buka discord", "buka whatsapp", "open whatsapp", etc.
         val normalized = effectiveInput.lowercase().trim()
-        if (normalized.startsWith("buka ") &&
-                        !normalized.matches(
-                                Regex("buka (aplikasi|app|spotify|youtube|browser|pengaturan)")
-                        )
+        if ((normalized.startsWith("buka ") || normalized.startsWith("open ")) &&
+                !normalized.matches(
+                        Regex("(buka|open) (aplikasi|app|spotify|youtube|browser|pengaturan|settings)")
+                )
         ) {
 
-            val appName = normalized.removePrefix("buka ").trim()
+            val prefix = if (normalized.startsWith("buka ")) "buka " else "open "
+            val appName = normalized.removePrefix(prefix).trim()
 
-            AppLauncher.open(context, appName)
-
-            OverlayEventBus.onBubble?.invoke("📱 Membuka $appName")
+            if (AppLauncher.open(context, appName)) {
+                OverlayEventBus.onBubble?.invoke("📱 Membuka $appName")
+            } else {
+                OverlayEventBus.onBubble?.invoke("🔎 Searching $appName")
+                IntentController.searchGoogle(context, appName)
+            }
 
             return
         }
@@ -82,9 +86,11 @@ object CommandManager {
         }
 
         if (result == null) {
-            // fallback: treat unrecognized input as a Google search
-            OverlayEventBus.onBubble?.invoke("🔎 Searching $effectiveInput")
-            IntentController.searchGoogle(context, effectiveInput)
+            // fallback: try as app name first, then Google search
+            if (!AppLauncher.open(context, effectiveInput)) {
+                OverlayEventBus.onBubble?.invoke("🔎 Searching $effectiveInput")
+                IntentController.searchGoogle(context, effectiveInput)
+            }
             return
         }
         when (result.command) {

@@ -68,6 +68,7 @@ fun SshScreen(
     var terminalInput by remember { mutableStateOf("") }
     var terminalDir by remember { mutableStateOf("") }
 
+    var passwordVisible by remember { mutableStateOf(false) }
     var showUploadPicker by remember { mutableStateOf(false) }
     var pendingDownloadPath by remember { mutableStateOf("") }
     val isActive = remember { mutableStateOf(true) }
@@ -177,10 +178,12 @@ fun SshScreen(
                     port = port,
                     username = username,
                     password = password,
+                    passwordVisible = passwordVisible,
                     onHostChange = { host = it },
                     onPortChange = { port = it },
                     onUsernameChange = { username = it },
                     onPasswordChange = { password = it },
+                    onPasswordVisibilityToggle = { passwordVisible = !passwordVisible },
                     connecting = connecting,
                     onConnect = {
                         if (host.isBlank() || username.isBlank()) {
@@ -302,11 +305,13 @@ private fun ConnectionForm(
     port: String,
     username: String,
     password: String,
+    passwordVisible: Boolean,
     connecting: Boolean,
     onHostChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
     onUsernameChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
+    onPasswordVisibilityToggle: () -> Unit,
     onConnect: () -> Unit
 ) {
     val scroll = rememberScrollState()
@@ -386,8 +391,17 @@ private fun ConnectionForm(
             onValueChange = onPasswordChange,
             label = { Text("Password") },
             leadingIcon = { Icon(Icons.Filled.Lock, contentDescription = null) },
+            trailingIcon = {
+                IconButton(onClick = onPasswordVisibilityToggle) {
+                    Icon(
+                        if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                        contentDescription = if (passwordVisible) "Sembunyikan" else "Tampilkan"
+                    )
+                }
+            },
             singleLine = true,
-            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+            visualTransformation = if (passwordVisible) androidx.compose.ui.text.input.VisualTransformation.None
+            else androidx.compose.ui.text.input.PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp)
         )

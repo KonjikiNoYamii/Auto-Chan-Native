@@ -84,6 +84,16 @@ fun MainScreen() {
                         else -> Screen.Main
                     }
                     OverlayEventBus.navigateScreen.value = null
+                    // bring app to foreground when triggered from overlay
+                    val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                    if (launchIntent != null) {
+                        launchIntent.addFlags(
+                            Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                        )
+                        context.startActivity(launchIntent)
+                    }
                 }
             }
     }
