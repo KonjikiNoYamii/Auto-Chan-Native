@@ -17,6 +17,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,6 +43,7 @@ import com.silica.assistant.core.CommandManager
 import com.silica.assistant.core.ssh.SshManager
 import com.silica.assistant.ui.ssh.LaptopInfoScreen
 import com.silica.assistant.ui.ssh.SshScreen
+import com.silica.assistant.ui.guide.GuideScreen
 import com.silica.assistant.overlay.WaifuState
 import com.silica.assistant.overlay.WaifuStateManager
 import com.silica.assistant.ui.components.*
@@ -54,6 +59,7 @@ private sealed class Screen {
     data object Main : Screen()
     data class Ssh(val tab: Int = 0) : Screen()
     data object Info : Screen()
+    data object Guide : Screen()
 }
 
 @Composable
@@ -169,6 +175,7 @@ fun MainScreen() {
                                         }
                                         currentScreen = Screen.Info
                                     }
+                                    "Guide" -> currentScreen = Screen.Guide
                                 }
                             }
                         )
@@ -241,6 +248,11 @@ fun MainScreen() {
         }
         is Screen.Info -> {
             LaptopInfoScreen(
+                onBack = { currentScreen = Screen.Main }
+            )
+        }
+        is Screen.Guide -> {
+            GuideScreen(
                 onBack = { currentScreen = Screen.Main }
             )
         }
@@ -317,6 +329,7 @@ private fun QuickActionChips(onChipClick: (String) -> Unit = {}) {
         ChipData("File", Icons.Filled.Folder, DeepRose),
         ChipData("SSH", Icons.Filled.Lan, DeepRose),
         ChipData("Info", Icons.Filled.Info, DeepRose),
+        ChipData("Guide", Icons.AutoMirrored.Filled.MenuBook, DeepRose),
     )
 
     Row(
