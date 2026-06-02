@@ -46,6 +46,7 @@ import com.silica.assistant.ui.ssh.SshScreen
 import com.silica.assistant.ui.guide.GuideScreen
 import com.silica.assistant.overlay.WaifuState
 import com.silica.assistant.overlay.WaifuStateManager
+import com.silica.assistant.core.overlay.OverlayEventBus
 import com.silica.assistant.ui.components.*
 import com.silica.assistant.ui.theme.Espresso
 import com.silica.assistant.ui.theme.GlassRose
@@ -54,6 +55,7 @@ import com.silica.assistant.ui.theme.DeepRose
 import com.silica.assistant.ui.viewmodel.AssistantViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.flow.collect
 
 private sealed class Screen {
     data object Main : Screen()
@@ -71,6 +73,19 @@ fun MainScreen() {
 
     BackHandler(enabled = currentScreen !is Screen.Main) {
         currentScreen = Screen.Main
+    }
+
+    LaunchedEffect(Unit) {
+        snapshotFlow { OverlayEventBus.navigateScreen.value }
+            .collect { dest ->
+                if (dest != null) {
+                    currentScreen = when (dest) {
+                        "ssh" -> Screen.Ssh(tab = 0)
+                        else -> Screen.Main
+                    }
+                    OverlayEventBus.navigateScreen.value = null
+                }
+            }
     }
 
     val speechIntent = remember {

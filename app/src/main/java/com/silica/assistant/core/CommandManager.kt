@@ -181,8 +181,8 @@ object CommandManager {
                 Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
             }
             "ssh_connect" -> {
-                OverlayEventBus.onBubble?.invoke("🔌 Buka menu SSH untuk koneksi")
-                Toast.makeText(context, "Buka menu SSH di aplikasi untuk koneksi", Toast.LENGTH_LONG).show()
+                OverlayEventBus.navigateScreen.value = "ssh"
+                OverlayEventBus.onBubble?.invoke("🔌 Membuka SSH...")
             }
             "ssh_disconnect" -> {
                 SshManager.disconnect()
