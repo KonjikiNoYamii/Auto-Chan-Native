@@ -19,8 +19,8 @@ android {
         applicationId = "com.silica.assistant"
         minSdk = 24
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.0"
+        versionCode = 3
+        versionName = "1.1"
     }
 
     signingConfigs {
@@ -91,6 +91,10 @@ dependencies {
 
     implementation(
         "androidx.compose.material3:material3"
+    )
+
+    implementation(
+        "androidx.compose.foundation:foundation"
     )
 
     implementation(

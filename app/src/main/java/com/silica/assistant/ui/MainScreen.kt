@@ -18,10 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,36 +27,38 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.silica.assistant.R
 import com.silica.assistant.core.CommandManager
 import com.silica.assistant.core.CustomAssetManager
+import com.silica.assistant.core.config.TutorialManager
+import com.silica.assistant.core.overlay.OverlayEventBus
 import com.silica.assistant.core.ssh.SshManager
-import com.silica.assistant.ui.ssh.LaptopInfoScreen
-import com.silica.assistant.ui.ssh.SshScreen
-import com.silica.assistant.ui.guide.GuideScreen
-import com.silica.assistant.ui.customize.CustomizeScreen
 import com.silica.assistant.overlay.WaifuState
 import com.silica.assistant.overlay.WaifuStateManager
-import com.silica.assistant.core.overlay.OverlayEventBus
+import com.silica.assistant.core.update.UpdateChecker
+import com.silica.assistant.core.update.UpdateDownloader
+import com.silica.assistant.core.update.UpdateInstaller
 import com.silica.assistant.ui.components.*
-import com.silica.assistant.ui.theme.Espresso
-import com.silica.assistant.ui.theme.GlassRose
-import com.silica.assistant.ui.theme.GlassWhite
+import com.silica.assistant.ui.components.UpdateDialog
+import com.silica.assistant.ui.customize.CustomizeScreen
+import com.silica.assistant.ui.guide.GuideScreen
+import com.silica.assistant.ui.permissions.PermissionScreen
+import com.silica.assistant.ui.tutorial.OverlayTutorialScreen
+import com.silica.assistant.ui.ssh.LaptopInfoScreen
+import com.silica.assistant.ui.ssh.SshScreen
 import com.silica.assistant.ui.theme.DeepRose
+import com.silica.assistant.ui.theme.Espresso
 import com.silica.assistant.ui.viewmodel.AssistantViewModel
-import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 
 private sealed class Screen {
@@ -68,6 +67,8 @@ private sealed class Screen {
     data object Info : Screen()
     data object Guide : Screen()
     data object Customize : Screen()
+    data object Permissions : Screen()
+    data object OverlayTutorial : Screen()
 }
 
 @Composable
@@ -77,38 +78,52 @@ fun MainScreen() {
     val uiState = viewModel.uiState
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Main) }
 
-    BackHandler(enabled = currentScreen !is Screen.Main) {
-        currentScreen = Screen.Main
+    var updateInfo by remember { mutableStateOf<UpdateChecker.UpdateInfo?>(null) }
+    var isDownloading by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableFloatStateOf(0f) }
+
+    BackHandler(enabled = currentScreen !is Screen.Main) { currentScreen = Screen.Main }
+
+    LaunchedEffect(Unit) {
+        snapshotFlow { OverlayEventBus.navigateScreen.value }.collect { dest ->
+            if (dest != null) {
+                currentScreen =
+                        when (dest) {
+                            "ssh" -> Screen.Ssh(tab = 0)
+                            else -> Screen.Main
+                        }
+                OverlayEventBus.navigateScreen.value = null
+                // bring app to foreground when triggered from overlay
+                val launchIntent =
+                        context.packageManager.getLaunchIntentForPackage(context.packageName)
+                if (launchIntent != null) {
+                    launchIntent.addFlags(
+                            Intent.FLAG_ACTIVITY_NEW_TASK or
+                                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                    )
+                    context.startActivity(launchIntent)
+                }
+            }
+        }
     }
 
     LaunchedEffect(Unit) {
-        snapshotFlow { OverlayEventBus.navigateScreen.value }
-            .collect { dest ->
-                if (dest != null) {
-                    currentScreen = when (dest) {
-                        "ssh" -> Screen.Ssh(tab = 0)
-                        else -> Screen.Main
-                    }
-                    OverlayEventBus.navigateScreen.value = null
-                    // bring app to foreground when triggered from overlay
-                    val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-                    if (launchIntent != null) {
-                        launchIntent.addFlags(
-                            Intent.FLAG_ACTIVITY_NEW_TASK or
-                            Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                        )
-                        context.startActivity(launchIntent)
-                    }
-                }
-            }
+        val currentVersionCode = try {
+            val pkg = context.packageManager.getPackageInfo(context.packageName, 0)
+            androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(pkg).toInt()
+        } catch (_: Exception) { 0 }
+        val info = UpdateChecker.check(currentVersionCode)
+        if (info != null) {
+            updateInfo = info
+        }
     }
 
     val speechIntent = remember {
         Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(
-                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
             )
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "id-ID")
         }
@@ -118,58 +133,59 @@ fun MainScreen() {
     val greeting = remember {
         val cal = Calendar.getInstance()
         val hour = cal.get(Calendar.HOUR_OF_DAY)
-        CustomAssetManager.getCustomGreeting(context, hour) ?: when {
-            hour < 12 -> "Selamat pagi"
-            hour < 15 -> "Selamat siang"
-            hour < 18 -> "Selamat sore"
-            else -> "Selamat malam"
-        }
+        CustomAssetManager.getCustomGreeting(context, hour)
+                ?: when {
+                    hour < 12 -> "Selamat pagi"
+                    hour < 15 -> "Selamat siang"
+                    hour < 18 -> "Selamat sore"
+                    else -> "Selamat malam"
+                }
     }
 
     val speechRecognizer = remember {
         val googleComponent =
-            android.content.ComponentName(
-                "com.google.android.googlequicksearchbox",
-                "com.google.android.voicesearch.serviceapi.GoogleRecognitionService"
-            )
+                android.content.ComponentName(
+                        "com.google.android.googlequicksearchbox",
+                        "com.google.android.voicesearch.serviceapi.GoogleRecognitionService"
+                )
         val recognizer =
-            SpeechRecognizer.createSpeechRecognizer(context, googleComponent)
-                ?: SpeechRecognizer.createSpeechRecognizer(context)
+                SpeechRecognizer.createSpeechRecognizer(context, googleComponent)
+                        ?: SpeechRecognizer.createSpeechRecognizer(context)
         recognizer.setRecognitionListener(
-            object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {
-                    Toast.makeText(context, "Listening...", Toast.LENGTH_SHORT).show()
+                object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        Toast.makeText(context, "Listening...", Toast.LENGTH_SHORT).show()
+                    }
+                    override fun onBeginningOfSpeech() {
+                        Toast.makeText(context, "Speech Started", Toast.LENGTH_SHORT).show()
+                    }
+                    override fun onResults(results: Bundle?) {
+                        viewModel.setListening(false)
+                        val matches =
+                                results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        val text = matches?.get(0) ?: ""
+                        Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+                        WaifuStateManager.currentState = WaifuState.TALK
+                        CommandManager.execute(context, text)
+                        handler.postDelayed(
+                                { WaifuStateManager.currentState = WaifuState.RELAX },
+                                3000
+                        )
+                    }
+                    override fun onEndOfSpeech() {
+                        viewModel.setListening(false)
+                        Toast.makeText(context, "Speech Ended", Toast.LENGTH_SHORT).show()
+                    }
+                    override fun onError(error: Int) {
+                        viewModel.setListening(false)
+                        Toast.makeText(context, "Speech Error: $error", Toast.LENGTH_LONG).show()
+                        WaifuStateManager.currentState = WaifuState.RELAX
+                    }
+                    override fun onRmsChanged(rmsdB: Float) {}
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+                    override fun onPartialResults(partialResults: Bundle?) {}
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
                 }
-                override fun onBeginningOfSpeech() {
-                    Toast.makeText(context, "Speech Started", Toast.LENGTH_SHORT).show()
-                }
-                override fun onResults(results: Bundle?) {
-                    viewModel.setListening(false)
-                    val matches =
-                        results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    val text = matches?.get(0) ?: ""
-                    Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
-                    WaifuStateManager.currentState = WaifuState.TALK
-                    CommandManager.execute(context, text)
-                    handler.postDelayed(
-                        { WaifuStateManager.currentState = WaifuState.RELAX },
-                        3000
-                    )
-                }
-                override fun onEndOfSpeech() {
-                    viewModel.setListening(false)
-                    Toast.makeText(context, "Speech Ended", Toast.LENGTH_SHORT).show()
-                }
-                override fun onError(error: Int) {
-                    viewModel.setListening(false)
-                    Toast.makeText(context, "Speech Error: $error", Toast.LENGTH_LONG).show()
-                    WaifuStateManager.currentState = WaifuState.RELAX
-                }
-                override fun onRmsChanged(rmsdB: Float) {}
-                override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onPartialResults(partialResults: Bundle?) {}
-                override fun onEvent(eventType: Int, params: Bundle?) {}
-            }
         )
         recognizer
     }
@@ -178,40 +194,39 @@ fun MainScreen() {
     when (currentScreen) {
         is Screen.Main -> {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
+                    modifier =
+                            Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                ) {
+                Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                     HeaderSection(greeting = greeting)
 
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         QuickActionChips(
-                            onChipClick = { label ->
-                                when (label) {
-                                    "Terminal" -> currentScreen = Screen.Ssh(tab = 0)
-                                    "File" -> currentScreen = Screen.Ssh(tab = 1)
-                                    "SSH" -> currentScreen = Screen.Ssh(tab = 0)
-                                    "Info" -> {
-                                        if (!SshManager.isConnected()) {
-                                            Toast.makeText(context, "SSH not connected", Toast.LENGTH_SHORT).show()
-                                            return@QuickActionChips
+                                onChipClick = { label ->
+                                    when (label) {
+                                        "Terminal" -> currentScreen = Screen.Ssh(tab = 0)
+                                        "File" -> currentScreen = Screen.Ssh(tab = 1)
+                                        "SSH" -> currentScreen = Screen.Ssh(tab = 0)
+                                        "Info" -> {
+                                            if (!SshManager.isConnected()) {
+                                                Toast.makeText(
+                                                                context,
+                                                                "SSH not connected",
+                                                                Toast.LENGTH_SHORT
+                                                        )
+                                                        .show()
+                                                return@QuickActionChips
+                                            }
+                                            currentScreen = Screen.Info
                                         }
-                                        currentScreen = Screen.Info
+                                        "Guide" -> currentScreen = Screen.Guide
+                                        "Customize" -> currentScreen = Screen.Customize
+                                        "Permissions" -> currentScreen = Screen.Permissions
                                     }
-                                    "Guide" -> currentScreen = Screen.Guide
-                                    "Customize" -> currentScreen = Screen.Customize
                                 }
-                            }
                         )
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -221,44 +236,48 @@ fun MainScreen() {
                         Spacer(modifier = Modifier.height(16.dp))
 
                         CommandInputSection(
-                            commandText = uiState.commandText,
-                            onCommandChange = { viewModel.updateCommandText(it) },
-                            onExecute = {
-                                if (uiState.commandText.isNotBlank()) {
-                                    WaifuStateManager.currentState = WaifuState.TALK
-                                    CommandManager.execute(context, uiState.commandText)
-                                    handler.postDelayed(
-                                        { WaifuStateManager.currentState = WaifuState.RELAX },
-                                        3000
-                                    )
-                                    viewModel.clearCommand()
+                                commandText = uiState.commandText,
+                                onCommandChange = { viewModel.updateCommandText(it) },
+                                onExecute = {
+                                    if (uiState.commandText.isNotBlank()) {
+                                        WaifuStateManager.currentState = WaifuState.TALK
+                                        CommandManager.execute(context, uiState.commandText)
+                                        handler.postDelayed(
+                                                {
+                                                    WaifuStateManager.currentState =
+                                                            WaifuState.RELAX
+                                                },
+                                                3000
+                                        )
+                                        viewModel.clearCommand()
+                                    }
                                 }
-                            }
                         )
 
                         Spacer(modifier = Modifier.height(16.dp))
 
                         VoiceCommandSection(
-                            isListening = uiState.isListening,
-                            onStartListening = {
-                                if (ContextCompat.checkSelfPermission(
-                                        context,
-                                        Manifest.permission.RECORD_AUDIO
-                                    ) == PackageManager.PERMISSION_GRANTED
-                                ) {
-                                    try {
-                                        WaifuStateManager.currentState = WaifuState.LISTEN
-                                        viewModel.setListening(true)
-                                        speechRecognizer.startListening(speechIntent)
-                                    } catch (e: Exception) {
-                                        Toast.makeText(
-                                            context,
-                                            "Exception: ${e.message}",
-                                            Toast.LENGTH_LONG
-                                        ).show()
+                                isListening = uiState.isListening,
+                                onStartListening = {
+                                    if (ContextCompat.checkSelfPermission(
+                                                    context,
+                                                    Manifest.permission.RECORD_AUDIO
+                                            ) == PackageManager.PERMISSION_GRANTED
+                                    ) {
+                                        try {
+                                            WaifuStateManager.currentState = WaifuState.LISTEN
+                                            viewModel.setListening(true)
+                                            speechRecognizer.startListening(speechIntent)
+                                        } catch (e: Exception) {
+                                            Toast.makeText(
+                                                            context,
+                                                            "Exception: ${e.message}",
+                                                            Toast.LENGTH_LONG
+                                                    )
+                                                    .show()
+                                        }
                                     }
                                 }
-                            }
                         )
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -267,7 +286,9 @@ fun MainScreen() {
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        OverlayControlSection()
+                        OverlayControlSection(
+                            onShowTutorial = { currentScreen = Screen.OverlayTutorial }
+                        )
 
                         Spacer(modifier = Modifier.height(48.dp))
                     }
@@ -276,25 +297,64 @@ fun MainScreen() {
         }
         is Screen.Ssh -> {
             SshScreen(
-                onBack = { currentScreen = Screen.Main },
-                defaultTab = (currentScreen as Screen.Ssh).tab
+                    onBack = { currentScreen = Screen.Main },
+                    defaultTab = (currentScreen as Screen.Ssh).tab
             )
         }
         is Screen.Info -> {
-            LaptopInfoScreen(
-                onBack = { currentScreen = Screen.Main }
-            )
+            LaptopInfoScreen(onBack = { currentScreen = Screen.Main })
         }
         is Screen.Guide -> {
-            GuideScreen(
-                onBack = { currentScreen = Screen.Main }
-            )
+            GuideScreen(onBack = { currentScreen = Screen.Main })
         }
         is Screen.Customize -> {
-            CustomizeScreen(
-                onBack = { currentScreen = Screen.Main }
+            CustomizeScreen(onBack = { currentScreen = Screen.Main })
+        }
+        is Screen.Permissions -> {
+            PermissionScreen(onBack = { currentScreen = Screen.Main })
+        }
+        is Screen.OverlayTutorial -> {
+            OverlayTutorialScreen(
+                onDone = {
+                    TutorialManager.markOverlayTutorialDone(context)
+                    CommandManager.execute(context, "start_overlay")
+                    currentScreen = Screen.Main
+                }
             )
         }
+    }
+
+    val currentVersionName = remember {
+        try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
+        } catch (_: Exception) { "1.0" }
+    }
+
+    val scope = rememberCoroutineScope()
+
+    updateInfo?.let { info ->
+        UpdateDialog(
+            currentVersion = currentVersionName,
+            newVersion = info.latestVersionName,
+            isDownloading = isDownloading,
+            downloadProgress = downloadProgress,
+            onUpdate = {
+                isDownloading = true
+                scope.launch {
+                    val result = UpdateDownloader.download(context, info.downloadUrl)
+                    if (result != null) {
+                        isDownloading = false
+                        UpdateInstaller.install(context, result.file)
+                    } else {
+                        isDownloading = false
+                        android.widget.Toast
+                            .makeText(context, "Gagal mengunduh update", android.widget.Toast.LENGTH_SHORT)
+                            .show()
+                    }
+                }
+            },
+            onLater = { updateInfo = null }
+        )
     }
 }
 
@@ -308,66 +368,61 @@ private fun HeaderSection(greeting: String) {
         CustomAssetManager.loadImageBitmap(context, CustomAssetManager.AssetType.ICON)
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(240.dp)
-    ) {
+    Box(modifier = Modifier.fillMaxWidth().height(240.dp)) {
         if (headerBitmap != null) {
             Image(
-                painter = BitmapPainter(headerBitmap),
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
+                    painter = BitmapPainter(headerBitmap),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
             )
         } else {
             Image(
-                painter = painterResource(id = R.drawable.header),
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
+                    painter = painterResource(id = R.drawable.header),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
             )
         }
 
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0x80000000),
-                            Color(0x00000000),
-                            Color(0xFFF2EAE1)
-                        )
-                    )
-                )
+                modifier =
+                        Modifier.fillMaxSize()
+                                .background(
+                                        Brush.verticalGradient(
+                                                colors =
+                                                        listOf(
+                                                                Color(0x80000000),
+                                                                Color(0x00000000),
+                                                                Color(0xFFF2EAE1)
+                                                        )
+                                        )
+                                )
         )
 
         Row(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.align(Alignment.BottomStart).padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically
         ) {
             if (iconBitmap != null) {
                 Image(
-                    painter = BitmapPainter(iconBitmap),
-                    contentDescription = "Waifu",
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentScale = ContentScale.Crop
+                        painter = BitmapPainter(iconBitmap),
+                        contentDescription = "Waifu",
+                        modifier =
+                                Modifier.size(64.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentScale = ContentScale.Crop
                 )
             } else {
                 Image(
-                    painter = painterResource(id = R.drawable.icon),
-                    contentDescription = "Waifu",
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentScale = ContentScale.Crop
+                        painter = painterResource(id = R.drawable.icon),
+                        contentDescription = "Waifu",
+                        modifier =
+                                Modifier.size(64.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentScale = ContentScale.Crop
                 )
             }
 
@@ -375,15 +430,15 @@ private fun HeaderSection(greeting: String) {
 
             Column {
                 Text(
-                    text = greeting,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Espresso
+                        text = greeting,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Espresso
                 )
                 Text(
-                    text = "Apa yang bisa saya bantu?",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF8C7A70)
+                        text = "Apa yang bisa saya bantu?",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF8C7A70)
                 )
             }
         }
@@ -392,44 +447,51 @@ private fun HeaderSection(greeting: String) {
 
 @Composable
 private fun QuickActionChips(onChipClick: (String) -> Unit = {}) {
-    val chips = listOf(
-        ChipData("Terminal", Icons.Filled.Terminal, DeepRose),
-        ChipData("File", Icons.Filled.Folder, DeepRose),
-        ChipData("SSH", Icons.Filled.Lan, DeepRose),
-        ChipData("Info", Icons.Filled.Info, DeepRose),
-        ChipData("Guide", Icons.AutoMirrored.Filled.MenuBook, DeepRose),
-        ChipData("Customize", Icons.Filled.Palette, DeepRose),
+    val chips =
+            listOf(
+                    ChipData("Terminal", Icons.Filled.Terminal, DeepRose),
+                    ChipData("File", Icons.Filled.Folder, DeepRose),
+                    ChipData("SSH", Icons.Filled.Lan, DeepRose),
+                    ChipData("Info", Icons.Filled.Info, DeepRose),
+                    ChipData("Guide", Icons.AutoMirrored.Filled.MenuBook, DeepRose),
+            ChipData("Customize", Icons.Filled.Palette, DeepRose),
+            ChipData("Permissions", Icons.Filled.Lock, DeepRose),
     )
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(top = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
+            modifier =
+                    Modifier.fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(top = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
     ) {
         chips.forEach { chip ->
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(horizontal = 8.dp)
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 8.dp)
             ) {
                 FilledIconButton(
-                    onClick = { onChipClick(chip.label) },
-                    modifier = Modifier.size(48.dp),
-                    shape = CircleShape,
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = chip.color.copy(alpha = 0.15f),
-                        contentColor = chip.color
-                    )
+                        onClick = { onChipClick(chip.label) },
+                        modifier = Modifier.size(48.dp),
+                        shape = CircleShape,
+                        colors =
+                                IconButtonDefaults.filledIconButtonColors(
+                                        containerColor = chip.color.copy(alpha = 0.15f),
+                                        contentColor = chip.color
+                                )
                 ) {
-                    Icon(chip.icon, contentDescription = chip.label, modifier = Modifier.size(24.dp))
+                    Icon(
+                            chip.icon,
+                            contentDescription = chip.label,
+                            modifier = Modifier.size(24.dp)
+                    )
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = chip.label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onBackground
+                        text = chip.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onBackground
                 )
             }
         }
@@ -439,26 +501,27 @@ private fun QuickActionChips(onChipClick: (String) -> Unit = {}) {
 @Composable
 private fun StatusBar() {
     val sshConnected = SshManager.isConnected()
-    val sshLabel = if (sshConnected) {
-        val conn = SshManager.getCurrentConnection()
-        "Laptop: ${conn?.host ?: "online"}"
-    } else {
-        "Laptop: offline"
-    }
+    val sshLabel =
+            if (sshConnected) {
+                val conn = SshManager.getCurrentConnection()
+                "Laptop: ${conn?.host ?: "online"}"
+            } else {
+                "Laptop: offline"
+            }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        )
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors =
+                    CardDefaults.cardColors(
+                            containerColor =
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    )
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
         ) {
             StatusItem(Icons.Filled.Wifi, "WiFi")
             StatusItem(Icons.Filled.Computer, sshLabel)
@@ -471,22 +534,22 @@ private fun StatusBar() {
 private fun StatusItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
-            icon,
-            contentDescription = null,
-            modifier = Modifier.size(14.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                icon,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.width(4.dp))
         Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
 
 private data class ChipData(
-    val label: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
-    val color: Color
+        val label: String,
+        val icon: androidx.compose.ui.graphics.vector.ImageVector,
+        val color: Color
 )

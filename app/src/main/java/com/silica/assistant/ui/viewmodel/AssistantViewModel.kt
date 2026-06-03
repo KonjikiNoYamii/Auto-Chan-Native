@@ -10,6 +10,7 @@ class AssistantViewModel : ViewModel() {
     var uiState by mutableStateOf(AssistantUiState())
         private set
 
+
     fun updateCommandText(text: String) {
         uiState = uiState.copy(commandText = text)
     }

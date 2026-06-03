@@ -16,10 +16,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.silica.assistant.core.CommandManager
+import com.silica.assistant.core.config.TutorialManager
 
 @Composable
 fun OverlayControlSection(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onShowTutorial: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
 
@@ -55,7 +57,11 @@ fun OverlayControlSection(
                         if (Build.VERSION.SDK_INT >= 33) {
                             notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                         }
-                        CommandManager.execute(context, "start_overlay")
+                        if (!TutorialManager.isOverlayTutorialDone(context) && onShowTutorial != null) {
+                            onShowTutorial()
+                        } else {
+                            CommandManager.execute(context, "start_overlay")
+                        }
                     },
                     modifier = Modifier.weight(1f),
                     shape = MaterialTheme.shapes.small,
