@@ -86,10 +86,8 @@ object CommandManager {
         }
 
         if (result == null) {
-            // fallback: try as app name first, then Google search
             if (!AppLauncher.open(context, effectiveInput)) {
-                OverlayEventBus.onBubble?.invoke("🔎 Searching $effectiveInput")
-                IntentController.searchGoogle(context, effectiveInput)
+                OverlayEventBus.onBubble?.invoke("😕 Maaf, saya tidak mengerti \"$effectiveInput\". Coba buka Panduan untuk lihat command yang tersedia.")
             }
             return
         }
@@ -212,12 +210,7 @@ object CommandManager {
                 }.start()
             }
             else -> {
-                Toast.makeText(
-                                context,
-                                "Command: ${result.command} (${result.confidence})",
-                                Toast.LENGTH_SHORT
-                        )
-                        .show()
+                OverlayEventBus.onBubble?.invoke("😕 Maaf, saya tidak mengerti command \"${result.command}\"")
             }
         }
     }

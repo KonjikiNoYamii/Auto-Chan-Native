@@ -1,7 +1,9 @@
 package com.silica.assistant.service
 
+import android.Manifest
 import android.app.Service
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.PixelFormat
 import android.media.MediaPlayer
 import android.os.Handler
@@ -13,6 +15,7 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import com.silica.assistant.R
 import com.silica.assistant.core.CommandManager
 import com.silica.assistant.core.CustomAssetManager
@@ -133,7 +136,7 @@ class OverlayService : Service() {
                     longPressHandler.postDelayed(
                             {
                                 longPressTriggered = true
-                                VoiceManager.start()
+                                startVoiceWithPermissionCheck()
                             },
                             600
                     )
@@ -166,12 +169,35 @@ class OverlayService : Service() {
                     if (!isMoving && !longPressTriggered) {
 
                         // toggle voice via SINGLE SYSTEM
-                        VoiceManager.start()
+                        startVoiceWithPermissionCheck()
                     }
 
                     true
                 }
                 else -> false
+            }
+        }
+    }
+
+    private fun startVoiceWithPermissionCheck() {
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            VoiceManager.start()
+        } else {
+            showBubble("Izinkan akses mikrofon dulu ya")
+            OverlayEventBus.navigateScreen.value = "request_audio_permission"
+            val launchIntent =
+                packageManager.getLaunchIntentForPackage(packageName)
+            if (launchIntent != null) {
+                launchIntent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                        Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                )
+                startActivity(launchIntent)
             }
         }
     }

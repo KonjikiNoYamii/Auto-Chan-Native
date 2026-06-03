@@ -9,6 +9,8 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -39,6 +41,7 @@ import com.silica.assistant.R
 import com.silica.assistant.core.CommandManager
 import com.silica.assistant.core.CustomAssetManager
 import com.silica.assistant.core.config.TutorialManager
+
 import com.silica.assistant.core.overlay.OverlayEventBus
 import com.silica.assistant.core.ssh.SshManager
 import com.silica.assistant.overlay.WaifuState
@@ -50,7 +53,6 @@ import com.silica.assistant.ui.components.*
 import com.silica.assistant.ui.components.UpdateDialog
 import com.silica.assistant.ui.customize.CustomizeScreen
 import com.silica.assistant.ui.guide.GuideScreen
-import com.silica.assistant.ui.permissions.PermissionScreen
 import com.silica.assistant.ui.tutorial.OverlayTutorialScreen
 import com.silica.assistant.ui.ssh.LaptopInfoScreen
 import com.silica.assistant.ui.ssh.SshScreen
@@ -67,7 +69,6 @@ private sealed class Screen {
     data object Info : Screen()
     data object Guide : Screen()
     data object Customize : Screen()
-    data object Permissions : Screen()
     data object OverlayTutorial : Screen()
 }
 
@@ -81,18 +82,31 @@ fun MainScreen() {
     var updateInfo by remember { mutableStateOf<UpdateChecker.UpdateInfo?>(null) }
     var isDownloading by remember { mutableStateOf(false) }
     var downloadProgress by remember { mutableFloatStateOf(0f) }
+    var pendingAudioPermission by remember { mutableStateOf(false) }
 
     BackHandler(enabled = currentScreen !is Screen.Main) { currentScreen = Screen.Main }
 
     LaunchedEffect(Unit) {
         snapshotFlow { OverlayEventBus.navigateScreen.value }.collect { dest ->
             if (dest != null) {
-                currentScreen =
-                        when (dest) {
-                            "ssh" -> Screen.Ssh(tab = 0)
-                            else -> Screen.Main
-                        }
-                OverlayEventBus.navigateScreen.value = null
+                if (dest == "request_audio_permission") {
+                    currentScreen = Screen.Main
+                    OverlayEventBus.navigateScreen.value = null
+                    if (ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.RECORD_AUDIO
+                        ) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        pendingAudioPermission = true
+                    }
+                } else {
+                    currentScreen =
+                            when (dest) {
+                                "ssh" -> Screen.Ssh(tab = 0)
+                                else -> Screen.Main
+                            }
+                    OverlayEventBus.navigateScreen.value = null
+                }
                 // bring app to foreground when triggered from overlay
                 val launchIntent =
                         context.packageManager.getLaunchIntentForPackage(context.packageName)
@@ -116,6 +130,12 @@ fun MainScreen() {
         val info = UpdateChecker.check(currentVersionCode)
         if (info != null) {
             updateInfo = info
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (!TutorialManager.isOverlayTutorialDone(context)) {
+            currentScreen = Screen.OverlayTutorial
         }
     }
 
@@ -191,6 +211,29 @@ fun MainScreen() {
     }
     DisposableEffect(Unit) { onDispose { speechRecognizer.destroy() } }
 
+    val recordPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            try {
+                WaifuStateManager.currentState = WaifuState.LISTEN
+                viewModel.setListening(true)
+                speechRecognizer.startListening(speechIntent)
+            } catch (e: Exception) {
+                Toast.makeText(context, "Exception: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        } else {
+            Toast.makeText(context, "Izin mikrofon diperlukan untuk voice command", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    LaunchedEffect(pendingAudioPermission) {
+        if (pendingAudioPermission) {
+            pendingAudioPermission = false
+            recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
     when (currentScreen) {
         is Screen.Main -> {
             Box(
@@ -224,7 +267,6 @@ fun MainScreen() {
                                         }
                                         "Guide" -> currentScreen = Screen.Guide
                                         "Customize" -> currentScreen = Screen.Customize
-                                        "Permissions" -> currentScreen = Screen.Permissions
                                     }
                                 }
                         )
@@ -276,6 +318,8 @@ fun MainScreen() {
                                                     )
                                                     .show()
                                         }
+                                    } else {
+                                        recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                                     }
                                 }
                         )
@@ -286,9 +330,7 @@ fun MainScreen() {
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        OverlayControlSection(
-                            onShowTutorial = { currentScreen = Screen.OverlayTutorial }
-                        )
+                        OverlayControlSection()
 
                         Spacer(modifier = Modifier.height(48.dp))
                     }
@@ -310,14 +352,10 @@ fun MainScreen() {
         is Screen.Customize -> {
             CustomizeScreen(onBack = { currentScreen = Screen.Main })
         }
-        is Screen.Permissions -> {
-            PermissionScreen(onBack = { currentScreen = Screen.Main })
-        }
         is Screen.OverlayTutorial -> {
             OverlayTutorialScreen(
                 onDone = {
                     TutorialManager.markOverlayTutorialDone(context)
-                    CommandManager.execute(context, "start_overlay")
                     currentScreen = Screen.Main
                 }
             )
@@ -455,7 +493,6 @@ private fun QuickActionChips(onChipClick: (String) -> Unit = {}) {
                     ChipData("Info", Icons.Filled.Info, DeepRose),
                     ChipData("Guide", Icons.AutoMirrored.Filled.MenuBook, DeepRose),
             ChipData("Customize", Icons.Filled.Palette, DeepRose),
-            ChipData("Permissions", Icons.Filled.Lock, DeepRose),
     )
 
     Row(

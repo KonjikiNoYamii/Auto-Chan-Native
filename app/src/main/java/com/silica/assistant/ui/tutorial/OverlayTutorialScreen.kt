@@ -1,6 +1,5 @@
 package com.silica.assistant.ui.tutorial
 
-import androidx.compose.animation.*
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -31,90 +30,90 @@ fun OverlayTutorialScreen(onDone: () -> Unit) {
     val pagerState = rememberPagerState(pageCount = { steps.size })
     val scope = rememberCoroutineScope()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        TopAppBar(
-            title = { Text("Tutorial Overlay", fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                IconButton(onClick = onDone) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = DeepRose,
-                titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
-            )
-        )
-
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically
-        ) { page ->
-            TutorialStep(
-                icon = steps[page].icon,
-                title = steps[page].title,
-                description = steps[page].description,
-                color = steps[page].color
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Tutorial Overlay", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onDone) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
             )
         }
-
-        // Bottom: dots + button
+    ) { padding ->
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .fillMaxSize()
+                .padding(padding)
         ) {
-            // Dots indicator
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically
-            ) {
-                steps.indices.forEach { i ->
-                    Box(
-                        modifier = Modifier
-                            .size(if (pagerState.currentPage == i) 10.dp else 8.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (pagerState.currentPage == i) DeepRose
-                                else MaterialTheme.colorScheme.outlineVariant
-                            )
-                    )
-                }
+            ) { page ->
+                TutorialStep(
+                    icon = steps[page].icon,
+                    title = steps[page].title,
+                    description = steps[page].description,
+                    color = steps[page].color
+                )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            if (pagerState.currentPage == steps.lastIndex) {
-                Button(
-                    onClick = onDone,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = DeepRose)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        "MULAI OVERLAY",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    )
+                    steps.indices.forEach { i ->
+                        Box(
+                            modifier = Modifier
+                                .size(if (pagerState.currentPage == i) 10.dp else 8.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (pagerState.currentPage == i) DeepRose
+                                    else MaterialTheme.colorScheme.outlineVariant
+                                )
+                        )
+                    }
                 }
-            } else {
-                Button(
-                    onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = DeepRose)
-                ) {
-                    Text(
-                        "LANJUT",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                if (pagerState.currentPage == steps.lastIndex) {
+                    Button(
+                        onClick = onDone,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = DeepRose)
+                    ) {
+                        Text(
+                            "LANJUTKAN",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = DeepRose)
+                    ) {
+                        Text(
+                            "LANJUT",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
                 }
             }
         }
@@ -214,7 +213,7 @@ private val steps = listOf(
     TutorialStepData(
         icon = Icons.Filled.ChatBubble,
         title = "Bubble Chat",
-        description = "Waifu akan menampilkan gelembung chat sebagai respons atas perintah atau aksi yang Anda lakukan. Keren, kan?",
+        description = "Waifu akan menampilkan gelembung chat sebagai respons atas perintah atau aksi yang Anda lakukan.",
         color = Color(0xFF4CAF50)
     )
 )

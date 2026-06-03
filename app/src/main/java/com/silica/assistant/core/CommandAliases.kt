@@ -9,8 +9,14 @@ object CommandAliases {
             "spotify",
             "buka spotify",
             "putar lagu",
-            "musik",
-            "play lagu"
+            "play lagu",
+            "memutar musik",
+            "memutar lagu",
+            "putarkan musik",
+            "putarkan lagu",
+            "dengarkan musik",
+            "dengerin musik",
+            "dengerin lagu"
         ),
 
         "open_youtube" to listOf(
@@ -44,11 +50,16 @@ object CommandAliases {
         ),
 
         "media_play_pause" to listOf(
+            "musik",
             "play musik",
             "pause musik",
             "play music",
             "pause music",
             "putar musik",
+            "nyalakan musik",
+            "nyalain musik",
+            "mainkan musik",
+            "diputar",
             "hentikan musik",
             "lanjutkan musik",
             "resume music"
