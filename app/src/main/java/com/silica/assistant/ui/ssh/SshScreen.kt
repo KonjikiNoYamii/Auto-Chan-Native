@@ -339,6 +339,16 @@ fun SshScreen(
                         }
                     )
                 }
+
+                LaunchedEffect(tab, currentPath) {
+                    if (tab == 1) {
+                        while (true) {
+                            kotlinx.coroutines.delay(3000)
+                            if (!isActive.value) break
+                            refreshFiles(currentPath, { files = it }, { filesLoading = it })
+                        }
+                    }
+                }
             }
         }
     }
