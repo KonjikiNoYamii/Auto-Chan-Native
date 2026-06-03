@@ -3,6 +3,7 @@ package com.silica.assistant.core.ssh
 import android.content.Context
 import com.jcraft.jsch.ChannelExec
 import com.jcraft.jsch.ChannelSftp
+import com.jcraft.jsch.ChannelShell
 import com.jcraft.jsch.JSch
 import com.jcraft.jsch.KeyPair
 import com.jcraft.jsch.Session
@@ -150,12 +151,33 @@ object SshManager {
 
     fun disconnect() {
         stopMonitor()
+        closeShell()
         session?.disconnect()
         session = null
         currentConnection = null
     }
 
     fun isConnected(): Boolean = session?.isConnected == true
+
+    private var shellSession: ShellSession? = null
+
+    fun openShell(): Result<ShellSession> = runCatching {
+        closeShell()
+        val s = session ?: throw Exception("Not connected")
+        val channel = s.openChannel("shell") as ChannelShell
+        val shell = ShellSession(channel)
+        shellSession = shell
+        shell
+    }
+
+    fun closeShell() {
+        try { shellSession?.close() } catch (_: Exception) {}
+        shellSession = null
+    }
+
+    fun isShellActive(): Boolean = shellSession != null
+
+    fun getShell(): ShellSession? = shellSession
 
     fun getCurrentConnection(): SshConnection? = currentConnection
 

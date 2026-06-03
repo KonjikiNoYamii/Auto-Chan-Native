@@ -169,6 +169,15 @@ object CommandAliases {
             "laptop info",
             "status laptop",
             "kondisi laptop"
+        ),
+
+        "chat" to listOf(
+            "chat",
+            "chat ai",
+            "buka chat",
+            "ai chat",
+            "tanya ai",
+            "tanya"
         )
     )
 }

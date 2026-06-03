@@ -54,6 +54,7 @@ import com.silica.assistant.ui.components.UpdateDialog
 import com.silica.assistant.ui.customize.CustomizeScreen
 import com.silica.assistant.ui.guide.GuideScreen
 import com.silica.assistant.ui.tutorial.OverlayTutorialScreen
+import com.silica.assistant.ui.chat.ChatScreen
 import com.silica.assistant.ui.ssh.LaptopInfoScreen
 import com.silica.assistant.ui.ssh.SshScreen
 import com.silica.assistant.ui.theme.DeepRose
@@ -70,6 +71,7 @@ private sealed class Screen {
     data object Guide : Screen()
     data object Customize : Screen()
     data object OverlayTutorial : Screen()
+    data object Chat : Screen()
 }
 
 @Composable
@@ -103,6 +105,7 @@ fun MainScreen() {
                     currentScreen =
                             when (dest) {
                                 "ssh" -> Screen.Ssh(tab = 0)
+                                "chat" -> Screen.Chat
                                 else -> Screen.Main
                             }
                     OverlayEventBus.navigateScreen.value = null
@@ -265,6 +268,7 @@ fun MainScreen() {
                                             }
                                             currentScreen = Screen.Info
                                         }
+                                        "Chat" -> currentScreen = Screen.Chat
                                         "Guide" -> currentScreen = Screen.Guide
                                         "Customize" -> currentScreen = Screen.Customize
                                     }
@@ -359,6 +363,9 @@ fun MainScreen() {
                     currentScreen = Screen.Main
                 }
             )
+        }
+        is Screen.Chat -> {
+            ChatScreen(onBack = { currentScreen = Screen.Main })
         }
     }
 
@@ -490,6 +497,7 @@ private fun QuickActionChips(onChipClick: (String) -> Unit = {}) {
                     ChipData("Terminal", Icons.Filled.Terminal, DeepRose),
                     ChipData("File", Icons.Filled.Folder, DeepRose),
                     ChipData("SSH", Icons.Filled.Lan, DeepRose),
+                    ChipData("Chat", Icons.Filled.QuestionAnswer, DeepRose),
                     ChipData("Info", Icons.Filled.Info, DeepRose),
                     ChipData("Guide", Icons.AutoMirrored.Filled.MenuBook, DeepRose),
             ChipData("Customize", Icons.Filled.Palette, DeepRose),

@@ -32,10 +32,13 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.silica.assistant.core.config.AssistantConfig
+import com.silica.assistant.core.ssh.ShellSession
 import com.silica.assistant.core.ssh.SshConnection
 import com.silica.assistant.core.ssh.SshFile
 import com.silica.assistant.core.ssh.SshManager
@@ -67,7 +70,10 @@ fun SshScreen(
     var filesLoading by remember { mutableStateOf(false) }
     var terminalOutput by remember { mutableStateOf("") }
     var terminalInput by remember { mutableStateOf("") }
-    var terminalDir by remember { mutableStateOf("") }
+    var commandHistory = remember { mutableListOf<String>() }
+    var historyIndex by remember { mutableIntStateOf(-1) }
+    var showSudoDialog by remember { mutableStateOf(false) }
+    var terminalShell by remember { mutableStateOf<ShellSession?>(null) }
 
     var passwordVisible by remember { mutableStateOf(false) }
     var showUploadPicker by remember { mutableStateOf(false) }
@@ -77,7 +83,9 @@ fun SshScreen(
     var pendingConnection by remember { mutableStateOf<SshConnection?>(null) }
     val isActive = remember { mutableStateOf(true) }
     DisposableEffect(Unit) {
-        onDispose { isActive.value = false }
+        onDispose {
+            isActive.value = false
+        }
     }
 
     val uploadLauncher = rememberLauncherForActivityResult(
@@ -208,7 +216,7 @@ fun SshScreen(
                         } else {
                             connecting = true
                             doConnect(context, handler, conn, { connected = true }, { connecting = false },
-                                { terminalDir = it }, { currentPath = it })
+                                { currentPath = it })
                         }
                     }
                 )
@@ -273,52 +281,39 @@ fun SshScreen(
                 }
 
                 when (tab) {
-                        0 -> TerminalTab(
+                    0 -> TerminalTab(
                         output = terminalOutput,
                         input = terminalInput,
-                        currentDir = terminalDir,
                         onInputChange = { terminalInput = it },
                         onExecute = {
                             if (terminalInput.isNotBlank()) {
-                                val rawCmd = terminalInput
+                                val cmd = terminalInput
                                 terminalInput = ""
-                                val home = SshManager.homePath
-                                // resolve cd locally
-                                if (rawCmd.startsWith("cd ")) {
-                                    val target = rawCmd.removePrefix("cd ").trim()
-                                    val resolved = resolvePath(terminalDir, target, home)
-                                    terminalDir = resolved
-                                    terminalOutput = if (terminalOutput.isEmpty()) "" else "$terminalOutput\n"
-                                    terminalOutput = "$terminalOutput${buildPrompt(resolved)}"
-                                    // refresh files tab path too
-                                    currentPath = resolved
-                                    refreshFiles(resolved, { files = it }, { filesLoading = it })
-                                } else {
-                                    val prompt = buildPrompt(terminalDir)
-                                    val display = "$prompt$rawCmd"
-                                    terminalOutput = if (terminalOutput.isEmpty()) display else "$terminalOutput\n$display"
-                                    val fullCmd = "cd '$terminalDir' 2>/dev/null; $rawCmd"
-                                    Thread {
-                                        val cmdResult = SshManager.executeCommand(fullCmd)
-                                        handler.post {
-                                            if (isActive.value) {
-                                                cmdResult
-                                                    .onSuccess { result ->
-                                                        terminalOutput = "$terminalOutput\n$result"
-                                                    }
-                                                    .onFailure { e ->
-                                                        terminalOutput = "$terminalOutput\nError: ${e.message}"
-                                                        handler.post {
-                                                            if (!SshManager.isConnected()) connected = false
-                                                        }
-                                                    }
-                                            }
-                                        }
-                                    }.start()
-                                }
+                                commandHistory.add(cmd)
+                                historyIndex = -1
+                                terminalShell?.sendCommand(cmd)
                             }
                         },
-                        onClear = { terminalOutput = "" }
+                        onClear = { terminalOutput = "" },
+                        onInterrupt = { terminalShell?.interrupt() },
+                        onHistoryUp = {
+                            if (commandHistory.isNotEmpty()) {
+                                val newIdx = if (historyIndex == -1) commandHistory.size - 1 else (historyIndex - 1).coerceAtLeast(0)
+                                historyIndex = newIdx
+                                terminalInput = commandHistory[newIdx]
+                            }
+                        },
+                        onHistoryDown = {
+                            if (historyIndex != -1) {
+                                historyIndex++
+                                if (historyIndex >= commandHistory.size) {
+                                    historyIndex = -1
+                                    terminalInput = ""
+                                } else {
+                                    terminalInput = commandHistory[historyIndex]
+                                }
+                            }
+                        }
                     )
                     1 -> FilesTab(
                         currentPath = currentPath,
@@ -342,6 +337,7 @@ fun SshScreen(
 
                 LaunchedEffect(tab, currentPath) {
                     if (tab == 1) {
+                        refreshFiles(currentPath, { files = it }, { filesLoading = it })
                         while (true) {
                             kotlinx.coroutines.delay(3000)
                             if (!isActive.value) break
@@ -349,7 +345,47 @@ fun SshScreen(
                         }
                     }
                 }
+
+                LaunchedEffect(tab, connected) {
+                    if (tab == 0 && connected) {
+                        if (!SshManager.isShellActive()) {
+                            val shell = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                SshManager.openShell().getOrNull()
+                            }
+                            terminalShell = shell
+                            shell?.onOutput = { data ->
+                                handler.post { terminalOutput += data }
+                            }
+                            shell?.onSudoPrompt = {
+                                handler.post { showSudoDialog = true }
+                            }
+                            shell?.onError = { msg ->
+                                handler.post { terminalOutput += "\nError: $msg" }
+                            }
+                        } else {
+                            val shell = SshManager.getShell()
+                            terminalShell = shell
+                            shell?.onOutput = { data ->
+                                handler.post { terminalOutput += data }
+                            }
+                            shell?.onSudoPrompt = {
+                                handler.post { showSudoDialog = true }
+                            }
+                            shell?.onError = { msg ->
+                                handler.post { terminalOutput += "\nError: $msg" }
+                            }
+                            terminalOutput = shell?.getFullOutput() ?: ""
+                        }
+                    }
+                }
             }
+        }
+    }
+
+    if (showSudoDialog) {
+        SudoPasswordDialog(onDismiss = { showSudoDialog = false }) { pwd ->
+            terminalShell?.sendPassword(pwd)
+            showSudoDialog = false
         }
     }
 
@@ -400,7 +436,7 @@ fun SshScreen(
                         pendingConnection?.let { conn ->
                             connecting = true
                             doConnect(context, handler, conn, { connected = true }, { connecting = false },
-                                { terminalDir = it }, { currentPath = it })
+                                { currentPath = it })
                         }
                         pendingConnection = null
                     },
@@ -423,7 +459,6 @@ private fun doConnect(
     conn: SshConnection,
     onConnected: (Boolean) -> Unit,
     onFinish: () -> Unit,
-    setTerminalDir: (String) -> Unit,
     setCurrentPath: (String) -> Unit
 ) {
     Thread {
@@ -431,7 +466,6 @@ private fun doConnect(
             .onSuccess {
                 handler.post {
                     onConnected(true)
-                    setTerminalDir(SshManager.homePath)
                     setCurrentPath(SshManager.homePath)
                     refreshFiles(SshManager.homePath, { _ -> }, { _ -> })
                 }
@@ -584,10 +618,12 @@ private fun ConnectionForm(
 private fun TerminalTab(
     output: String,
     input: String,
-    currentDir: String,
     onInputChange: (String) -> Unit,
     onExecute: () -> Unit,
-    onClear: () -> Unit
+    onClear: () -> Unit,
+    onInterrupt: () -> Unit,
+    onHistoryUp: () -> Unit,
+    onHistoryDown: () -> Unit
 ) {
     val scrollState = rememberScrollState()
     val promptColor = Color(0xFFFFD700)
@@ -627,16 +663,23 @@ private fun TerminalTab(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = if (currentDir.isNotEmpty()) currentDir else "Output",
+                text = "Terminal",
                 fontWeight = FontWeight.Bold,
                 fontSize = 12.sp,
                 color = DeepRose,
                 maxLines = 1
             )
-            TextButton(onClick = onClear) {
-                Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Clear")
+            Row {
+                TextButton(onClick = onInterrupt) {
+                    Icon(Icons.Filled.Cancel, contentDescription = null, modifier = Modifier.size(16.dp), tint = DeepRose)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Ctrl+C", color = DeepRose)
+                }
+                TextButton(onClick = onClear) {
+                    Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Clear")
+                }
             }
         }
 
@@ -685,6 +728,19 @@ private fun TerminalTab(
                 colors = IconButtonDefaults.filledIconButtonColors(containerColor = DeepRose)
             ) {
                 Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Execute")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            IconButton(onClick = onHistoryUp, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "History Up", modifier = Modifier.size(20.dp))
+            }
+            IconButton(onClick = onHistoryDown, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "History Down", modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -881,44 +937,48 @@ private fun formatSize(bytes: Long): String {
     return "%.1f GB".format(m / 1024.0)
 }
 
-private fun displayPath(path: String): String {
-    val home = SshManager.homePath
-    return when {
-        path == home -> "~"
-        path.startsWith(home) -> path.replace(home, "~")
-        else -> path
-    }
-}
+@Composable
+private fun SudoPasswordDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var pwd by remember { mutableStateOf("") }
+    var visible by remember { mutableStateOf(false) }
 
-private fun buildPrompt(path: String): String {
-    val conn = SshManager.getCurrentConnection()
-    val user = conn?.username ?: "user"
-    val host = conn?.host ?: "host"
-    return "$user@$host:${displayPath(path)}$ "
-}
-
-private fun resolvePath(current: String, target: String, home: String): String {
-    if (target == "~" || target == "~/") return home
-    val abs = when {
-        target == ".." -> current.substringBeforeLast("/").let { if (it.isEmpty()) "/" else it }
-        target.startsWith("/") -> target
-        target.startsWith("~/") -> target.replaceFirst("~", home)
-        target.startsWith("./") -> {
-            val base = if (current.endsWith("/")) current else "$current/"
-            "$base${target.removePrefix("./")}"
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Filled.Lock, contentDescription = null, tint = DeepRose) },
+        title = { Text("Sudo Password") },
+        text = {
+            OutlinedTextField(
+                value = pwd,
+                onValueChange = { pwd = it },
+                label = { Text("Password") },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+                visualTransformation = if (visible) VisualTransformation.None
+                else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { visible = !visible }) {
+                        Icon(
+                            if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                            contentDescription = null
+                        )
+                    }
+                }
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(pwd) },
+                colors = ButtonDefaults.buttonColors(containerColor = DeepRose)
+            ) { Text("Kirim") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Batal") }
         }
-        target.startsWith("..") -> {
-            var dir = current
-            var rest = target
-            while (rest.startsWith("..")) {
-                dir = dir.substringBeforeLast("/").let { if (it.isEmpty()) "/" else it }
-                rest = rest.removePrefix("..").removePrefix("/")
-            }
-            if (rest.isEmpty()) dir else "${dir.removeSuffix("/")}/$rest"
-        }
-        else -> "${current.removeSuffix("/")}/$target"
-    }
-    return abs.removeSuffix("/").let { if (it.isEmpty()) "/" else it }
+    )
 }
 
 private fun refreshFiles(

@@ -2,7 +2,10 @@ package com.silica.assistant.service
 
 import android.Manifest
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.PixelFormat
 import android.media.MediaPlayer
@@ -19,11 +22,13 @@ import androidx.core.content.ContextCompat
 import com.silica.assistant.R
 import com.silica.assistant.core.CommandManager
 import com.silica.assistant.core.CustomAssetManager
+import com.silica.assistant.core.llm.YamiQuotes
 import com.silica.assistant.core.overlay.OverlayEventBus
 import com.silica.assistant.core.voice.VoiceManager
 import com.silica.assistant.overlay.WaifuExpressionController
 import com.silica.assistant.overlay.WaifuState
 import com.silica.assistant.overlay.WaifuStateManager
+import kotlin.random.Random
 
 class OverlayService : Service() {
 
@@ -51,6 +56,28 @@ class OverlayService : Service() {
     private val longPressHandler = Handler(Looper.getMainLooper())
 
     private var bubbleHideRunnable: Runnable? = null
+
+    // random Yami quotes
+    private val randomQuoteHandler = Handler(Looper.getMainLooper())
+    private var isQuoteScheduled = false
+    private var lastTouchTime = 0L
+    private var screenOn = true
+
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_SCREEN_OFF -> {
+                    screenOn = false
+                    randomQuoteHandler.removeCallbacksAndMessages(null)
+                    isQuoteScheduled = false
+                }
+                Intent.ACTION_SCREEN_ON -> {
+                    screenOn = true
+                    scheduleRandomQuote()
+                }
+            }
+        }
+    }
 
     // 🧠 expression loop
     private val expressionUpdater =
@@ -112,6 +139,48 @@ class OverlayService : Service() {
         setupTouchListener()
 
         windowManager.addView(overlayView, params)
+
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+        }
+        registerReceiver(screenReceiver, filter)
+
+        scheduleRandomQuote()
+    }
+
+    private fun isIdle(): Boolean {
+        if (!screenOn) return false
+        val idleTime = System.currentTimeMillis() - lastTouchTime
+        return idleTime > 30_000
+    }
+
+    private fun scheduleRandomQuote() {
+        if (isQuoteScheduled || !screenOn) return
+        isQuoteScheduled = true
+        val delay = if (isIdle()) {
+            Random.nextLong(15_000, 30_000)
+        } else {
+            Random.nextLong(1_200_000, 2_400_000)
+        }
+        randomQuoteHandler.postDelayed({
+            showRandomQuote()
+            isQuoteScheduled = false
+            scheduleRandomQuote()
+        }, delay)
+    }
+
+    private fun showRandomQuote() {
+        if (!::bubbleText.isInitialized || overlayView.windowToken == null) return
+
+        val (text, emotion) = YamiQuotes.random()
+
+        WaifuStateManager.currentState = when (emotion) {
+            "happy", "blush" -> WaifuState.TALK
+            else -> WaifuState.RELAX
+        }
+
+        showBubble(text)
     }
 
     // =========================
@@ -123,6 +192,7 @@ class OverlayService : Service() {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
 
+                    lastTouchTime = System.currentTimeMillis()
                     isMoving = false
                     longPressTriggered = false
 
@@ -260,6 +330,9 @@ class OverlayService : Service() {
 
         handler.removeCallbacks(expressionUpdater)
         longPressHandler.removeCallbacksAndMessages(null)
+        randomQuoteHandler.removeCallbacksAndMessages(null)
+        isQuoteScheduled = false
+        try { unregisterReceiver(screenReceiver) } catch (_: Exception) {}
 
         VoiceManager.destroy()
 

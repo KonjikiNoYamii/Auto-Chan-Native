@@ -193,6 +193,10 @@ object CommandManager {
                 OverlayEventBus.onBubble?.invoke("🔌 SSH terputus")
                 Toast.makeText(context, "SSH disconnected", Toast.LENGTH_SHORT).show()
             }
+            "chat" -> {
+                OverlayEventBus.navigateScreen.value = "chat"
+                OverlayEventBus.onBubble?.invoke("💬 Membuka Chat AI...")
+            }
             "laptop_info" -> {
                 if (!SshManager.isConnected()) {
                     OverlayEventBus.onBubble?.invoke("❌ SSH tidak terhubung")
