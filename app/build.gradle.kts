@@ -19,7 +19,11 @@ android {
         applicationId = "com.silica.assistant"
         minSdk = 24
         targetSdk = 34
-        versionCode = 3
+        versionCode = if (project.gradle.startParameter.taskNames.any { it.contains("Debug", ignoreCase = true) }) {
+            (System.currentTimeMillis() / 1000).toInt()
+        } else {
+            4
+        }
         versionName = "1.1"
     }
 

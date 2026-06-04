@@ -3,6 +3,7 @@ package com.silica.assistant.ui
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -126,6 +127,7 @@ fun MainScreen() {
     }
 
     LaunchedEffect(Unit) {
+        if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) return@LaunchedEffect
         val currentVersionCode = try {
             val pkg = context.packageManager.getPackageInfo(context.packageName, 0)
             androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(pkg).toInt()
