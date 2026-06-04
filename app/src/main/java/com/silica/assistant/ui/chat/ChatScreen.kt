@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
@@ -23,7 +24,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.painterResource
+import com.silica.assistant.R
+import com.silica.assistant.core.CustomAssetManager
 import com.silica.assistant.core.llm.ChatMessage
 import com.silica.assistant.core.llm.EmotionMapper
 import com.silica.assistant.core.llm.LlmConfig
@@ -61,7 +65,17 @@ fun ChatScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Yami", fontSize = 18.sp) },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Image(
+                            painter = painterResource(R.drawable.iconchat),
+                            contentDescription = "Yami",
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Yami", fontSize = 18.sp)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -403,25 +417,34 @@ private fun MemoriesDialog(
 
 @Composable
 private fun ChatBubble(message: ChatMessage) {
+    val context = LocalContext.current
     val isUser = message.role == "user"
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val emotion = message.emotion
 
-    Column(
+    val userIconBitmap = remember {
+        CustomAssetManager.loadImageBitmap(context, CustomAssetManager.AssetType.ICON)
+    }
+
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Bottom
     ) {
-        if (emotion != null) {
+        if (!isUser && emotion != null) {
             Image(
                 painter = painterResource(EmotionMapper.getDrawable(emotion)),
                 contentDescription = emotion,
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .size(32.dp)
+                    .clip(CircleShape)
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.width(8.dp))
         }
-        Column {
+
+        Column(
+            horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
+        ) {
             Box(
                 modifier = Modifier
                     .widthIn(max = 280.dp)
@@ -455,6 +478,27 @@ private fun ChatBubble(message: ChatMessage) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 modifier = Modifier.padding(horizontal = 4.dp)
             )
+        }
+
+        if (isUser) {
+            Spacer(modifier = Modifier.width(8.dp))
+            if (userIconBitmap != null) {
+                Image(
+                    painter = BitmapPainter(userIconBitmap),
+                    contentDescription = "User",
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                )
+            } else {
+                Image(
+                    painter = painterResource(R.drawable.icon),
+                    contentDescription = "User",
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                )
+            }
         }
     }
 }
