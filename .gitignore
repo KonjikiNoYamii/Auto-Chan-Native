@@ -16,3 +16,6 @@ local.properties
 # Ignore keystore
 silica.jks
 keystore.properties
+
+# Ignore environment file
+.env

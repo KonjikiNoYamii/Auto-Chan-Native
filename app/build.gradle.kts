@@ -11,6 +11,11 @@ if (keystoreFile.exists()) {
     keystoreProps.load(keystoreFile.inputStream())
 }
 
+val envFile = rootProject.file(".env")
+val openRouterKey = if (envFile.exists()) {
+    envFile.readLines().firstOrNull { it.startsWith("OPENROUTER_API_KEY=") }?.substringAfter("=")?.trim() ?: ""
+} else ""
+
 android {
     namespace = "com.silica.assistant"
     compileSdk = 34
@@ -25,6 +30,7 @@ android {
             4
         }
         versionName = "1.1"
+        buildConfigField("String", "OPENROUTER_API_KEY", "\"${openRouterKey}\"")
     }
 
     signingConfigs {
@@ -57,6 +63,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {

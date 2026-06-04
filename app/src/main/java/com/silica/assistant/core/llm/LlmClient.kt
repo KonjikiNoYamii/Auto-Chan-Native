@@ -1,27 +1,49 @@
 package com.silica.assistant.core.llm
 
-import com.silica.assistant.core.ssh.SshManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.OutputStreamWriter
+import java.net.HttpURLConnection
+import java.net.URL
 
 object LlmClient {
 
     suspend fun chat(messages: List<ChatMessage>, memoryContext: String = ""): Result<ChatMessage> {
         return withContext(Dispatchers.IO) {
             try {
-                if (!SshManager.isConnected()) {
-                    return@withContext Result.failure(Exception("SSH tidak terhubung"))
-                }
                 val payload = buildPayload(messages, memoryContext)
-                val escaped = payload.replace("'", "'\\''")
-                val cmd = "curl -s -X POST 'http://localhost:11434/api/chat' -H 'Content-Type: application/json' -d '$escaped'"
-                SshManager.executeCommand(cmd).map { raw -> parseResponse(raw) }
+                val response = httpPost(LlmConfig.endpoint, payload)
+                parseResponse(response)
             } catch (e: Exception) {
                 Result.failure(e)
             }
         }
+    }
+
+    private fun httpPost(urlString: String, jsonPayload: String): String {
+        val url = URL(urlString)
+        val conn = url.openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.setRequestProperty("Content-Type", "application/json")
+        conn.setRequestProperty("Authorization", "Bearer ${LlmConfig.apiKey}")
+        conn.setRequestProperty("HTTP-Referer", "https://github.com/KonjikiNoYamii/Auto-Chan-Native")
+        conn.doOutput = true
+        conn.connectTimeout = 30000
+        conn.readTimeout = 60000
+
+        OutputStreamWriter(conn.outputStream).use { it.write(jsonPayload) }
+
+        val code = conn.responseCode
+        val body = if (code in 200..299) {
+            conn.inputStream.bufferedReader().use { it.readText() }
+        } else {
+            val err = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+            throw Exception("HTTP $code: ${err.take(200)}")
+        }
+        conn.disconnect()
+        return body
     }
 
     private fun buildPayload(messages: List<ChatMessage>, memoryContext: String = ""): String {
@@ -38,35 +60,42 @@ object LlmClient {
                 put("content", "Berikut adalah fakta yang kamu ingat:\n$memoryContext\nGunakan jika relevan.")
             })
         }
+
         for (msg in messages) {
             arr.put(JSONObject().apply {
                 put("role", msg.role)
                 put("content", msg.content)
             })
         }
+
         return JSONObject().apply {
             put("model", LlmConfig.model)
             put("messages", arr)
             put("stream", false)
-            put("keep_alive", 3600000)
         }.toString()
     }
 
-    private fun parseResponse(raw: String): ChatMessage {
-        if (raw.isBlank()) {
-            throw Exception("Respon kosong. Pastikan Ollama berjalan di laptop.")
+    private fun parseResponse(raw: String): Result<ChatMessage> {
+        return try {
+            if (raw.isBlank()) {
+                return Result.failure(Exception("Respon kosong dari server."))
+            }
+            val json = JSONObject(raw)
+            if (json.has("error")) {
+                val err = json.getJSONObject("error")
+                return Result.failure(Exception(err.optString("message", "Unknown error")))
+            }
+            val choices = json.optJSONArray("choices")
+            if (choices == null || choices.length() == 0) {
+                return Result.failure(Exception("Respon tidak dikenal: ${raw.take(200)}"))
+            }
+            val msg = choices.getJSONObject(0).getJSONObject("message")
+            Result.success(ChatMessage(
+                role = msg.getString("role"),
+                content = msg.getString("content")
+            ))
+        } catch (e: Exception) {
+            Result.failure(e)
         }
-        val json = JSONObject(raw)
-        if (json.has("error")) {
-            throw Exception(json.getString("error"))
-        }
-        if (!json.has("message")) {
-            throw Exception("Respon tidak dikenal: ${raw.take(200)}")
-        }
-        val msg = json.getJSONObject("message")
-        return ChatMessage(
-            role = msg.getString("role"),
-            content = msg.getString("content")
-        )
     }
 }

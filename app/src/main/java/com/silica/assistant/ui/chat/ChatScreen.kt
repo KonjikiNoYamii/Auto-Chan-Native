@@ -28,7 +28,6 @@ import com.silica.assistant.core.llm.ChatMessage
 import com.silica.assistant.core.llm.EmotionMapper
 import com.silica.assistant.core.llm.LlmConfig
 import com.silica.assistant.core.llm.MemoryManager
-import com.silica.assistant.core.ssh.SshManager
 import com.silica.assistant.ui.theme.DeepRose
 import java.text.SimpleDateFormat
 import java.util.*
@@ -194,7 +193,7 @@ fun ChatScreen(
                     placeholder = { Text("Ketik pesan...") },
                     singleLine = true,
                     shape = RoundedCornerShape(24.dp),
-                    enabled = SshManager.isConnected() && !isLoading
+                    enabled = !isLoading
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 FilledIconButton(
@@ -203,7 +202,7 @@ fun ChatScreen(
                         inputText = ""
                     },
                     modifier = Modifier.size(50.dp),
-                    enabled = inputText.isNotBlank() && !isLoading && SshManager.isConnected(),
+                    enabled = inputText.isNotBlank() && !isLoading,
                     colors = IconButtonDefaults.filledIconButtonColors(
                         containerColor = DeepRose
                     )
@@ -223,13 +222,13 @@ fun ChatScreen(
     }
 
     if (showModelInfo) {
-        ModelInfoDialog(onDismiss = { showModelInfo = false }, viewModel = viewModel)
+        ModelInfoDialog(onDismiss = { showModelInfo = false })
     }
 }
 
 @Composable
 private fun EmptyChatState() {
-    val sshConnected = SshManager.isConnected()
+    val apiReady = LlmConfig.apiKey.isNotBlank()
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Icon(
             Icons.Filled.QuestionAnswer,
@@ -270,10 +269,10 @@ private fun EmptyChatState() {
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    if (sshConnected) "SSH terhubung — Ollama siap"
-                    else "SSH tidak terhubung",
+                    if (apiReady) "OpenRouter siap"
+                    else "API key belum diatur",
                     fontSize = 12.sp,
-                    color = if (sshConnected) Color(0xFF00FF88)
+                    color = if (apiReady) Color(0xFF00FF88)
                     else MaterialTheme.colorScheme.error
                 )
                 Spacer(modifier = Modifier.height(4.dp))
@@ -294,8 +293,7 @@ private fun EmptyChatState() {
 }
 
 @Composable
-private fun ModelInfoDialog(onDismiss: () -> Unit, viewModel: ChatViewModel? = null) {
-    val ctx = LocalContext.current
+private fun ModelInfoDialog(onDismiss: () -> Unit) {
     var modelInput by remember { mutableStateOf(LlmConfig.model) }
 
     AlertDialog(
@@ -313,31 +311,8 @@ private fun ModelInfoDialog(onDismiss: () -> Unit, viewModel: ChatViewModel? = n
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                InfoRow("Koneksi", "SSH")
-                InfoRow("Endpoint", "localhost:11434")
-
-                if (viewModel != null) {
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    viewModel.modelCreateResult?.let { msg ->
-                        Text(msg, fontSize = 12.sp, color = if (msg.startsWith("Gagal")) MaterialTheme.colorScheme.error else Color(0xFF00FF88))
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-
-                    Button(
-                        onClick = { viewModel.createModel(ctx) },
-                        enabled = !viewModel.creatingModel && com.silica.assistant.core.ssh.SshManager.isConnected(),
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = DeepRose)
-                    ) {
-                        if (viewModel.creatingModel) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            Spacer(modifier = Modifier.width(8.dp))
-                        }
-                        Text(if (viewModel.creatingModel) "Membuat model..." else "Buat Model Yami")
-                    }
-                }
+                InfoRow("Koneksi", "OpenRouter")
+                InfoRow("Endpoint", "api.openrouter.ai")
             }
         },
         confirmButton = {
