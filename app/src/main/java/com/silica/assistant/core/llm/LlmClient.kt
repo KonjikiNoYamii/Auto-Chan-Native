@@ -1,7 +1,10 @@
 package com.silica.assistant.core.llm
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.OutputStreamWriter
@@ -9,10 +12,63 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 object LlmClient {
+    var activeProvider: String = "Memeriksa..."
+
+    private var healthCheckFailCount = 0
+    private var healthCheckPassCount = 0
+    private const val CONFIDENCE_THRESHOLD = 2
+
+    suspend fun startPeriodicHealthCheck() {
+        while (coroutineContext.isActive) {
+            val healthy = checkGeminiServer()
+            if (healthy) {
+                healthCheckPassCount++
+                healthCheckFailCount = 0
+                if (healthCheckPassCount >= CONFIDENCE_THRESHOLD) {
+                    activeProvider = "Gemini"
+                }
+            } else {
+                healthCheckFailCount++
+                healthCheckPassCount = 0
+                if (healthCheckFailCount >= CONFIDENCE_THRESHOLD) {
+                    activeProvider = "OpenRouter"
+                }
+            }
+            delay(if (activeProvider == "Gemini") 15_000L else 10_000L)
+        }
+    }
+
+    suspend fun checkGeminiServer(): Boolean {
+        return withContext(Dispatchers.IO) {
+            if (!LlmConfig.useGeminiFallback) return@withContext false
+            try {
+                val url = URL(LlmConfig.geminiEndpoint.replace("/v1/chat/completions", "/health"))
+                val conn = url.openConnection() as HttpURLConnection
+                conn.connectTimeout = 5000
+                conn.readTimeout = 5000
+                conn.requestMethod = "GET"
+                val code = conn.responseCode
+                conn.disconnect()
+                code == 200
+            } catch (_: Exception) {
+                false
+            }
+        }
+    }
 
     suspend fun chat(messages: List<ChatMessage>, memoryContext: String = ""): Result<ChatMessage> {
         return withContext(Dispatchers.IO) {
             try {
+                if (activeProvider == "Gemini") {
+                    try {
+                        val payload = buildPayload(messages, memoryContext)
+                        return@withContext parseResponse(
+                            httpPost(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout)
+                        )
+                    } catch (_: Exception) {
+                        activeProvider = "OpenRouter"
+                    }
+                }
                 val payload = buildPayload(messages, memoryContext)
                 val response = httpPost(LlmConfig.endpoint, payload)
                 parseResponse(response)
@@ -22,16 +78,20 @@ object LlmClient {
         }
     }
 
-    private fun httpPost(urlString: String, jsonPayload: String): String {
+    private fun httpPost(urlString: String, jsonPayload: String, useAuth: Boolean = true, timeout: Int = 30000): String {
         val url = URL(urlString)
         val conn = url.openConnection() as HttpURLConnection
         conn.requestMethod = "POST"
         conn.setRequestProperty("Content-Type", "application/json")
-        conn.setRequestProperty("Authorization", "Bearer ${LlmConfig.apiKey}")
-        conn.setRequestProperty("HTTP-Referer", "https://github.com/KonjikiNoYamii/Auto-Chan-Native")
+        if (useAuth) {
+            conn.setRequestProperty("Authorization", "Bearer ${LlmConfig.apiKey}")
+            conn.setRequestProperty("HTTP-Referer", "https://github.com/KonjikiNoYamii/Auto-Chan-Native")
+        } else if (LlmConfig.geminiSecret.isNotBlank()) {
+            conn.setRequestProperty("Authorization", "Bearer ${LlmConfig.geminiSecret}")
+        }
         conn.doOutput = true
-        conn.connectTimeout = 30000
-        conn.readTimeout = 60000
+        conn.connectTimeout = timeout
+        conn.readTimeout = timeout
 
         OutputStreamWriter(conn.outputStream).use { it.write(jsonPayload) }
 
