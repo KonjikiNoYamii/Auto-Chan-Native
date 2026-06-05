@@ -30,6 +30,7 @@ import com.silica.assistant.R
 import com.silica.assistant.core.CustomAssetManager
 import com.silica.assistant.core.llm.ChatMessage
 import com.silica.assistant.core.llm.EmotionMapper
+import com.silica.assistant.core.llm.LlmClient
 import com.silica.assistant.core.llm.LlmConfig
 import com.silica.assistant.core.llm.MemoryManager
 import com.silica.assistant.ui.theme.DeepRose
@@ -70,7 +71,7 @@ fun ChatScreen(
                         Image(
                             painter = painterResource(R.drawable.iconchat),
                             contentDescription = "Yami",
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(28.dp).clip(CircleShape)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Yami", fontSize = 18.sp)
@@ -282,11 +283,15 @@ private fun EmptyChatState() {
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
+                val provider = LlmClient.activeProvider
+                val geminiActive = provider == "Gemini" && LlmConfig.useGeminiFallback
                 Text(
-                    if (apiReady) "OpenRouter siap"
+                    if (geminiActive) "Gemini Server Aktif" 
+                    else if (apiReady) "OpenRouter - Fallback" 
                     else "API key belum diatur",
                     fontSize = 12.sp,
-                    color = if (apiReady) Color(0xFF00FF88)
+                    color = if (geminiActive) Color(0xFFFF69B4) 
+                    else if (apiReady) Color(0xFF00FF88) 
                     else MaterialTheme.colorScheme.error
                 )
                 Spacer(modifier = Modifier.height(4.dp))
@@ -295,6 +300,14 @@ private fun EmptyChatState() {
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
+                if (geminiActive) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        "Server: ${LlmConfig.geminiEndpoint.removePrefix("https://").take(30)}...",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                }
             }
         }
         Spacer(modifier = Modifier.height(16.dp))
@@ -325,8 +338,10 @@ private fun ModelInfoDialog(onDismiss: () -> Unit) {
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                InfoRow("Koneksi", "OpenRouter")
-                InfoRow("Endpoint", "api.openrouter.ai")
+                val provider = LlmClient.activeProvider
+                val geminiActive = provider == "Gemini" && LlmConfig.useGeminiFallback
+                InfoRow("Provider Aktif", if (geminiActive) "Gemini" else "OpenRouter")
+                InfoRow("Endpoint", if (geminiActive) LlmConfig.geminiEndpoint else LlmConfig.endpoint)
             }
         },
         confirmButton = {
