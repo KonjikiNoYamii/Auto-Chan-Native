@@ -198,17 +198,21 @@ fun SshScreen(
                     onPasswordVisibilityToggle = { passwordVisible = !passwordVisible },
                     connecting = connecting,
                     onConnect = {
-                        if (host.isBlank() || username.isBlank()) {
+                        val trimmedHost = host.trim()
+                        val trimmedUser = username.trim()
+                        val trimmedPort = port.trim()
+                        val trimmedPass = password.trim()
+                        if (trimmedHost.isBlank() || trimmedUser.isBlank()) {
                             Toast.makeText(context, "Host and username required", Toast.LENGTH_SHORT).show()
                             return@ConnectionForm
                         }
-                        val portNum = port.toIntOrNull() ?: 22
+                        val portNum = trimmedPort.toIntOrNull() ?: 22
                         val conn = SshConnection(
-                            name = "$username@$host",
-                            host = host,
+                            name = "$trimmedUser@$trimmedHost",
+                            host = trimmedHost,
                             port = portNum,
-                            username = username,
-                            password = password
+                            username = trimmedUser,
+                            password = trimmedPass
                         )
                         if (!AssistantConfig.sshWarningAcknowledged && !warningAccepted) {
                             pendingConnection = conn
