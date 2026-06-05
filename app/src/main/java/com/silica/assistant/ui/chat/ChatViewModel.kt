@@ -16,6 +16,12 @@ import kotlinx.coroutines.launch
 
 class ChatViewModel : ViewModel() {
 
+    init {
+        viewModelScope.launch {
+            LlmClient.startPeriodicHealthCheck()
+        }
+    }
+
     var messages by mutableStateOf<List<ChatMessage>>(emptyList())
         private set
 
