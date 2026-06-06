@@ -16,7 +16,7 @@ object GameModeManager {
     var currentAppPackage: String? = null
     var currentAppName: String? = null
     var manualMode = false
-    var autoGameMode = false
+    var autoGameMode = true
     var gameModeAppPackage: String? = null
 
     private val knownGameModeApps = setOf(
@@ -129,18 +129,17 @@ object GameModeManager {
         wm.defaultDisplay.getMetrics(metrics)
         val w = metrics.widthPixels
         val h = metrics.heightPixels
-        val offsetX = 60
-        val offsetY = 60
+        val half = (60 * metrics.density).toInt()
 
         return when (gameModePosition) {
             GameModePosition.TOP_LEFT -> 0 to 0
-            GameModePosition.TOP_CENTER -> (w / 2 - offsetX) to 0
-            GameModePosition.TOP_RIGHT -> (w - offsetX * 2) to 0
-            GameModePosition.CENTER_LEFT -> 0 to (h / 2 - offsetY)
-            GameModePosition.CENTER_RIGHT -> (w - offsetX * 2) to (h / 2 - offsetY)
-            GameModePosition.BOTTOM_LEFT -> 0 to (h - offsetY * 2)
-            GameModePosition.BOTTOM_CENTER -> (w / 2 - offsetX) to (h - offsetY * 2)
-            GameModePosition.BOTTOM_RIGHT -> (w - offsetX * 2) to (h - offsetY * 2)
+            GameModePosition.TOP_CENTER -> (w / 2 - half) to 0
+            GameModePosition.TOP_RIGHT -> (w - half * 2) to 0
+            GameModePosition.CENTER_LEFT -> 0 to (h / 2 - half)
+            GameModePosition.CENTER_RIGHT -> (w - half * 2) to (h / 2 - half)
+            GameModePosition.BOTTOM_LEFT -> 0 to (h - half * 2)
+            GameModePosition.BOTTOM_CENTER -> (w / 2 - half) to (h - half * 2)
+            GameModePosition.BOTTOM_RIGHT -> (w - half * 2) to (h - half * 2)
         }
     }
 }

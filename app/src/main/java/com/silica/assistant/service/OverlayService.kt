@@ -133,8 +133,10 @@ class OverlayService : Service() {
                         if (w != displayWidth || h != displayHeight) {
                             displayWidth = w
                             displayHeight = h
-                            val maxX = (w - waifuWidth).coerceAtLeast(0)
-                            val maxY = (h - waifuHeight).coerceAtLeast(0)
+                            val vw = overlayView.width.coerceAtLeast(waifuWidth)
+                            val vh = overlayView.height.coerceAtLeast(waifuHeight)
+                            val maxX = (w - vw).coerceAtLeast(0)
+                            val maxY = (h - vh).coerceAtLeast(0)
                             params.x = params.x.coerceIn(0, maxX)
                             params.y = params.y.coerceIn(0, maxY)
                             windowManager.updateViewLayout(overlayView, params)
@@ -305,10 +307,8 @@ class OverlayService : Service() {
                         longPressHandler.removeCallbacksAndMessages(null)
                     }
 
-                    val maxX = (displayWidth - waifuWidth).coerceAtLeast(0)
-                    val maxY = (displayHeight - waifuHeight).coerceAtLeast(0)
-                    params.x = (initialX + dx).coerceIn(0, maxX)
-                    params.y = (initialY + dy).coerceIn(0, maxY)
+                    params.x = initialX + dx
+                    params.y = initialY + dy
 
                     WaifuStateManager.currentState = WaifuState.RELAX
 
