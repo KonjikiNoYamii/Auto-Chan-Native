@@ -222,9 +222,23 @@ class OverlayService : Service() {
         scheduleRandomQuote()
 
         activityDetector = ActivityDetector(this)
-        if (activityDetector.isUsageStatsGranted()) {
-            detecting = true
-            activityScope.launch { detectActivityLoop() }
+        detecting = activityDetector.isUsageStatsGranted()
+        activityScope.launch { detectActivityLoop() }
+
+        // Auto-redirect ke Settings kalau izin belum dikasih
+        if (!detecting) {
+            handler.postDelayed({
+                showBubble("🔒 Aktifkan Akses Penggunaan Aplikasi untuk mode game")
+                try {
+                    startActivity(
+                        Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                        }
+                    )
+                } catch (_: Exception) {}
+            }, 2000)
         }
     }
 
@@ -361,6 +375,24 @@ class OverlayService : Service() {
     // =========================
     private suspend fun detectActivityLoop() {
         while (true) {
+            val granted = activityDetector.isUsageStatsGranted()
+            if (granted && !detecting) {
+                detecting = true
+                handler.post {
+                    showBubble("✅ Akses penggunaan aplikasi diberikan — mode game siap")
+                }
+            } else if (!granted && detecting) {
+                detecting = false
+                handler.post {
+                    showBubble("🔒 Akses penggunaan aplikasi belum diizinkan — mode game tidak aktif")
+                }
+            }
+
+            if (!detecting) {
+                delay(3000)
+                continue
+            }
+
             val pkg = activityDetector.getForegroundApp()
             if (pkg != null && pkg != lastDetectedApp && pkg != packageName) {
                 lastDetectedApp = pkg
@@ -395,13 +427,6 @@ class OverlayService : Service() {
                 if (screenOn && System.currentTimeMillis() - lastCommentTime > 60_000) {
                     lastCommentTime = System.currentTimeMillis()
                     generateContextComment(appName, isGame)
-                }
-            }
-
-            if (pkg == null && !activityDetector.isUsageStatsGranted() && detecting) {
-                detecting = false
-                handler.post {
-                    showBubble("Akses penggunaan aplikasi belum diizinkan. Buka Pengaturan > Akses Usage Stats.")
                 }
             }
 
