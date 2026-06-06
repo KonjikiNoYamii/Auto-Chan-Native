@@ -379,6 +379,7 @@ class OverlayService : Service() {
                             params.x = newX
                             params.y = newY
                             windowManager.updateViewLayout(overlayView, params)
+                            showBubble("🎮 Mode game aktif — $appName")
                         }
                     } else if (!isGameModeApp && !isGame && GameModeManager.autoGameMode) {
                         val (restoreX, restoreY) = GameModeManager.exitGameMode()
@@ -386,6 +387,7 @@ class OverlayService : Service() {
                             params.x = restoreX
                             params.y = restoreY
                             windowManager.updateViewLayout(overlayView, params)
+                            showBubble("Mode game dinonaktifkan")
                         }
                     }
                 }
