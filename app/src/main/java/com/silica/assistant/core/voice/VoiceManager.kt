@@ -1,5 +1,6 @@
 package com.silica.assistant.core.voice
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -17,12 +18,21 @@ object VoiceManager {
     private var appContext: Context? = null
     private var speechRecognizer: SpeechRecognizer? = null
     private var speechIntent: Intent? = null
+    private var componentName: ComponentName? = null
     
     private var isListening = false
     private var isDestroyed = false
 
     var onResult: ((String) -> Unit)? = null
     var onStateChange: ((Boolean) -> Unit)? = null
+
+    var onReadyForSpeech: (() -> Unit)? = null
+    var onBeginningOfSpeech: (() -> Unit)? = null
+    var onEndOfSpeech: (() -> Unit)? = null
+    var onErrorCallback: ((Int) -> Unit)? = null
+
+    private var errorCount = 0
+    private val maxErrorsBeforeRecreate = 10
 
     // 🧠 watchdog untuk detect silent death
     private val handler = Handler(Looper.getMainLooper())
@@ -50,11 +60,12 @@ object VoiceManager {
                 }
             }
 
-    fun init(context: Context) {
+    fun init(context: Context, component: ComponentName? = null) {
 
         if (speechRecognizer != null) return
 
         appContext = context.applicationContext
+        componentName = component
 
         createRecognizer()
 
@@ -70,7 +81,12 @@ object VoiceManager {
 
         val ctx = appContext ?: return
 
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(ctx)
+        speechRecognizer = if (componentName != null) {
+            SpeechRecognizer.createSpeechRecognizer(ctx, componentName)
+                ?: SpeechRecognizer.createSpeechRecognizer(ctx)
+        } else {
+            SpeechRecognizer.createSpeechRecognizer(ctx)
+        }
 
         speechIntent =
                 Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -87,11 +103,13 @@ object VoiceManager {
 
                     override fun onReadyForSpeech(params: Bundle?) {
                         Log.d(TAG, "Ready for speech")
+                        onReadyForSpeech?.invoke()
                     }
 
                     override fun onBeginningOfSpeech() {
                         lastRealSpeechTime = System.currentTimeMillis()
                         Log.d(TAG, "Speech started")
+                        onBeginningOfSpeech?.invoke()
                     }
 
                     override fun onRmsChanged(rmsdB: Float) {}
@@ -100,6 +118,7 @@ object VoiceManager {
 
                     override fun onEndOfSpeech() {
                         Log.d(TAG, "End of speech")
+                        onEndOfSpeech?.invoke()
                     }
 
                     override fun onError(error: Int) {
@@ -108,7 +127,16 @@ object VoiceManager {
 
                         isListening = false
                         onStateChange?.invoke(false)
+                        onErrorCallback?.invoke(error)
                         lastRealSpeechTime = System.currentTimeMillis()
+
+                        errorCount++
+                        if (errorCount >= maxErrorsBeforeRecreate) {
+                            errorCount = 0
+                            Log.w(TAG, "Too many errors, recreating recognizer")
+                            restartRecognizer()
+                            return
+                        }
 
                         // 🔥 critical fix: always recover
                         resultCount = 0
@@ -118,6 +146,7 @@ object VoiceManager {
                     override fun onResults(results: Bundle?) {
 
                         lastRealSpeechTime = System.currentTimeMillis()
+                        errorCount = 0
 
                         val text =
                                 results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
