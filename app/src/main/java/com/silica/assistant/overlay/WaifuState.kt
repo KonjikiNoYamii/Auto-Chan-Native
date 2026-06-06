@@ -3,5 +3,6 @@ package com.silica.assistant.overlay
 enum class WaifuState {
     RELAX,
     TALK,
-    LISTEN
+    LISTEN,
+    GAME
 }

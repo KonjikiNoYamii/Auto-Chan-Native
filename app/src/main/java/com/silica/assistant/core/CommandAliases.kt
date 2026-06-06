@@ -178,6 +178,33 @@ object CommandAliases {
             "ai chat",
             "tanya ai",
             "tanya"
+        ),
+
+        "game_mode" to listOf(
+            "mode game",
+            "game mode",
+            "aktifkan mode game",
+            "nyalakan mode game"
+        ),
+
+        "stop_game_mode" to listOf(
+            "keluar mode game",
+            "nonaktifkan mode game",
+            "matikan mode game",
+            "stop game mode"
+        ),
+
+        "set_game_mode_app" to listOf(
+            "ini game mode ku",
+            "set game mode",
+            "atur game mode",
+            "daftarkan game mode"
+        ),
+
+        "clear_game_mode_app" to listOf(
+            "hapus game mode",
+            "reset game mode",
+            "clear game mode"
         )
     )
 }

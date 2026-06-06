@@ -22,6 +22,7 @@ object CustomAssetManager {
         WAIFU_IDLE("waifu_idle", "mybinik"),
         WAIFU_HAPPY("waifu_happy", "mybinikmangap"),
         WAIFU_LISTENING("waifu_listening", "mybinikmendengarkan"),
+        WAIFU_GAME("waifu_game", "icongamemode"),
         POP_SOUND("pop_sound", "pop")
     }
 

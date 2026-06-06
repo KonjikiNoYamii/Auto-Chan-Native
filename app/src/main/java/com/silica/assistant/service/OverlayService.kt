@@ -8,7 +8,9 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.PixelFormat
+import android.os.Build
 import android.media.MediaPlayer
+import android.util.DisplayMetrics
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -20,14 +22,24 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import com.silica.assistant.R
+import com.silica.assistant.core.ActivityDetector
 import com.silica.assistant.core.CommandManager
 import com.silica.assistant.core.CustomAssetManager
+import com.silica.assistant.core.llm.LlmClient
+import com.silica.assistant.core.llm.WaifuNotifier
 import com.silica.assistant.core.llm.YamiQuotes
 import com.silica.assistant.core.overlay.OverlayEventBus
 import com.silica.assistant.core.voice.VoiceManager
+import com.silica.assistant.overlay.GameModeManager
 import com.silica.assistant.overlay.WaifuExpressionController
 import com.silica.assistant.overlay.WaifuState
 import com.silica.assistant.overlay.WaifuStateManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancel
 import kotlin.random.Random
 
 class OverlayService : Service() {
@@ -49,6 +61,11 @@ class OverlayService : Service() {
     private var initialX = 0
     private var initialY = 0
 
+    private var displayWidth = 0
+    private var displayHeight = 0
+    private var waifuWidth = 0
+    private var waifuHeight = 0
+
     private var touchX = 0f
     private var touchY = 0f
 
@@ -62,6 +79,12 @@ class OverlayService : Service() {
     private var isQuoteScheduled = false
     private var lastTouchTime = 0L
     private var screenOn = true
+
+    private val activityScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private lateinit var activityDetector: ActivityDetector
+    private var lastDetectedApp: String? = null
+    private var lastCommentTime = 0L
+    private var detecting = false
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -86,6 +109,36 @@ class OverlayService : Service() {
 
                     if (::controller.isInitialized && overlayView.windowToken != null) {
                         controller.update()
+
+                        val gameReq = OverlayEventBus.gameModeRequest
+                        if (gameReq != null) {
+                            OverlayEventBus.gameModeRequest = null
+                            if (gameReq) {
+                                val (newX, newY) = GameModeManager.enterGameMode(this@OverlayService, params.x, params.y)
+                                params.x = newX
+                                params.y = newY
+                                windowManager.updateViewLayout(overlayView, params)
+                            } else {
+                                val (restoreX, restoreY) = GameModeManager.exitGameMode()
+                                params.x = restoreX
+                                params.y = restoreY
+                                windowManager.updateViewLayout(overlayView, params)
+                            }
+                        }
+
+                        val metrics = DisplayMetrics()
+                        windowManager.defaultDisplay.getMetrics(metrics)
+                        val w = metrics.widthPixels
+                        val h = metrics.heightPixels
+                        if (w != displayWidth || h != displayHeight) {
+                            displayWidth = w
+                            displayHeight = h
+                            val maxX = (w - waifuWidth).coerceAtLeast(0)
+                            val maxY = (h - waifuHeight).coerceAtLeast(0)
+                            params.x = params.x.coerceIn(0, maxX)
+                            params.y = params.y.coerceIn(0, maxY)
+                            windowManager.updateViewLayout(overlayView, params)
+                        }
                     }
 
                     handler.postDelayed(this, 500)
@@ -95,10 +148,21 @@ class OverlayService : Service() {
     override fun onCreate() {
         super.onCreate()
 
-        val intent = Intent(this, VoiceForegroundService::class.java)
-        startForegroundService(intent)
+        try {
+            val intent = Intent(this, VoiceForegroundService::class.java)
+            startForegroundService(intent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
 
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+
+        val metrics = DisplayMetrics()
+        windowManager.defaultDisplay.getMetrics(metrics)
+        displayWidth = metrics.widthPixels
+        displayHeight = metrics.heightPixels
+        waifuWidth = (120 * metrics.density).toInt()
+        waifuHeight = (120 * metrics.density).toInt()
 
         overlayView = LayoutInflater.from(this).inflate(R.layout.overlay_view, null)
 
@@ -113,6 +177,7 @@ class OverlayService : Service() {
 
         // 🧠 VOICE SYSTEM (ONLY ONE SOURCE)
         VoiceManager.init(this)
+        WaifuNotifier.init(this)
 
         VoiceManager.onResult = { text ->
             OverlayEventBus.onBubble?.invoke("🎤 $text")
@@ -126,11 +191,17 @@ class OverlayService : Service() {
 
         WaifuStateManager.currentState = WaifuState.RELAX
 
+        val overlayType =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                else
+                    WindowManager.LayoutParams.TYPE_PHONE
+
         params =
                 WindowManager.LayoutParams(
                         WindowManager.LayoutParams.WRAP_CONTENT,
                         WindowManager.LayoutParams.WRAP_CONTENT,
-                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                        overlayType,
                         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                         PixelFormat.TRANSLUCENT
@@ -147,6 +218,12 @@ class OverlayService : Service() {
         registerReceiver(screenReceiver, filter)
 
         scheduleRandomQuote()
+
+        activityDetector = ActivityDetector(this)
+        if (activityDetector.isUsageStatsGranted()) {
+            detecting = true
+            activityScope.launch { detectActivityLoop() }
+        }
     }
 
     private fun isIdle(): Boolean {
@@ -181,6 +258,11 @@ class OverlayService : Service() {
         }
 
         showBubble(text)
+
+        // sometimes also push a notification
+        if (screenOn && kotlin.random.Random.nextInt(3) == 0) {
+            WaifuNotifier.showRandomNotification()
+        }
     }
 
     // =========================
@@ -223,8 +305,10 @@ class OverlayService : Service() {
                         longPressHandler.removeCallbacksAndMessages(null)
                     }
 
-                    params.x = initialX + dx
-                    params.y = initialY + dy
+                    val maxX = (displayWidth - waifuWidth).coerceAtLeast(0)
+                    val maxY = (displayHeight - waifuHeight).coerceAtLeast(0)
+                    params.x = (initialX + dx).coerceIn(0, maxX)
+                    params.y = (initialY + dy).coerceIn(0, maxY)
 
                     WaifuStateManager.currentState = WaifuState.RELAX
 
@@ -268,6 +352,66 @@ class OverlayService : Service() {
                         Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
                 )
                 startActivity(launchIntent)
+            }
+        }
+    }
+
+    // =========================
+    // ACTIVITY DETECTION & GAME MODE
+    // =========================
+    private suspend fun detectActivityLoop() {
+        while (true) {
+            val pkg = activityDetector.getForegroundApp()
+            if (pkg != null && pkg != lastDetectedApp && pkg != packageName) {
+                lastDetectedApp = pkg
+                val appName = GameModeManager.getAppName(this, pkg)
+                val isGame = GameModeManager.isGame(this, pkg)
+                GameModeManager.currentAppPackage = pkg
+                GameModeManager.currentAppName = appName
+
+                if (GameModeManager.manualMode) {
+                    // skip auto mode when manual override is active
+                } else {
+                    val isGameModeApp = pkg == GameModeManager.gameModeAppPackage
+                    if ((isGameModeApp || isGame) && !GameModeManager.isGameMode) {
+                        val (newX, newY) = GameModeManager.enterGameMode(this, params.x, params.y, auto = true)
+                        handler.post {
+                            params.x = newX
+                            params.y = newY
+                            windowManager.updateViewLayout(overlayView, params)
+                        }
+                    } else if (!isGameModeApp && !isGame && GameModeManager.autoGameMode) {
+                        val (restoreX, restoreY) = GameModeManager.exitGameMode()
+                        handler.post {
+                            params.x = restoreX
+                            params.y = restoreY
+                            windowManager.updateViewLayout(overlayView, params)
+                        }
+                    }
+                }
+
+                if (screenOn && System.currentTimeMillis() - lastCommentTime > 60_000) {
+                    lastCommentTime = System.currentTimeMillis()
+                    generateContextComment(appName, isGame)
+                }
+            }
+
+            if (pkg == null && !activityDetector.isUsageStatsGranted() && detecting) {
+                detecting = false
+                handler.post {
+                    showBubble("Akses penggunaan aplikasi belum diizinkan. Buka Pengaturan > Akses Usage Stats.")
+                }
+            }
+
+            delay(3000)
+        }
+    }
+
+    private fun generateContextComment(appName: String, isGame: Boolean) {
+        activityScope.launch {
+            val comment = LlmClient.generateActivityComment(appName, isGame)
+            if (comment != null) {
+                showBubble(comment)
             }
         }
     }
@@ -335,6 +479,8 @@ class OverlayService : Service() {
         try { unregisterReceiver(screenReceiver) } catch (_: Exception) {}
 
         VoiceManager.destroy()
+
+        activityScope.cancel()
 
         popPlayer?.release()
         popPlayer = null

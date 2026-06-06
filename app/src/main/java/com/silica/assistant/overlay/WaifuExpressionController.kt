@@ -16,10 +16,21 @@ class WaifuExpressionController(
         if (state == lastState) return
         lastState = state
 
+        if (state == WaifuState.GAME) {
+            if (CustomAssetManager.hasCustom(context, CustomAssetManager.AssetType.WAIFU_GAME)) {
+                CustomAssetManager.applyToImageView(context, imageView, CustomAssetManager.AssetType.WAIFU_GAME)
+            } else {
+                imageView.setImageResource(R.drawable.icongamemode)
+            }
+            lastState = state
+            return
+        }
+
         val type = when (state) {
             WaifuState.RELAX -> CustomAssetManager.AssetType.WAIFU_IDLE
             WaifuState.TALK -> CustomAssetManager.AssetType.WAIFU_HAPPY
             WaifuState.LISTEN -> CustomAssetManager.AssetType.WAIFU_LISTENING
+            else -> return
         }
 
         if (CustomAssetManager.hasCustom(context, type)) {
@@ -29,6 +40,7 @@ class WaifuExpressionController(
                 WaifuState.RELAX -> R.drawable.mybinik
                 WaifuState.TALK -> R.drawable.mybinikmangap
                 WaifuState.LISTEN -> R.drawable.mybinikmendengarkan
+                else -> return
             }
             imageView.setImageResource(resId)
         }

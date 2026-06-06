@@ -6,6 +6,7 @@ object OverlayEventBus {
 
     var onBubble: ((String) -> Unit)? = null
     val navigateScreen = mutableStateOf<String?>(null)
+    var gameModeRequest: Boolean? = null
 
     fun send(text: String) {
         onBubble?.invoke(text)

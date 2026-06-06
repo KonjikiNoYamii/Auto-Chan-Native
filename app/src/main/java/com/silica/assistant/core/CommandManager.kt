@@ -14,6 +14,7 @@ import com.silica.assistant.core.parser.SearchCommandParser
 import com.silica.assistant.core.ssh.SshManager
 import com.silica.assistant.core.system.AppLauncher
 import com.silica.assistant.core.system.BrightnessController
+import com.silica.assistant.overlay.GameModeManager
 import com.silica.assistant.service.OverlayService
 
 object CommandManager {
@@ -212,6 +213,28 @@ object CommandManager {
                             OverlayEventBus.onBubble?.invoke("❌ Gagal: ${e.message}")
                         }
                 }.start()
+            }
+            "game_mode" -> {
+                OverlayEventBus.gameModeRequest = true
+                OverlayEventBus.onBubble?.invoke("🎮 Mode game diaktifkan")
+            }
+            "stop_game_mode" -> {
+                OverlayEventBus.gameModeRequest = false
+                OverlayEventBus.onBubble?.invoke("🎮 Mode game dinonaktifkan")
+            }
+            "set_game_mode_app" -> {
+                val pkg = GameModeManager.currentAppPackage
+                if (pkg != null) {
+                    GameModeManager.gameModeAppPackage = pkg
+                    val name = GameModeManager.currentAppName ?: pkg
+                    OverlayEventBus.onBubble?.invoke("✅ Game mode terdeteksi dari $name")
+                } else {
+                    OverlayEventBus.onBubble?.invoke("❌ Tidak ada aplikasi terdeteksi. Coba buka game mode dulu.")
+                }
+            }
+            "clear_game_mode_app" -> {
+                GameModeManager.gameModeAppPackage = null
+                OverlayEventBus.onBubble?.invoke("✅ Game mode app direset")
             }
             else -> {
                 OverlayEventBus.onBubble?.invoke("😕 Maaf, saya tidak mengerti command \"${result.command}\"")
