@@ -1,5 +1,6 @@
 package com.silica.assistant.core.update
 
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -8,6 +9,7 @@ import java.net.URL
 
 object UpdateChecker {
 
+    private const val TAG = "UpdateChecker"
     private const val GITHUB_API = "https://api.github.com/repos/KonjikiNoYamii/Auto-Chan-Native/releases/latest"
 
     data class UpdateInfo(
@@ -24,7 +26,10 @@ object UpdateChecker {
             conn.connectTimeout = 10000
             conn.readTimeout = 10000
 
-            if (conn.responseCode != 200) return@withContext null
+            if (conn.responseCode != 200) {
+                Log.w(TAG, "GitHub API returned ${conn.responseCode}")
+                return@withContext null
+            }
 
             val json = conn.inputStream.bufferedReader().use { it.readText() }
             val release = JSONObject(json)
@@ -46,12 +51,14 @@ object UpdateChecker {
             }
 
             val url = downloadUrl ?: return@withContext null
+            Log.d(TAG, "Update found: $tag")
             UpdateInfo(
                 latestVersionCode = versionCode,
                 latestVersionName = tag,
                 downloadUrl = url
             )
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.e(TAG, "Update check failed", e)
             null
         }
     }

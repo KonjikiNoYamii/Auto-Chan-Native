@@ -15,7 +15,11 @@ object UpdateDownloader {
         val totalBytes: Long
     )
 
-    suspend fun download(context: Context, url: String): DownloadResult? = withContext(Dispatchers.IO) {
+    suspend fun download(
+        context: Context,
+        url: String,
+        onProgress: ((Float) -> Unit)? = null
+    ): DownloadResult? = withContext(Dispatchers.IO) {
         try {
             val dir = File(context.cacheDir, "updates")
             dir.mkdirs()
@@ -31,9 +35,19 @@ object UpdateDownloader {
             val input = conn.inputStream
             val output = FileOutputStream(file)
 
+            val buffer = ByteArray(8192)
+            var bytesRead: Int
+            var totalRead = 0L
+
             input.use { inp ->
                 output.use { out ->
-                    inp.copyTo(out)
+                    while (inp.read(buffer).also { bytesRead = it } != -1) {
+                        out.write(buffer, 0, bytesRead)
+                        totalRead += bytesRead
+                        if (totalBytes > 0) {
+                            onProgress?.invoke(totalRead.toFloat() / totalBytes)
+                        }
+                    }
                 }
             }
 
