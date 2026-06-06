@@ -85,7 +85,8 @@ class OverlayService : Service() {
     private lateinit var activityDetector: ActivityDetector
     private var lastDetectedApp: String? = null
     private var lastCommentTime = 0L
-    private var nextCommentDelay = Random.nextLong(60_000, 120_000)
+    private var nextCommentDelay = Random.nextLong(20_000, 60_000)
+    private var lastGameTouchTime = 0L
     private var detecting = false
 
     private val screenReceiver = object : BroadcastReceiver() {
@@ -112,7 +113,14 @@ class OverlayService : Service() {
                     if (::controller.isInitialized && overlayView.windowToken != null) {
                         controller.update()
 
-                        val gameReq = OverlayEventBus.gameModeRequest
+                        // game mode transparency: opaque on touch, fade after 10s idle
+                    if (GameModeManager.isGameMode) {
+                        val idleFromTouch = System.currentTimeMillis() - lastGameTouchTime
+                        val targetAlpha = if (idleFromTouch < 10_000 || bubbleText.visibility == View.VISIBLE) 1.0f else 0.55f
+                        if (waifuImage.alpha != targetAlpha) waifuImage.alpha = targetAlpha
+                    }
+
+                    val gameReq = OverlayEventBus.gameModeRequest
                         if (gameReq != null) {
                             OverlayEventBus.gameModeRequest = null
                             if (gameReq) {
@@ -303,6 +311,7 @@ class OverlayService : Service() {
                 MotionEvent.ACTION_DOWN -> {
 
                     lastTouchTime = System.currentTimeMillis()
+                    lastGameTouchTime = System.currentTimeMillis()
                     isMoving = false
                     longPressTriggered = false
 
@@ -448,7 +457,7 @@ class OverlayService : Service() {
                         val den = if (waifuWidth > 0) waifuWidth / 120f else 2f
                         GameModeManager.enterGameMode(this, params.x, params.y, displayWidth, displayHeight, den, auto = true)
                         lastCommentTime = System.currentTimeMillis()
-                        nextCommentDelay = Random.nextLong(60_000, 120_000)
+                        nextCommentDelay = Random.nextLong(30_000, 90_000)
                         generateContextComment(appName, true)
                         handler.post {
                             params.gravity = Gravity.TOP or Gravity.START
@@ -476,7 +485,7 @@ class OverlayService : Service() {
                 val elapsed = System.currentTimeMillis() - lastCommentTime
                 if (elapsed > nextCommentDelay) {
                     lastCommentTime = System.currentTimeMillis()
-                    nextCommentDelay = Random.nextLong(30_000, 120_000)
+                    nextCommentDelay = Random.nextLong(20_000, 90_000)
                     val appName = GameModeManager.currentAppName ?: lastDetectedApp
                     if (appName != null) {
                         generateContextComment(appName, true)
@@ -552,26 +561,10 @@ class OverlayService : Service() {
 
             if (!::bubbleText.isInitialized) return@post
 
-            bubbleText.visibility = View.GONE
             bubbleText.translationY = 0f
             bubbleText.text = text
             bubbleText.visibility = View.VISIBLE
-
-            // position bubble above/below image based on screen placement
-            bubbleText.post( Runnable {
-                if (bubbleText.visibility != View.VISIBLE) return@Runnable
-                val density = resources.displayMetrics.density
-                val gap = (4 * density).toInt()
-                val imageH = waifuHeight
-                val bubbleH = bubbleText.height
-                val centerY = params.y + imageH / 2
-                val placeAbove = centerY > displayHeight / 2
-                bubbleText.translationY = if (placeAbove) {
-                    -(bubbleH + gap).toFloat()
-                } else {
-                    (imageH + gap).toFloat()
-                }
-            })
+            lastGameTouchTime = System.currentTimeMillis()
 
             playPopSound()
 
@@ -585,6 +578,31 @@ class OverlayService : Service() {
             }
 
             handler.postDelayed(bubbleHideRunnable!!, duration)
+
+            // position bubble above/below image after layout is guaranteed
+            bubbleText.viewTreeObserver.addOnGlobalLayoutListener(
+                object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
+                    override fun onGlobalLayout() {
+                        if (bubbleText.visibility != View.VISIBLE) {
+                            bubbleText.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                            return
+                        }
+                        bubbleText.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                        val density = resources.displayMetrics.density
+                        val gap = (4 * density).toInt()
+                        val imageH = waifuHeight
+                        val bubbleH = bubbleText.height
+                        if (bubbleH <= 0) return
+                        val centerY = params.y + imageH / 2
+                        val placeAbove = centerY > displayHeight / 2
+                        bubbleText.translationY = if (placeAbove) {
+                            -(bubbleH + gap).toFloat()
+                        } else {
+                            (imageH + gap).toFloat()
+                        }
+                    }
+                }
+            )
         }
     }
 
