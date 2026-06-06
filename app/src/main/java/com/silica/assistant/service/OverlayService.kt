@@ -116,9 +116,11 @@ class OverlayService : Service() {
                             OverlayEventBus.gameModeRequest = null
                             if (gameReq) {
                                 val den = if (waifuWidth > 0) waifuWidth / 120f else 2f
-                                val (newX, newY) = GameModeManager.enterGameMode(this@OverlayService, params.x, params.y, displayWidth, displayHeight, den)
-                                params.x = newX
-                                params.y = newY
+                                GameModeManager.enterGameMode(this@OverlayService, params.x, params.y, displayWidth, displayHeight, den)
+                                val half = (60 * den).toInt()
+                                params.gravity = Gravity.TOP or Gravity.START
+                                params.x = displayWidth / 2 - half
+                                params.y = 0
                                 windowManager.updateViewLayout(overlayView, params)
                             } else {
                                 val (restoreX, restoreY) = GameModeManager.exitGameMode()
@@ -189,8 +191,10 @@ class OverlayService : Service() {
         }
 
         VoiceManager.onStateChange = { listening ->
-            WaifuStateManager.currentState =
-                    if (listening) WaifuState.LISTEN else WaifuState.RELAX
+            if (!GameModeManager.isGameMode) {
+                WaifuStateManager.currentState =
+                        if (listening) WaifuState.LISTEN else WaifuState.RELAX
+            }
         }
 
         WaifuStateManager.currentState = WaifuState.RELAX
@@ -413,10 +417,12 @@ class OverlayService : Service() {
                     val isGameModeApp = pkg == GameModeManager.gameModeAppPackage
                     if ((isGameModeApp || isGame) && !GameModeManager.isGameMode) {
                         val den = if (waifuWidth > 0) waifuWidth / 120f else 2f
-                        val (newX, newY) = GameModeManager.enterGameMode(this, params.x, params.y, displayWidth, displayHeight, den, auto = true)
+                        GameModeManager.enterGameMode(this, params.x, params.y, displayWidth, displayHeight, den, auto = true)
                         handler.post {
-                            params.x = newX
-                            params.y = newY
+                            params.gravity = Gravity.TOP or Gravity.START
+                            val half = (60 * den).toInt()
+                            params.x = displayWidth / 2 - half
+                            params.y = 0
                             windowManager.updateViewLayout(overlayView, params)
                             showBubble("🎮 Mode game aktif — $appName")
                         }

@@ -45,7 +45,10 @@ object CommandManager {
         val searchQuery = SearchCommandParser.parse(effectiveInput)
 
         if (searchQuery != null) {
-
+            if (GameModeManager.isGameMode) {
+                OverlayEventBus.onBubble?.invoke("🔇 Pencarian dinonaktifkan saat mode game")
+                return
+            }
             OverlayEventBus.onBubble?.invoke("🔎 Searching $searchQuery")
 
             IntentController.searchGoogle(context, searchQuery)
