@@ -4,10 +4,6 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ApplicationInfo
-import android.os.Bundle
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -44,6 +40,7 @@ import com.silica.assistant.core.CustomAssetManager
 import com.silica.assistant.core.config.TutorialManager
 
 import com.silica.assistant.core.overlay.OverlayEventBus
+import com.silica.assistant.core.voice.VoiceManager
 import com.silica.assistant.core.ssh.SshManager
 import com.silica.assistant.overlay.WaifuState
 import com.silica.assistant.overlay.WaifuStateManager
@@ -131,7 +128,10 @@ fun MainScreen() {
         val currentVersionCode = try {
             val pkg = context.packageManager.getPackageInfo(context.packageName, 0)
             androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(pkg).toInt()
-        } catch (_: Exception) { 0 }
+        } catch (e: Exception) {
+            android.util.Log.e("MainScreen", "Failed to get version code", e)
+            0
+        }
         val info = UpdateChecker.check(currentVersionCode)
         if (info != null) {
             updateInfo = info
@@ -144,17 +144,8 @@ fun MainScreen() {
         }
     }
 
-    val speechIntent = remember {
-        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(
-                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-            )
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "id-ID")
-        }
-    }
-
     val handler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
+
     val greeting = remember {
         val cal = Calendar.getInstance()
         val hour = cal.get(Calendar.HOUR_OF_DAY)
@@ -167,66 +158,13 @@ fun MainScreen() {
                 }
     }
 
-    val speechRecognizer = remember {
-        val googleComponent =
-                android.content.ComponentName(
-                        "com.google.android.googlequicksearchbox",
-                        "com.google.android.voicesearch.serviceapi.GoogleRecognitionService"
-                )
-        val recognizer =
-                SpeechRecognizer.createSpeechRecognizer(context, googleComponent)
-                        ?: SpeechRecognizer.createSpeechRecognizer(context)
-        recognizer.setRecognitionListener(
-                object : RecognitionListener {
-                    override fun onReadyForSpeech(params: Bundle?) {
-                        Toast.makeText(context, "Listening...", Toast.LENGTH_SHORT).show()
-                    }
-                    override fun onBeginningOfSpeech() {
-                        Toast.makeText(context, "Speech Started", Toast.LENGTH_SHORT).show()
-                    }
-                    override fun onResults(results: Bundle?) {
-                        viewModel.setListening(false)
-                        val matches =
-                                results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        val text = matches?.get(0) ?: ""
-                        Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
-                        WaifuStateManager.currentState = WaifuState.TALK
-                        CommandManager.execute(context, text)
-                        handler.postDelayed(
-                                { WaifuStateManager.currentState = WaifuState.RELAX },
-                                3000
-                        )
-                    }
-                    override fun onEndOfSpeech() {
-                        viewModel.setListening(false)
-                        Toast.makeText(context, "Speech Ended", Toast.LENGTH_SHORT).show()
-                    }
-                    override fun onError(error: Int) {
-                        viewModel.setListening(false)
-                        Toast.makeText(context, "Speech Error: $error", Toast.LENGTH_LONG).show()
-                        WaifuStateManager.currentState = WaifuState.RELAX
-                    }
-                    override fun onRmsChanged(rmsdB: Float) {}
-                    override fun onBufferReceived(buffer: ByteArray?) {}
-                    override fun onPartialResults(partialResults: Bundle?) {}
-                    override fun onEvent(eventType: Int, params: Bundle?) {}
-                }
-        )
-        recognizer
-    }
-    DisposableEffect(Unit) { onDispose { speechRecognizer.destroy() } }
-
     val recordPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            try {
-                WaifuStateManager.currentState = WaifuState.LISTEN
-                viewModel.setListening(true)
-                speechRecognizer.startListening(speechIntent)
-            } catch (e: Exception) {
-                Toast.makeText(context, "Exception: ${e.message}", Toast.LENGTH_LONG).show()
-            }
+            WaifuStateManager.currentState = WaifuState.LISTEN
+            viewModel.setListening(true)
+            VoiceManager.start()
         } else {
             Toast.makeText(context, "Izin mikrofon diperlukan untuk voice command", Toast.LENGTH_SHORT).show()
         }
@@ -304,34 +242,6 @@ fun MainScreen() {
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        VoiceCommandSection(
-                                isListening = uiState.isListening,
-                                onStartListening = {
-                                    if (ContextCompat.checkSelfPermission(
-                                                    context,
-                                                    Manifest.permission.RECORD_AUDIO
-                                            ) == PackageManager.PERMISSION_GRANTED
-                                    ) {
-                                        try {
-                                            WaifuStateManager.currentState = WaifuState.LISTEN
-                                            viewModel.setListening(true)
-                                            speechRecognizer.startListening(speechIntent)
-                                        } catch (e: Exception) {
-                                            Toast.makeText(
-                                                            context,
-                                                            "Exception: ${e.message}",
-                                                            Toast.LENGTH_LONG
-                                                    )
-                                                    .show()
-                                        }
-                                    } else {
-                                        recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                    }
-                                }
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
                         CommandHistorySection()
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -388,7 +298,9 @@ fun MainScreen() {
             onUpdate = {
                 isDownloading = true
                 scope.launch {
-                    val result = UpdateDownloader.download(context, info.downloadUrl)
+                    val result = UpdateDownloader.download(context, info.downloadUrl) { progress ->
+                        downloadProgress = progress
+                    }
                     if (result != null) {
                         isDownloading = false
                         UpdateInstaller.install(context, result.file)

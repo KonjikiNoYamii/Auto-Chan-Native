@@ -26,12 +26,14 @@ object LlmClient {
                 healthCheckFailCount = 0
                 if (healthCheckPassCount >= CONFIDENCE_THRESHOLD) {
                     activeProvider = "Gemini"
+                    WaifuNotifier.showSwitchNotification("Gemini")
                 }
             } else {
                 healthCheckFailCount++
                 healthCheckPassCount = 0
                 if (healthCheckFailCount >= CONFIDENCE_THRESHOLD) {
                     activeProvider = "OpenRouter"
+                    WaifuNotifier.showSwitchNotification("OpenRouter")
                 }
             }
             delay(if (activeProvider == "Gemini") 15_000L else 10_000L)
@@ -48,8 +50,11 @@ object LlmClient {
                 conn.readTimeout = 5000
                 conn.requestMethod = "GET"
                 val code = conn.responseCode
+                val body = if (code == 200) {
+                    conn.inputStream.bufferedReader().use { it.readText() }
+                } else ""
                 conn.disconnect()
-                code == 200
+                code == 200 && JSONObject(body).optBoolean("client_ready", false)
             } catch (_: Exception) {
                 false
             }
@@ -67,6 +72,7 @@ object LlmClient {
                         )
                     } catch (_: Exception) {
                         activeProvider = "OpenRouter"
+                        WaifuNotifier.showSwitchNotification("OpenRouter")
                     }
                 }
                 val payload = buildPayload(messages, memoryContext)
@@ -104,6 +110,25 @@ object LlmClient {
         }
         conn.disconnect()
         return body
+    }
+
+    suspend fun generateActivityComment(appName: String, isGame: Boolean): String? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val prompt = if (isGame) {
+                    "User sedang main $appName. Beri komentar singkat MAXIMAL 1 KALIMAT tentang game ini. Khas Yami: tsundere, cool, santai. Langsung komentar saja tanpa perkenalan."
+                } else {
+                    "User sedang membuka $appName. Beri komentar singkat MAXIMAL 1 KALIMAT. Khas Yami: tsundere, cool, santai. Langsung komentar saja tanpa perkenalan."
+                }
+                val msg = listOf(ChatMessage("user", prompt))
+                val payload = buildPayload(msg, "")
+                val raw = httpPost(LlmConfig.endpoint, payload)
+                val result = parseResponse(raw)
+                result.getOrNull()?.content?.take(150)
+            } catch (_: Exception) {
+                null
+            }
+        }
     }
 
     private fun buildPayload(messages: List<ChatMessage>, memoryContext: String = ""): String {
