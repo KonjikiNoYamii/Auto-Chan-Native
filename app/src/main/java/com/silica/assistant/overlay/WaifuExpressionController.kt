@@ -17,14 +17,16 @@ class WaifuExpressionController(
         lastState = state
 
         if (state == WaifuState.GAME) {
+            imageView.alpha = 0.55f
             if (CustomAssetManager.hasCustom(context, CustomAssetManager.AssetType.WAIFU_GAME)) {
                 CustomAssetManager.applyToImageView(context, imageView, CustomAssetManager.AssetType.WAIFU_GAME)
             } else {
                 imageView.setImageResource(R.drawable.icongamemode)
             }
-            lastState = state
             return
         }
+
+        imageView.alpha = 1.0f
 
         val type = when (state) {
             WaifuState.RELAX -> CustomAssetManager.AssetType.WAIFU_IDLE

@@ -516,8 +516,27 @@ class OverlayService : Service() {
 
             if (!::bubbleText.isInitialized) return@post
 
+            bubbleText.visibility = View.GONE
+            bubbleText.translationY = 0f
             bubbleText.text = text
             bubbleText.visibility = View.VISIBLE
+
+            // position bubble above/below image based on screen placement
+            bubbleText.post {
+                if (bubbleText.visibility != View.VISIBLE) return@post
+                val density = resources.displayMetrics.density
+                val gap = (4 * density).toInt()
+                val imageH = waifuHeight
+                val bubbleH = bubbleText.height
+                val overflow = bubbleH + gap
+                val centerY = params.y + imageH / 2
+                val placeAbove = centerY > displayHeight / 2
+                bubbleText.translationY = if (placeAbove) {
+                    -(overflow + (imageH - bubbleH) / 2f).coerceAtMost(bubbleH + gap.toFloat())
+                } else {
+                    imageH + gap.toFloat()
+                }
+            }
 
             playPopSound()
 
@@ -525,7 +544,10 @@ class OverlayService : Service() {
 
             bubbleHideRunnable?.let { handler.removeCallbacks(it) }
 
-            bubbleHideRunnable = Runnable { bubbleText.visibility = View.GONE }
+            bubbleHideRunnable = Runnable {
+                bubbleText.translationY = 0f
+                bubbleText.visibility = View.GONE
+            }
 
             handler.postDelayed(bubbleHideRunnable!!, duration)
         }
