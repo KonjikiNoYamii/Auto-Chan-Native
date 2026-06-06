@@ -61,9 +61,22 @@ object LlmClient {
         }
     }
 
+    private suspend fun quickHealthCheck() {
+        if (activeProvider == "Memeriksa...") {
+            if (checkGeminiServer()) {
+                activeProvider = "Gemini"
+                WaifuNotifier.showSwitchNotification("Gemini")
+            } else {
+                activeProvider = "OpenRouter"
+                WaifuNotifier.showSwitchNotification("OpenRouter")
+            }
+        }
+    }
+
     suspend fun chat(messages: List<ChatMessage>, memoryContext: String = ""): Result<ChatMessage> {
         return withContext(Dispatchers.IO) {
             try {
+                quickHealthCheck()
                 if (activeProvider == "Gemini") {
                     try {
                         val payload = buildPayload(messages, memoryContext)
