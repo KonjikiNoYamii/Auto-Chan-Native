@@ -76,12 +76,29 @@ fun SshScreen(
     var terminalShell by remember { mutableStateOf<ShellSession?>(null) }
 
     var passwordVisible by remember { mutableStateOf(false) }
+    var rememberPassword by remember { mutableStateOf(false) }
     var showUploadPicker by remember { mutableStateOf(false) }
     var pendingDownloadPath by remember { mutableStateOf("") }
     var showSecurityWarning by remember { mutableStateOf(false) }
     var warningAccepted by remember { mutableStateOf(false) }
     var pendingConnection by remember { mutableStateOf<SshConnection?>(null) }
     val isActive = remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        if (!connected && SshManager.hasSavedConnection(context)) {
+            val saved = SshManager.loadSavedConnection(context)
+            if (saved != null) {
+                host = saved.host
+                port = saved.port.toString()
+                username = saved.username
+                if (saved.password.isNotBlank()) {
+                    password = saved.password
+                    rememberPassword = true
+                }
+            }
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             isActive.value = false
@@ -191,11 +208,13 @@ fun SshScreen(
                     username = username,
                     password = password,
                     passwordVisible = passwordVisible,
+                    rememberPassword = rememberPassword,
                     onHostChange = { host = it },
                     onPortChange = { port = it },
                     onUsernameChange = { username = it },
                     onPasswordChange = { password = it },
                     onPasswordVisibilityToggle = { passwordVisible = !passwordVisible },
+                    onRememberPasswordChange = { rememberPassword = it },
                     connecting = connecting,
                     onConnect = {
                         val trimmedHost = host.trim()
@@ -219,7 +238,12 @@ fun SshScreen(
                             showSecurityWarning = true
                         } else {
                             connecting = true
-                            doConnect(context, handler, conn, { connected = true }, { connecting = false },
+                            doConnect(context, handler, conn,
+                                {
+                                    connected = true
+                                    SshManager.saveConnection(context, conn, rememberPassword)
+                                },
+                                { connecting = false },
                                 { currentPath = it })
                         }
                     }
@@ -342,11 +366,6 @@ fun SshScreen(
                 LaunchedEffect(tab, currentPath) {
                     if (tab == 1) {
                         refreshFiles(currentPath, { files = it }, { filesLoading = it })
-                        while (true) {
-                            kotlinx.coroutines.delay(3000)
-                            if (!isActive.value) break
-                            refreshFiles(currentPath, { files = it }, { filesLoading = it })
-                        }
                     }
                 }
 
@@ -439,7 +458,12 @@ fun SshScreen(
                         showSecurityWarning = false
                         pendingConnection?.let { conn ->
                             connecting = true
-                            doConnect(context, handler, conn, { connected = true }, { connecting = false },
+                            doConnect(context, handler, conn,
+                                {
+                                    connected = true
+                                    SshManager.saveConnection(context, conn, rememberPassword)
+                                },
+                                { connecting = false },
                                 { currentPath = it })
                         }
                         pendingConnection = null
@@ -491,11 +515,13 @@ private fun ConnectionForm(
     password: String,
     passwordVisible: Boolean,
     connecting: Boolean,
+    rememberPassword: Boolean = false,
     onHostChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
     onUsernameChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     onPasswordVisibilityToggle: () -> Unit,
+    onRememberPasswordChange: (Boolean) -> Unit = {},
     onConnect: () -> Unit
 ) {
     val scroll = rememberScrollState()
@@ -590,7 +616,26 @@ private fun ConnectionForm(
             shape = RoundedCornerShape(12.dp)
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(
+                checked = rememberPassword,
+                onCheckedChange = onRememberPasswordChange,
+                colors = CheckboxDefaults.colors(checkedColor = DeepRose)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                "Ingat password",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         Button(
             onClick = onConnect,

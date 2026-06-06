@@ -270,4 +270,47 @@ object SshManager {
     }
 
     fun getConnectionId(): String = connectionId
+
+    // =========================
+    // SAVED CONNECTION
+    // =========================
+    private fun getConnPrefs(context: Context) =
+        context.getSharedPreferences("ssh_saved_connection", Context.MODE_PRIVATE)
+
+    fun saveConnection(context: Context, conn: SshConnection, savePassword: Boolean = false) {
+        getConnPrefs(context).edit().apply {
+            putString("host", conn.host)
+            putInt("port", conn.port)
+            putString("username", conn.username)
+            if (savePassword && conn.password.isNotBlank()) {
+                putString("password", conn.password)
+            } else {
+                remove("password")
+            }
+            apply()
+        }
+    }
+
+    fun loadSavedConnection(context: Context): SshConnection? {
+        val prefs = getConnPrefs(context)
+        val host = prefs.getString("host", null) ?: return null
+        val port = prefs.getInt("port", 22)
+        val username = prefs.getString("username", "") ?: ""
+        val password = prefs.getString("password", "") ?: ""
+        return SshConnection(
+            name = "$username@$host",
+            host = host,
+            port = port,
+            username = username,
+            password = password
+        )
+    }
+
+    fun hasSavedConnection(context: Context): Boolean {
+        return getConnPrefs(context).contains("host")
+    }
+
+    fun clearSavedConnection(context: Context) {
+        getConnPrefs(context).edit().clear().apply()
+    }
 }
