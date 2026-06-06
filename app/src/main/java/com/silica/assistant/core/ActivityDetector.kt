@@ -14,10 +14,12 @@ class ActivityDetector(private val context: Context) {
         }
     }
 
+    private var lastKnownApp: String? = null
+
     fun getForegroundApp(): String? {
-        val manager = usageStatsManager ?: return null
+        val manager = usageStatsManager ?: return lastKnownApp
         val endTime = System.currentTimeMillis()
-        val beginTime = endTime - 5000
+        val beginTime = endTime - 30_000
 
         return try {
             val events = manager.queryEvents(beginTime, endTime)
@@ -31,9 +33,10 @@ class ActivityDetector(private val context: Context) {
                     currentApp = event.packageName
                 }
             }
-            currentApp
+            if (currentApp != null) lastKnownApp = currentApp
+            currentApp ?: lastKnownApp
         } catch (_: SecurityException) {
-            null
+            lastKnownApp
         }
     }
 
