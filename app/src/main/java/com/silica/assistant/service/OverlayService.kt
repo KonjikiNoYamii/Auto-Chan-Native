@@ -141,10 +141,11 @@ class OverlayService : Service() {
                             displayHeight = h
                             val vw = overlayView.width.coerceAtLeast(waifuWidth)
                             val vh = overlayView.height.coerceAtLeast(waifuHeight)
+                            val topBound = -(16 * metrics.density).toInt()
                             val maxX = (w - vw).coerceAtLeast(0)
                             val maxY = (h - vh).coerceAtLeast(0)
                             params.x = params.x.coerceIn(0, maxX)
-                            params.y = params.y.coerceIn(0, maxY)
+                            params.y = params.y.coerceIn(topBound, maxY)
                             windowManager.updateViewLayout(overlayView, params)
                         }
                     }
@@ -358,7 +359,7 @@ class OverlayService : Service() {
                         // 🧲 snap to nearest edge
                         val density = resources.displayMetrics.density
                         val snapThreshold = (80 * density).toInt()
-                        val edgeMargin = (8 * density).toInt()
+                        val edgeMargin = (2 * density).toInt()
                         val cx = params.x + waifuWidth / 2
                         val cy = params.y + waifuHeight / 2
                         val distLeft = cx
