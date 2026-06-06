@@ -324,7 +324,9 @@ class OverlayService : Service() {
                     params.x = initialX + dx
                     params.y = initialY + dy
 
-                    WaifuStateManager.currentState = WaifuState.RELAX
+                    if (!GameModeManager.isGameMode) {
+                        WaifuStateManager.currentState = WaifuState.RELAX
+                    }
 
                     windowManager.updateViewLayout(overlayView, params)
 
