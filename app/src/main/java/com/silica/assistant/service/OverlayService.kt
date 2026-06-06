@@ -17,6 +17,7 @@ import android.os.Looper
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
+import android.view.Gravity
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.TextView
@@ -207,7 +208,9 @@ class OverlayService : Service() {
                         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                         PixelFormat.TRANSLUCENT
-                )
+                ).apply {
+                    gravity = Gravity.TOP or Gravity.START
+                }
 
         setupTouchListener()
 

@@ -124,9 +124,7 @@ object GameModeManager {
     }
 
     private fun positionForGameMode(context: Context): Pair<Int, Int> {
-        val wm = context.getSystemService(Context.WINDOW_SERVICE) as? android.view.WindowManager ?: return 0 to 0
-        val metrics = DisplayMetrics()
-        wm.defaultDisplay.getMetrics(metrics)
+        val metrics = context.resources.displayMetrics
         val w = metrics.widthPixels
         val h = metrics.heightPixels
         val half = (60 * metrics.density).toInt()
