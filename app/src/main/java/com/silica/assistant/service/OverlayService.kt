@@ -85,6 +85,7 @@ class OverlayService : Service() {
     private lateinit var activityDetector: ActivityDetector
     private var lastDetectedApp: String? = null
     private var lastCommentTime = 0L
+    private var nextCommentDelay = Random.nextLong(60_000, 120_000)
     private var detecting = false
 
     private val screenReceiver = object : BroadcastReceiver() {
@@ -446,6 +447,9 @@ class OverlayService : Service() {
                     if ((isGameModeApp || isGame) && !GameModeManager.isGameMode) {
                         val den = if (waifuWidth > 0) waifuWidth / 120f else 2f
                         GameModeManager.enterGameMode(this, params.x, params.y, displayWidth, displayHeight, den, auto = true)
+                        lastCommentTime = System.currentTimeMillis()
+                        nextCommentDelay = Random.nextLong(60_000, 120_000)
+                        generateContextComment(appName, true)
                         handler.post {
                             params.gravity = Gravity.TOP or Gravity.START
                             val half = (60 * den).toInt()
@@ -454,7 +458,6 @@ class OverlayService : Service() {
                             windowManager.updateViewLayout(overlayView, params)
                             randomQuoteHandler.removeCallbacksAndMessages(null)
                             isQuoteScheduled = false
-                            showBubble("🎮 Mode game aktif — $appName")
                         }
                     } else if (!isGameModeApp && !isGame && GameModeManager.autoGameMode) {
                         val (restoreX, restoreY) = GameModeManager.exitGameMode()
@@ -469,12 +472,15 @@ class OverlayService : Service() {
 
             }
 
-            if (screenOn && System.currentTimeMillis() - lastCommentTime > 60_000) {
-                lastCommentTime = System.currentTimeMillis()
-                val appName = GameModeManager.currentAppName ?: lastDetectedApp
-                if (appName != null) {
-                    val isGame = GameModeManager.isGameMode || (lastDetectedApp?.let { GameModeManager.isGame(this@OverlayService, it) } ?: false)
-                    generateContextComment(appName, isGame)
+            if (screenOn && GameModeManager.isGameMode) {
+                val elapsed = System.currentTimeMillis() - lastCommentTime
+                if (elapsed > nextCommentDelay) {
+                    lastCommentTime = System.currentTimeMillis()
+                    nextCommentDelay = Random.nextLong(30_000, 120_000)
+                    val appName = GameModeManager.currentAppName ?: lastDetectedApp
+                    if (appName != null) {
+                        generateContextComment(appName, true)
+                    }
                 }
             }
 
