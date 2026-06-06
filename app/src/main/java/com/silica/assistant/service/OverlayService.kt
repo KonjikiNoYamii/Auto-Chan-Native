@@ -561,7 +561,6 @@ class OverlayService : Service() {
 
             if (!::bubbleText.isInitialized) return@post
 
-            bubbleText.translationY = 0f
             bubbleText.text = text
             bubbleText.visibility = View.VISIBLE
             lastGameTouchTime = System.currentTimeMillis()
@@ -573,36 +572,10 @@ class OverlayService : Service() {
             bubbleHideRunnable?.let { handler.removeCallbacks(it) }
 
             bubbleHideRunnable = Runnable {
-                bubbleText.translationY = 0f
                 bubbleText.visibility = View.GONE
             }
 
             handler.postDelayed(bubbleHideRunnable!!, duration)
-
-            // position bubble above/below image after layout is guaranteed
-            bubbleText.viewTreeObserver.addOnGlobalLayoutListener(
-                object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
-                    override fun onGlobalLayout() {
-                        if (bubbleText.visibility != View.VISIBLE) {
-                            bubbleText.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                            return
-                        }
-                        bubbleText.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                        val density = resources.displayMetrics.density
-                        val gap = (4 * density).toInt()
-                        val imageH = waifuHeight
-                        val bubbleH = bubbleText.height
-                        if (bubbleH <= 0) return
-                        val centerY = params.y + imageH / 2
-                        val placeAbove = centerY > displayHeight / 2
-                        bubbleText.translationY = if (placeAbove) {
-                            -(bubbleH + gap).toFloat()
-                        } else {
-                            (imageH + gap).toFloat()
-                        }
-                    }
-                }
-            )
         }
     }
 
