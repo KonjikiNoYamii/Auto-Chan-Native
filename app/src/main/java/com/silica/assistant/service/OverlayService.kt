@@ -115,7 +115,8 @@ class OverlayService : Service() {
                         if (gameReq != null) {
                             OverlayEventBus.gameModeRequest = null
                             if (gameReq) {
-                                val (newX, newY) = GameModeManager.enterGameMode(this@OverlayService, params.x, params.y)
+                                val den = if (waifuWidth > 0) waifuWidth / 120f else 2f
+                                val (newX, newY) = GameModeManager.enterGameMode(this@OverlayService, params.x, params.y, displayWidth, displayHeight, den)
                                 params.x = newX
                                 params.y = newY
                                 windowManager.updateViewLayout(overlayView, params)
@@ -411,7 +412,8 @@ class OverlayService : Service() {
                 } else {
                     val isGameModeApp = pkg == GameModeManager.gameModeAppPackage
                     if ((isGameModeApp || isGame) && !GameModeManager.isGameMode) {
-                        val (newX, newY) = GameModeManager.enterGameMode(this, params.x, params.y, auto = true)
+                        val den = if (waifuWidth > 0) waifuWidth / 120f else 2f
+                        val (newX, newY) = GameModeManager.enterGameMode(this, params.x, params.y, displayWidth, displayHeight, den, auto = true)
                         handler.post {
                             params.x = newX
                             params.y = newY

@@ -2,7 +2,6 @@ package com.silica.assistant.overlay
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
-import android.util.DisplayMetrics
 
 enum class GameModePosition {
     TOP_LEFT, TOP_CENTER, TOP_RIGHT,
@@ -111,7 +110,21 @@ object GameModeManager {
         isGameMode = true
         autoGameMode = auto
         WaifuStateManager.currentState = WaifuState.GAME
-        return positionForGameMode(context)
+        val metrics = context.resources.displayMetrics
+        return positionForGameMode(metrics.widthPixels, metrics.heightPixels, metrics.density)
+    }
+
+    fun enterGameMode(context: Context, x: Int, y: Int, displayW: Int, displayH: Int, density: Float, auto: Boolean = false): Pair<Int, Int> {
+        if (isGameMode && auto == autoGameMode) return x to y
+        if (!isGameMode) {
+            previousX = x
+            previousY = y
+            previousState = WaifuStateManager.currentState
+        }
+        isGameMode = true
+        autoGameMode = auto
+        WaifuStateManager.currentState = WaifuState.GAME
+        return positionForGameMode(displayW, displayH, density)
     }
 
     fun exitGameMode(resetManual: Boolean = true): Pair<Int, Int> {
@@ -123,12 +136,8 @@ object GameModeManager {
         return previousX to previousY
     }
 
-    private fun positionForGameMode(context: Context): Pair<Int, Int> {
-        val metrics = context.resources.displayMetrics
-        val w = metrics.widthPixels
-        val h = metrics.heightPixels
-        val half = (60 * metrics.density).toInt()
-
+    private fun positionForGameMode(w: Int, h: Int, density: Float): Pair<Int, Int> {
+        val half = (60 * density).toInt()
         return when (gameModePosition) {
             GameModePosition.TOP_LEFT -> 0 to 0
             GameModePosition.TOP_CENTER -> (w / 2 - half) to 0
