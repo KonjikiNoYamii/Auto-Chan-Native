@@ -121,6 +121,8 @@ class OverlayService : Service() {
                                 params.gravity = Gravity.TOP or Gravity.START
                                 params.x = displayWidth / 2 - half
                                 params.y = 0
+                                randomQuoteHandler.removeCallbacksAndMessages(null)
+                                isQuoteScheduled = false
                                 windowManager.updateViewLayout(overlayView, params)
                             } else {
                                 val (restoreX, restoreY) = GameModeManager.exitGameMode()
@@ -257,7 +259,7 @@ class OverlayService : Service() {
     }
 
     private fun scheduleRandomQuote() {
-        if (isQuoteScheduled || !screenOn) return
+        if (isQuoteScheduled || !screenOn || GameModeManager.isGameMode) return
         isQuoteScheduled = true
         val delay = if (isIdle()) {
             Random.nextLong(15_000, 30_000)
@@ -308,6 +310,12 @@ class OverlayService : Service() {
                     touchX = event.rawX
                     touchY = event.rawY
 
+                    // hide bubble during drag
+                    if (bubbleText.visibility == View.VISIBLE) {
+                        bubbleText.visibility = View.GONE
+                        bubbleHideRunnable?.let { handler.removeCallbacks(it) }
+                    }
+
                     // long press → voice start
                     longPressHandler.postDelayed(
                             {
@@ -345,9 +353,28 @@ class OverlayService : Service() {
                     longPressHandler.removeCallbacksAndMessages(null)
 
                     if (!isMoving && !longPressTriggered) {
-
-                        // toggle voice via SINGLE SYSTEM
                         startVoiceWithPermissionCheck()
+                    } else if (isMoving) {
+                        // 🧲 snap to nearest edge
+                        val density = resources.displayMetrics.density
+                        val snapThreshold = (80 * density).toInt()
+                        val edgeMargin = (8 * density).toInt()
+                        val cx = params.x + waifuWidth / 2
+                        val cy = params.y + waifuHeight / 2
+                        val distLeft = cx
+                        val distRight = displayWidth - cx
+                        val distTop = cy
+                        val distBottom = displayHeight - cy
+                        val minDist = minOf(distLeft, distRight, distTop, distBottom)
+                        if (minDist < snapThreshold) {
+                            when (minDist) {
+                                distLeft -> params.x = edgeMargin
+                                distRight -> params.x = displayWidth - waifuWidth - edgeMargin
+                                distTop -> params.y = edgeMargin
+                                distBottom -> params.y = displayHeight - waifuHeight - edgeMargin
+                            }
+                            windowManager.updateViewLayout(overlayView, params)
+                        }
                     }
 
                     true
@@ -424,6 +451,8 @@ class OverlayService : Service() {
                             params.x = displayWidth / 2 - half
                             params.y = 0
                             windowManager.updateViewLayout(overlayView, params)
+                            randomQuoteHandler.removeCallbacksAndMessages(null)
+                            isQuoteScheduled = false
                             showBubble("🎮 Mode game aktif — $appName")
                         }
                     } else if (!isGameModeApp && !isGame && GameModeManager.autoGameMode) {

@@ -135,9 +135,15 @@ object LlmClient {
                 }
                 val msg = listOf(ChatMessage("user", prompt))
                 val payload = buildPayload(msg, "")
+                if (activeProvider == "Gemini") {
+                    try {
+                        val raw = httpPost(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout)
+                        val r = parseResponse(raw).getOrNull()?.content?.take(150)
+                        if (r != null) return@withContext r
+                    } catch (_: Exception) {}
+                }
                 val raw = httpPost(LlmConfig.endpoint, payload)
-                val result = parseResponse(raw)
-                result.getOrNull()?.content?.take(150)
+                parseResponse(raw).getOrNull()?.content?.take(150)
             } catch (_: Exception) {
                 null
             }
