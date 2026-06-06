@@ -467,8 +467,13 @@ class OverlayService : Service() {
                     }
                 }
 
-                if (screenOn && System.currentTimeMillis() - lastCommentTime > 60_000) {
-                    lastCommentTime = System.currentTimeMillis()
+            }
+
+            if (screenOn && System.currentTimeMillis() - lastCommentTime > 60_000) {
+                lastCommentTime = System.currentTimeMillis()
+                val appName = GameModeManager.currentAppName ?: lastDetectedApp
+                if (appName != null) {
+                    val isGame = GameModeManager.isGameMode || (lastDetectedApp?.let { GameModeManager.isGame(this@OverlayService, it) } ?: false)
                     generateContextComment(appName, isGame)
                 }
             }
@@ -477,11 +482,35 @@ class OverlayService : Service() {
         }
     }
 
+    private val gameFallbackComments = listOf(
+        "Seru juga mainnya, tapi masih kalah sama latihanku~",
+        "Hmph, bagus sih, tapi jangan lupa latihan juga!",
+        "Fufu, kamu cukup mahir juga ternyata.",
+        "Mainnya oke, tapi jangan keseringan ya.",
+        "... Lumayan. Tapi jangan lupa istirahat.",
+        "Gamenya menarik? Ceritain dong~",
+    )
+
+    private val appFallbackComments = listOf(
+        "Aplikasi itu, ya? Hmm, nggak terlalu menarik sih…",
+        "Lagi sibuk ya? Baiklah, aku di sini aja.",
+        "Fufu, kamu sibuk sekali hari ini.",
+        "... Ada yang bisa aku bantu?",
+        "Hmm, kamu betah juga di aplikasi itu.",
+    )
+
     private fun generateContextComment(appName: String, isGame: Boolean) {
         activityScope.launch {
             val comment = LlmClient.generateActivityComment(appName, isGame)
             if (comment != null) {
                 showBubble(comment)
+            } else {
+                val fallback = if (isGame) {
+                    gameFallbackComments.random()
+                } else {
+                    appFallbackComments.random()
+                }
+                showBubble(fallback)
             }
         }
     }
@@ -523,21 +552,20 @@ class OverlayService : Service() {
             bubbleText.visibility = View.VISIBLE
 
             // position bubble above/below image based on screen placement
-            bubbleText.post {
-                if (bubbleText.visibility != View.VISIBLE) return@post
+            bubbleText.post( Runnable {
+                if (bubbleText.visibility != View.VISIBLE) return@Runnable
                 val density = resources.displayMetrics.density
                 val gap = (4 * density).toInt()
                 val imageH = waifuHeight
                 val bubbleH = bubbleText.height
-                val overflow = bubbleH + gap
                 val centerY = params.y + imageH / 2
                 val placeAbove = centerY > displayHeight / 2
                 bubbleText.translationY = if (placeAbove) {
-                    -(overflow + (imageH - bubbleH) / 2f).coerceAtMost(bubbleH + gap.toFloat())
+                    -(bubbleH + gap).toFloat()
                 } else {
-                    imageH + gap.toFloat()
+                    (imageH + gap).toFloat()
                 }
-            }
+            })
 
             playPopSound()
 
