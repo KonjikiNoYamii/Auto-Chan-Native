@@ -186,7 +186,6 @@ class OverlayService : Service() {
 
         waifuImage = overlayView.findViewById(R.id.waifuImage)
         bubbleText = overlayView.findViewById(R.id.bubbleText)
-        bubbleText.translationY = (waifuHeight + (8 * metrics.density).toInt()).toFloat()
 
         controller = WaifuExpressionController(waifuImage, this)
 
@@ -558,13 +557,6 @@ class OverlayService : Service() {
         handler.post {
 
             if (!::bubbleText.isInitialized) return@post
-
-            val density = resources.displayMetrics.density
-            val imageH = waifuHeight
-            val gap = (8 * density).toInt()
-            val centerY = params.y + imageH / 2
-            bubbleText.translationY =
-                if (centerY > displayHeight / 2) -(300 * density).toFloat() else (imageH + gap).toFloat()
 
             bubbleText.text = text
             bubbleText.visibility = View.VISIBLE
