@@ -321,12 +321,6 @@ class OverlayService : Service() {
                     touchX = event.rawX
                     touchY = event.rawY
 
-                    // hide bubble during drag
-                    if (bubbleText.visibility == View.VISIBLE) {
-                        bubbleText.visibility = View.GONE
-                        bubbleHideRunnable?.let { handler.removeCallbacks(it) }
-                    }
-
                     // long press → voice start
                     longPressHandler.postDelayed(
                             {
