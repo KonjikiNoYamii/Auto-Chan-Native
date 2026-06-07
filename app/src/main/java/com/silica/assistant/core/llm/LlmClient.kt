@@ -126,19 +126,20 @@ object LlmClient {
                 val prompt = if (isGame) {
                     "User sedang main $appName. Beri komentar singkat MAXIMAL 1 KALIMAT tentang game ini. Khas Yami: tsundere, cool, santai. Langsung komentar saja tanpa perkenalan."
                 } else {
-                    "User sedang membuka $appName. Beri komentar singkat MAXIMAL 1 KALIMAT. Khas Yami: tsundere, cool, santai. Langsung komentar saja tanpa perkenalan."
+                    "User sedang membuka $appName. Beri komentar pendek 1-2 kalimat. Khas Yami: tsundere, cool, santai. Langsung komentar saja tanpa perkenalan."
                 }
                 val msg = listOf(ChatMessage("user", prompt))
                 val payload = buildPayload(msg, "")
                 if (activeProvider == "Gemini") {
                     try {
                         val raw = httpPost(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout)
-                        val r = parseResponse(raw).getOrNull()?.content?.let { limitSentence(it) }
+                        val r = parseResponse(raw).getOrNull()?.content?.let { c -> if (isGame) limitSentence(c) else c.take(300) }
                         if (r != null) return@withContext r
                     } catch (_: Exception) {}
                 }
                 val raw = httpPost(LlmConfig.endpoint, payload)
-                parseResponse(raw).getOrNull()?.content?.let { limitSentence(it) }
+                val result = parseResponse(raw).getOrNull()?.content
+                if (result != null) if (isGame) limitSentence(result) else result.take(300) else null
             } catch (_: Exception) {
                 null
             }
@@ -158,7 +159,7 @@ object LlmClient {
 
         arr.put(JSONObject().apply {
             put("role", "system")
-            put("content", "Kamu adalah Konjiki no Yami, assassin dari planet asing dalam anime To Love-Ru. Kepribadian: cool, kalem, formal, blak-blakan, jujur. Tsundere — mudah malu saat dipuji tapi tidak akan mengaku. Sangat singkat (maks 1 kalimat). Cara bicara: formal, elegan, to the point. Sering mulai kalimat dengan '...' saat ragu/malu. Kadang 'Hmph' atau 'Fufu'. Panggil user dengan 'Kamu'. Jangan dramatis atau sedih berlebihan. Gunakan emoji untuk ekspresi (★, ♪, (￣ー￣), 😊, 😅, 🎮, dll) — jangan pakai tag teks seperti (malu) atau (senyum). Selalu gunakan ${LlmConfig.language}.")
+            put("content", "Kamu adalah Konjiki no Yami, assassin dari planet asing dalam anime To Love-Ru. Kepribadian: cool, kalem, formal, blak-blakan, jujur. Tsundere — mudah malu saat dipuji tapi tidak akan mengaku. Cara bicara: formal, elegan, to the point. Sering mulai kalimat dengan '...' saat ragu/malu. Kadang 'Hmph' atau 'Fufu'. Panggil user dengan 'Kamu'. Jangan dramatis atau sedih berlebihan. Gunakan emoji untuk ekspresi (★, ♪, (￣ー￣), 😊, 😅, 🎮, dll) — jangan pakai tag teks seperti (malu) atau (senyum). Selalu gunakan ${LlmConfig.language}.")
         })
 
         if (memoryContext.isNotBlank()) {
