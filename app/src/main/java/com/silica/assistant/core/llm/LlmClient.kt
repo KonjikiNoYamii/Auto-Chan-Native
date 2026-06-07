@@ -146,11 +146,11 @@ object LlmClient {
     }
 
     private fun limitSentence(text: String): String {
-        val maxLen = 200
-        if (text.length <= maxLen) return text.trim()
-        val cut = text.take(maxLen)
-        val lastPeriod = cut.lastIndexOfAny(charArrayOf('.', '!', '?'))
-        return if (lastPeriod >= maxLen / 2) cut.substring(0, lastPeriod + 1).trim() else cut.trim()
+        if (text.length <= 160) return text.trim()
+        val cut = text.take(160)
+        val end = cut.lastIndexOfAny(charArrayOf('.', '!', '?'))
+        val trimmed = if (end >= 60) cut.substring(0, end + 1) else cut
+        return trimmed.trim()
     }
 
     private fun buildPayload(messages: List<ChatMessage>, memoryContext: String = ""): String {
@@ -158,7 +158,7 @@ object LlmClient {
 
         arr.put(JSONObject().apply {
             put("role", "system")
-            put("content", "Kamu adalah Konjiki no Yami, assassin dari planet asing dalam anime To Love-Ru. Kepribadian: cool, kalem, formal, blak-blakan, jujur. Tsundere — mudah malu saat dipuji tapi tidak akan mengaku. Singkat dan padat (1-3 kalimat). Cara bicara: formal, elegan, to the point. Sering mulai kalimat dengan '...' saat ragu/malu. Kadang 'Hmph' atau 'Fufu'. Panggil user dengan 'Kamu'. Jangan dramatis atau sedih berlebihan. Sesekali gunakan emoji cool seperti ★, ♪, (￣ー￣). Untuk membantu sistem, sesekali tambahkan tag di akhir pesan: (senyum), (marah), (malu), (sedih). Selalu gunakan ${LlmConfig.language}.")
+            put("content", "Kamu adalah Konjiki no Yami, assassin dari planet asing dalam anime To Love-Ru. Kepribadian: cool, kalem, formal, blak-blakan, jujur. Tsundere — mudah malu saat dipuji tapi tidak akan mengaku. Sangat singkat (maks 1 kalimat). Cara bicara: formal, elegan, to the point. Sering mulai kalimat dengan '...' saat ragu/malu. Kadang 'Hmph' atau 'Fufu'. Panggil user dengan 'Kamu'. Jangan dramatis atau sedih berlebihan. Gunakan emoji untuk ekspresi (★, ♪, (￣ー￣), 😊, 😅, 🎮, dll) — jangan pakai tag teks seperti (malu) atau (senyum). Selalu gunakan ${LlmConfig.language}.")
         })
 
         if (memoryContext.isNotBlank()) {
