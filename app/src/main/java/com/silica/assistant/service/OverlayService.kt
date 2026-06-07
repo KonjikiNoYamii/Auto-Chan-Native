@@ -186,6 +186,7 @@ class OverlayService : Service() {
 
         waifuImage = overlayView.findViewById(R.id.waifuImage)
         bubbleText = overlayView.findViewById(R.id.bubbleText)
+        bubbleText.translationY = (waifuHeight + (8 * metrics.density).toInt()).toFloat()
 
         controller = WaifuExpressionController(waifuImage, this)
 
@@ -558,7 +559,13 @@ class OverlayService : Service() {
 
             if (!::bubbleText.isInitialized) return@post
 
-            bubbleText.translationY = 0f
+            val density = resources.displayMetrics.density
+            val imageH = waifuHeight
+            val gap = (8 * density).toInt()
+            val centerY = params.y + imageH / 2
+            bubbleText.translationY =
+                if (centerY > displayHeight / 2) -(300 * density).toFloat() else (imageH + gap).toFloat()
+
             bubbleText.text = text
             bubbleText.visibility = View.VISIBLE
             lastGameTouchTime = System.currentTimeMillis()
@@ -570,26 +577,10 @@ class OverlayService : Service() {
             bubbleHideRunnable?.let { handler.removeCallbacks(it) }
 
             bubbleHideRunnable = Runnable {
-                bubbleText.translationY = 0f
                 bubbleText.visibility = View.GONE
             }
 
             handler.postDelayed(bubbleHideRunnable!!, duration)
-
-            // position bubble below image (or above if near bottom edge)
-            overlayView.postDelayed({
-                if (bubbleText.visibility != View.VISIBLE) return@postDelayed
-                val bubbleH = bubbleText.height
-                if (bubbleH <= 0) return@postDelayed
-                val imageH = waifuHeight
-                val gap = (6 * resources.displayMetrics.density).toInt()
-                val centerY = params.y + imageH / 2
-                bubbleText.translationY = if (centerY > displayHeight / 2) {
-                    -(bubbleH + gap).toFloat()
-                } else {
-                    (imageH + gap).toFloat()
-                }
-            }, 50)
         }
     }
 
