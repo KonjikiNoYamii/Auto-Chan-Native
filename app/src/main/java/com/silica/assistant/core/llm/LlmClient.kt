@@ -26,14 +26,12 @@ object LlmClient {
                 healthCheckFailCount = 0
                 if (healthCheckPassCount >= CONFIDENCE_THRESHOLD) {
                     activeProvider = "Gemini"
-                    WaifuNotifier.showSwitchNotification("Gemini")
                 }
             } else {
                 healthCheckFailCount++
                 healthCheckPassCount = 0
                 if (healthCheckFailCount >= CONFIDENCE_THRESHOLD) {
                     activeProvider = "OpenRouter"
-                    WaifuNotifier.showSwitchNotification("OpenRouter")
                 }
             }
             delay(if (activeProvider == "Gemini") 15_000L else 10_000L)
@@ -65,10 +63,8 @@ object LlmClient {
         if (activeProvider == "Memeriksa...") {
             if (checkGeminiServer()) {
                 activeProvider = "Gemini"
-                WaifuNotifier.showSwitchNotification("Gemini")
             } else {
                 activeProvider = "OpenRouter"
-                WaifuNotifier.showSwitchNotification("OpenRouter")
             }
         }
     }
@@ -85,7 +81,6 @@ object LlmClient {
                         )
                     } catch (_: Exception) {
                         activeProvider = "OpenRouter"
-                        WaifuNotifier.showSwitchNotification("OpenRouter")
                     }
                 }
                 val payload = buildPayload(messages, memoryContext)
