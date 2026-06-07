@@ -103,8 +103,10 @@ object GameModeManager {
     fun enterGameMode(context: Context, x: Int, y: Int, auto: Boolean = false): Pair<Int, Int> {
         if (isGameMode && auto == autoGameMode) return x to y
         if (!isGameMode) {
-            previousX = x
-            previousY = y
+            if (!auto) {
+                previousX = x
+                previousY = y
+            }
             previousState = WaifuStateManager.currentState
         }
         isGameMode = true
@@ -117,8 +119,10 @@ object GameModeManager {
     fun enterGameMode(context: Context, x: Int, y: Int, displayW: Int, displayH: Int, density: Float, auto: Boolean = false): Pair<Int, Int> {
         if (isGameMode && auto == autoGameMode) return x to y
         if (!isGameMode) {
-            previousX = x
-            previousY = y
+            if (!auto) {
+                previousX = x
+                previousY = y
+            }
             previousState = WaifuStateManager.currentState
         }
         isGameMode = true

@@ -469,11 +469,8 @@ class OverlayService : Service() {
                             isQuoteScheduled = false
                         }
                     } else if (!isGameModeApp && !isGame && GameModeManager.autoGameMode) {
-                        val (restoreX, restoreY) = GameModeManager.exitGameMode()
+                        GameModeManager.exitGameMode()
                         handler.post {
-                            params.x = restoreX
-                            params.y = restoreY
-                            windowManager.updateViewLayout(overlayView, params)
                             showBubble("Mode game dinonaktifkan")
                         }
                     }
