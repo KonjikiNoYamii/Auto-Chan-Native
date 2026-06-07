@@ -133,16 +133,24 @@ object LlmClient {
                 if (activeProvider == "Gemini") {
                     try {
                         val raw = httpPost(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout)
-                        val r = parseResponse(raw).getOrNull()?.content?.take(150)
+                        val r = parseResponse(raw).getOrNull()?.content?.let { limitSentence(it) }
                         if (r != null) return@withContext r
                     } catch (_: Exception) {}
                 }
                 val raw = httpPost(LlmConfig.endpoint, payload)
-                parseResponse(raw).getOrNull()?.content?.take(150)
+                parseResponse(raw).getOrNull()?.content?.let { limitSentence(it) }
             } catch (_: Exception) {
                 null
             }
         }
+    }
+
+    private fun limitSentence(text: String): String {
+        val maxLen = 200
+        if (text.length <= maxLen) return text.trim()
+        val cut = text.take(maxLen)
+        val lastPeriod = cut.lastIndexOfAny(charArrayOf('.', '!', '?'))
+        return if (lastPeriod >= maxLen / 2) cut.substring(0, lastPeriod + 1).trim() else cut.trim()
     }
 
     private fun buildPayload(messages: List<ChatMessage>, memoryContext: String = ""): String {
