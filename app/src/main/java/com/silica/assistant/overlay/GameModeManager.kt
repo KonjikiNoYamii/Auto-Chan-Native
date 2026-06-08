@@ -51,6 +51,7 @@ object GameModeManager {
     )
 
     private val knownGamePackages = setOf(
+        "com.nexon.bluearchive",
         "com.mobile.legends",
         "com.igg.android.illusionsconnect",
         "com.tencent.ig",
@@ -81,12 +82,20 @@ object GameModeManager {
     private var previousState = WaifuState.RELAX
 
     fun isGame(context: Context, packageName: String): Boolean {
+        // Fallback checks
         if (knownGameModeApps.any { packageName.startsWith(it) }) return true
         if (knownGamePackages.any { packageName.startsWith(it) }) return true
+
         return try {
             val info = context.packageManager.getApplicationInfo(packageName, 0)
-            info.category == ApplicationInfo.CATEGORY_GAME
-        } catch (_: Exception) {
+            val isGameCategory = info.category == ApplicationInfo.CATEGORY_GAME
+            
+            // Logging for diagnostic
+            android.util.Log.d("GameModeManager", "isGame: pkg=$packageName, category=${info.category}, isGameCategory=$isGameCategory")
+            
+            isGameCategory
+        } catch (e: Exception) {
+            android.util.Log.e("GameModeManager", "isGame failed for $packageName", e)
             false
         }
     }
