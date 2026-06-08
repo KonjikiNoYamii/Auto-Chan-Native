@@ -202,7 +202,13 @@ class OverlayService : Service() {
         WaifuNotifier.init(this)
 
         VoiceManager.onResult = { text ->
-            OverlayEventBus.onBubble?.invoke("🎤 $text")
+            VoiceManager.stop()
+            showBubble("🎤 $text")
+            handler.postDelayed({
+                if (bubbleText.text == "🎤 $text") {
+                    showBubble("...")
+                }
+            }, 800)
             CommandManager.execute(this, text)
         }
 

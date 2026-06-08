@@ -10,5 +10,5 @@ object LlmConfig {
     var apiKey: String = BuildConfig.OPENROUTER_API_KEY
     var geminiSecret: String = ""
     var useGeminiFallback: Boolean = true
-    var geminiTimeout: Int = 8000
+    var geminiTimeout: Int = 6000
 }
