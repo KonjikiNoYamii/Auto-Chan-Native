@@ -201,6 +201,26 @@ class OverlayService : Service() {
         VoiceManager.init(this)
         WaifuNotifier.init(this)
 
+        // Instant check for Game Mode on start
+        activityScope.launch {
+            delay(1000) // Give accessibility service a moment to connect
+            val acc = OverlayEventBus.accessibilityService
+            val pkg = acc?.rootInActiveWindow?.packageName?.toString()
+            if (pkg != null) {
+                android.util.Log.d("GameModeDebug", "Initial check: $pkg")
+                if (GameModeManager.isGame(this@OverlayService, pkg)) {
+                    val den = if (waifuWidth > 0) waifuWidth / 120f else 2f
+                    GameModeManager.enterGameMode(this@OverlayService, params.x, params.y, displayWidth, displayHeight, den, auto = true)
+                    handler.post {
+                        params.gravity = Gravity.TOP or Gravity.START
+                        params.x = displayWidth / 2 - (60 * den).toInt()
+                        params.y = 0
+                        windowManager.updateViewLayout(overlayView, params)
+                    }
+                }
+            }
+        }
+
         VoiceManager.onResult = { text ->
             VoiceManager.stop()
             showBubble("🎤 $text")
@@ -451,75 +471,70 @@ class OverlayService : Service() {
     // =========================
     private suspend fun detectActivityLoop() {
         while (true) {
-            val granted = activityDetector.isUsageStatsGranted()
-            if (granted && !detecting) {
-                detecting = true
-                handler.post {
-                    showBubble("✅ Akses penggunaan aplikasi diberikan — mode game siap")
+            try {
+                val granted = activityDetector.isUsageStatsGranted()
+                if (granted && !detecting) {
+                    detecting = true
+                    handler.post { showBubble("✅ Mode game siap") }
+                } else if (!granted && detecting) {
+                    detecting = false
+                    handler.post { showBubble("🔒 Akses penggunaan aplikasi belum diizinkan") }
                 }
-            } else if (!granted && detecting) {
-                detecting = false
-                handler.post {
-                    showBubble("🔒 Akses penggunaan aplikasi belum diizinkan — mode game tidak aktif")
+
+                if (!detecting) {
+                    delay(3000)
+                    continue
                 }
-            }
 
-            if (!detecting) {
-                delay(3000)
-                continue
-            }
+                // Use Accessibility Service for more reliable foreground detection
+                val acc = OverlayEventBus.accessibilityService
+                val pkg = acc?.rootInActiveWindow?.packageName?.toString()
+                android.util.Log.d("GameModeDebug", "Foreground app (via Acc): $pkg")
+                
+                if (pkg != null && pkg != packageName) {
+                    val appName = GameModeManager.getAppName(this, pkg)
+                    val isGame = GameModeManager.isGame(this, pkg)
+                    
+                    android.util.Log.d("GameModeDebug", "Processing $pkg, isGame=$isGame, isGameMode=${GameModeManager.isGameMode}")
+                    
+                    GameModeManager.currentAppPackage = pkg
+                    GameModeManager.currentAppName = appName
 
-            val pkg = activityDetector.getForegroundApp()
-            if (pkg != null && pkg != lastDetectedApp && pkg != packageName) {
-                lastDetectedApp = pkg
-                val appName = GameModeManager.getAppName(this, pkg)
-                val isGame = GameModeManager.isGame(this, pkg)
-                GameModeManager.currentAppPackage = pkg
-                GameModeManager.currentAppName = appName
+                    if (!GameModeManager.manualMode) {
+                        val isGameModeApp = pkg == GameModeManager.gameModeAppPackage
+                        // Relax condition: trigger if it's a game AND not already in game mode
+                        if ((isGameModeApp || isGame) && !GameModeManager.isGameMode) {
+                            android.util.Log.d("GameModeDebug", "Entering Game Mode for $pkg")
+                            val den = if (waifuWidth > 0) waifuWidth / 120f else 2f
+                            GameModeManager.enterGameMode(this, params.x, params.y, displayWidth, displayHeight, den, auto = true)
+                            generateContextComment(appName, true)
+                            handler.post {
+                                params.gravity = Gravity.TOP or Gravity.START
+                                params.x = displayWidth / 2 - (60 * den).toInt()
+                                params.y = 0
+                                windowManager.updateViewLayout(overlayView, params)
+                            }
+                        } else if (!isGameModeApp && !isGame && GameModeManager.autoGameMode && GameModeManager.isGameMode) {
+                            android.util.Log.d("GameModeDebug", "Exiting Game Mode")
+                            GameModeManager.exitGameMode()
+                            handler.post { showBubble("Mode game dinonaktifkan") }
+                        }
+                    }
+                    lastDetectedApp = pkg
+                }
 
-                if (GameModeManager.manualMode) {
-                    // skip auto mode when manual override is active
-                } else {
-                    val isGameModeApp = pkg == GameModeManager.gameModeAppPackage
-                    if ((isGameModeApp || isGame) && !GameModeManager.isGameMode) {
-                        val den = if (waifuWidth > 0) waifuWidth / 120f else 2f
-                        GameModeManager.enterGameMode(this, params.x, params.y, displayWidth, displayHeight, den, auto = true)
+                // Periodic comment logic (only if screen on and in game mode)
+                if (screenOn && GameModeManager.isGameMode) {
+                    val elapsed = System.currentTimeMillis() - lastCommentTime
+                    if (elapsed > nextCommentDelay) {
                         lastCommentTime = System.currentTimeMillis()
-                        nextCommentDelay = Random.nextLong(30_000, 90_000)
-                        generateContextComment(appName, true)
-                        handler.post {
-                            params.gravity = Gravity.TOP or Gravity.START
-                            val half = (60 * den).toInt()
-                            params.x = displayWidth / 2 - half
-                            params.y = 0
-                            windowManager.updateViewLayout(overlayView, params)
-                            randomQuoteHandler.removeCallbacksAndMessages(null)
-                            isQuoteScheduled = false
-                        }
-                    } else if (!isGameModeApp && !isGame && GameModeManager.autoGameMode) {
-                        GameModeManager.exitGameMode()
-                        handler.post {
-                            showBubble("Mode game dinonaktifkan")
-                        }
-                    } else if (!isGame && !isGameModeApp) {
-                        handler.post { generateAutoScreenComment() }
+                        nextCommentDelay = Random.nextLong(20_000, 90_000)
+                        generateContextComment(GameModeManager.currentAppName ?: "Game", true)
                     }
                 }
-
+            } catch (e: Exception) {
+                android.util.Log.e("GameModeDebug", "Error in loop: ${e.message}")
             }
-
-            if (screenOn && GameModeManager.isGameMode) {
-                val elapsed = System.currentTimeMillis() - lastCommentTime
-                if (elapsed > nextCommentDelay) {
-                    lastCommentTime = System.currentTimeMillis()
-                    nextCommentDelay = Random.nextLong(20_000, 90_000)
-                    val appName = GameModeManager.currentAppName ?: lastDetectedApp
-                    if (appName != null) {
-                        generateContextComment(appName, true)
-                    }
-                }
-            }
-
             delay(3000)
         }
     }
@@ -558,6 +573,12 @@ class OverlayService : Service() {
     }
 
     private fun handleScreenInfo() {
+        // Prevent screen capture during Game Mode to save resources and avoid interference
+        if (GameModeManager.isGameMode) {
+            android.util.Log.d("OverlayService", "Screen info skipped: Game Mode active")
+            return
+        }
+
         activityScope.launch {
             val acc = OverlayEventBus.accessibilityService
             val uiText = withContext(Dispatchers.Main) {
