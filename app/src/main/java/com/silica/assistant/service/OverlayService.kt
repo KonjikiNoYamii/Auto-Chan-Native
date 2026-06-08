@@ -526,9 +526,17 @@ class OverlayService : Service() {
                 // Periodic comment logic (only if screen on and in game mode)
                 if (screenOn && GameModeManager.isGameMode) {
                     val elapsed = System.currentTimeMillis() - lastCommentTime
-                    if (elapsed > nextCommentDelay) {
+                    
+                    // Event-based reaction: check screen text for triggers
+                    val screenText = acc?.getScreenText()?.lowercase() ?: ""
+                    val isEventTrigger = screenText.contains("victory") || screenText.contains("defeat") || screenText.contains("loading")
+                    
+                    if (isEventTrigger || elapsed > nextCommentDelay) {
                         lastCommentTime = System.currentTimeMillis()
-                        nextCommentDelay = Random.nextLong(20_000, 90_000)
+                        // Interval set to 3-5 minutes for token optimization
+                        nextCommentDelay = Random.nextLong(180_000, 300_000)
+                        val triggerType = if (isEventTrigger) "event" else "periodic"
+                        android.util.Log.d("GameModeDebug", "Triggering comment: $triggerType")
                         generateContextComment(GameModeManager.currentAppName ?: "Game", true)
                     }
                 }

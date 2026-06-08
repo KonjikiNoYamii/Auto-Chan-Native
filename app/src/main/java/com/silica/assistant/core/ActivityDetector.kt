@@ -25,29 +25,33 @@ class ActivityDetector(private val context: Context) {
         val manager = usageStatsManager ?: return lastKnownApp
 
         return try {
-            // Method 1: queryEvents — catat perpindahan foreground
-            var currentApp: String? = null
             val endTime = System.currentTimeMillis()
-            val events = manager.queryEvents(endTime - 30_000, endTime)
+            
+            // Debug: check queryEvents range
+            val events = manager.queryEvents(endTime - 60_000, endTime)
+            var currentApp: String? = null
+            var count = 0
             while (events.hasNextEvent()) {
                 val event = UsageEvents.Event()
                 events.getNextEvent(event)
+                count++
                 if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND ||
                     event.eventType == UsageEvents.Event.ACTIVITY_RESUMED
                 ) {
                     currentApp = event.packageName
                 }
             }
+            Log.d(TAG, "queryEvents processed $count events. Found: $currentApp")
+            
             if (currentApp != null) {
                 lastKnownApp = currentApp
-                Log.d(TAG, "queryEvents -> $currentApp")
                 return currentApp
             }
 
             // Method 2: queryUsageStats — cari app yg paling terakhir dipakai
             val stats = manager.queryUsageStats(
                 UsageStatsManager.INTERVAL_DAILY,
-                endTime - 300_000,
+                endTime - 600_000,
                 endTime
             )
             var recentApp: String? = null
@@ -58,12 +62,14 @@ class ActivityDetector(private val context: Context) {
                     recentApp = usage.packageName
                 }
             }
+            Log.d(TAG, "queryUsageStats checked ${stats.size} apps. Most recent: $recentApp at $recentTime")
+            
             if (recentApp != null) {
                 lastKnownApp = recentApp
-                Log.d(TAG, "queryUsageStats -> $recentApp")
                 return recentApp
             }
 
+            Log.d(TAG, "getForegroundApp returned null. lastKnownApp=$lastKnownApp")
             lastKnownApp
         } catch (e: SecurityException) {
             Log.e(TAG, "SecurityException", e)
