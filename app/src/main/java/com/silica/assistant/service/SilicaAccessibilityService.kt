@@ -1,7 +1,10 @@
 package com.silica.assistant.service
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
+import android.graphics.Path
 import android.os.Build
+import android.util.DisplayMetrics
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.silica.assistant.core.overlay.OverlayEventBus
@@ -126,39 +129,35 @@ class SilicaAccessibilityService : AccessibilityService() {
     }
 
     fun performScrollDown(): Boolean {
-        var node = rootInActiveWindow
-        if (node == null) node = rootNode
-        val scrollable = if (node != null) findScrollableNode(node) else null
-        return if (scrollable != null) {
-            val result = scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
-            scrollable.recycle()
-            result
-        } else false
+        return swipe(0.5f, 0.7f, 0.5f, 0.3f)
     }
 
     fun performScrollUp(): Boolean {
-        var node = rootInActiveWindow
-        if (node == null) node = rootNode
-        val scrollable = if (node != null) findScrollableNode(node) else null
-        return if (scrollable != null) {
-            val result = scrollable.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
-            scrollable.recycle()
-            result
-        } else false
+        return swipe(0.5f, 0.3f, 0.5f, 0.7f)
     }
 
-    private fun findScrollableNode(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        if (node.isScrollable) return node
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            val result = findScrollableNode(child)
-            if (result != null) {
-                child.recycle()
-                return result
-            }
-            child.recycle()
+    private fun swipe(fromX: Float, fromY: Float, toX: Float, toY: Float): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+        
+        val metrics = resources.displayMetrics
+        val width = metrics.widthPixels
+        val height = metrics.heightPixels
+        
+        val startX = fromX * width
+        val startY = fromY * height
+        val endX = toX * width
+        val endY = toY * height
+        
+        val path = Path().apply {
+            moveTo(startX, startY)
+            lineTo(endX, endY)
         }
-        return null
+        
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0, 400))
+            .build()
+            
+        return dispatchGesture(gesture, null, null)
     }
 
     fun performHome(): Boolean {
