@@ -205,6 +205,44 @@ object CommandAliases {
             "hapus game mode",
             "reset game mode",
             "clear game mode"
+        ),
+
+        "screen_info" to listOf(
+            "ini apa",
+            "apa ini",
+            "deskripsi layar",
+            "deskripsikan layar",
+            "layar",
+            "screen info",
+            "lihat layar",
+            "lagi ngapain"
+        ),
+
+        "click_element" to listOf(
+            "klik",
+            "tekan",
+            "tap"
+        ),
+
+        "scroll_down" to listOf(
+            "scroll ke bawah",
+            "scroll down",
+            "gulir ke bawah",
+            "geser ke bawah"
+        ),
+
+        "scroll_up" to listOf(
+            "scroll ke atas",
+            "scroll up",
+            "gulir ke atas",
+            "geser ke atas"
+        ),
+
+        "go_back" to listOf(
+            "kembali",
+            "back",
+            "mundur",
+            "keluar"
         )
     )
 }

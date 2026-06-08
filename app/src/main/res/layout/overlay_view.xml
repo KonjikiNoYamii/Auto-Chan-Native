@@ -27,6 +27,7 @@
         android:background="#AA000000"
         android:visibility="gone"
         android:text="..."
-        android:textSize="14sp" />
+        android:textSize="14sp"
+        android:maxWidth="240dp" />
 
 </LinearLayout>

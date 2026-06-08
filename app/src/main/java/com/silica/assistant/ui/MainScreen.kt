@@ -1,6 +1,7 @@
 package com.silica.assistant.ui
 
 import android.Manifest
+import android.net.Uri
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ApplicationInfo
@@ -40,6 +41,7 @@ import com.silica.assistant.core.CustomAssetManager
 import com.silica.assistant.core.config.TutorialManager
 
 import com.silica.assistant.core.overlay.OverlayEventBus
+import com.silica.assistant.core.screen.ScreenCaptureManager
 import com.silica.assistant.core.voice.VoiceManager
 import com.silica.assistant.core.ssh.SshManager
 import com.silica.assistant.overlay.WaifuState
@@ -83,6 +85,71 @@ fun MainScreen() {
     var isDownloading by remember { mutableStateOf(false) }
     var downloadProgress by remember { mutableFloatStateOf(0f) }
     var pendingAudioPermission by remember { mutableStateOf(false) }
+    var pendingScreenCapture by remember { mutableStateOf(false) }
+    var showOverlayPermissionDialog by remember { mutableStateOf(false) }
+    var showUsagePermissionDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        // 1. Check Audio
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            pendingAudioPermission = true
+        }
+        
+        // 2. Check Overlay
+        if (!android.provider.Settings.canDrawOverlays(context)) {
+            showOverlayPermissionDialog = true
+        }
+
+        // 3. Check Usage Stats
+        val activityDetector = com.silica.assistant.core.ActivityDetector(context)
+        if (!activityDetector.isUsageStatsGranted()) {
+            showUsagePermissionDialog = true
+        }
+
+        // 4. Check Screen Capture
+        if (!ScreenCaptureManager.isReady()) {
+            pendingScreenCapture = true
+        }
+    }
+
+    if (showOverlayPermissionDialog) {
+        AlertDialog(
+            onDismissRequest = { showOverlayPermissionDialog = false },
+            title = { Text("Izin Overlay") },
+            text = { Text("Silica butuh izin untuk tampil di atas aplikasi lain agar waifu kamu bisa nemenin terus~") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showOverlayPermissionDialog = false
+                    val intent = Intent(
+                        android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:${context.packageName}")
+                    )
+                    context.startActivity(intent)
+                }) { Text("Buka Settings") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showOverlayPermissionDialog = false }) { Text("Nanti") }
+            }
+        )
+    }
+
+    if (showUsagePermissionDialog) {
+        AlertDialog(
+            onDismissRequest = { showUsagePermissionDialog = false },
+            title = { Text("Akses Penggunaan") },
+            text = { Text("Biar Silica tahu kamu lagi main game apa dan bisa kasih semangat, izinkan akses penggunaan aplikasi ya~") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showUsagePermissionDialog = false
+                    val intent = Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                    context.startActivity(intent)
+                }) { Text("Buka Settings") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUsagePermissionDialog = false }) { Text("Nanti") }
+            }
+        )
+    }
 
     BackHandler(enabled = currentScreen !is Screen.Main) { currentScreen = Screen.Main }
 
@@ -99,6 +166,10 @@ fun MainScreen() {
                     ) {
                         pendingAudioPermission = true
                     }
+                } else if (dest == "request_screen_capture") {
+                    currentScreen = Screen.Main
+                    OverlayEventBus.navigateScreen.value = null
+                    pendingScreenCapture = true
                 } else {
                     currentScreen =
                             when (dest) {
@@ -174,6 +245,31 @@ fun MainScreen() {
         if (pendingAudioPermission) {
             pendingAudioPermission = false
             recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    val screenCaptureLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        try {
+            ScreenCaptureManager.resultCode = result.resultCode
+            ScreenCaptureManager.resultData = result.data
+            ScreenCaptureManager.setupProjection(context)
+            if (ScreenCaptureManager.isReady()) {
+                Toast.makeText(context, "Screen capture siap", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MainScreen", "screen capture callback error", e)
+            Toast.makeText(context, "Gagal: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    LaunchedEffect(pendingScreenCapture) {
+        if (pendingScreenCapture) {
+            pendingScreenCapture = false
+            val mgr = context.getSystemService(android.content.Context.MEDIA_PROJECTION_SERVICE)
+                as android.media.projection.MediaProjectionManager
+            screenCaptureLauncher.launch(mgr.createScreenCaptureIntent())
         }
     }
 

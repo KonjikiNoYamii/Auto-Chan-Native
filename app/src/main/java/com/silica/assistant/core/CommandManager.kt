@@ -19,6 +19,21 @@ import com.silica.assistant.service.OverlayService
 
 object CommandManager {
 
+    private fun keywordVariants(keyword: String): List<String> {
+        val base = keyword.lowercase().trim()
+        val variants = mutableListOf<String>()
+        variants.add(base)
+        val withCK = base.replace('c', 'k')
+        if (withCK != base) variants.add(withCK)
+        val withC = base.replace('k', 'c')
+        if (withC != base && withC !in variants) variants.add(withC)
+        val withIE = base.replace("ie", "i")
+        if (withIE != base && withIE !in variants) variants.add(withIE)
+        val withIe = base.replace("i", "ie")
+        if (withIe != base && withIe !in variants) variants.add(withIe)
+        return variants
+    }
+
     fun execute(context: Context, rawInput: String) {
         // direct command keys (from button clicks) bypass wake word filter
         val commandKeys = CommandAliases.aliases.keys
@@ -238,6 +253,63 @@ object CommandManager {
             "clear_game_mode_app" -> {
                 GameModeManager.gameModeAppPackage = null
                 OverlayEventBus.onBubble?.invoke("✅ Game mode app direset")
+            }
+            "screen_info" -> {
+                OverlayEventBus.onBubble?.invoke("🔍...")
+                OverlayEventBus.screenCaptureCallback?.invoke()
+            }
+            "click_element" -> {
+                val keyword = effectiveInput
+                    .removePrefix("klik ").removePrefix("tekan ").removePrefix("tap ")
+                    .trim()
+                if (keyword.isNotBlank()) {
+                    val tried = mutableSetOf<String>()
+                    val variants = keywordVariants(keyword)
+                    var clicked = false
+                    for (v in variants) {
+                        if (!tried.add(v)) continue
+                        if (OverlayEventBus.accessibilityService?.findAndClick(v) == true) {
+                            clicked = true
+                            break
+                        }
+                    }
+                    if (clicked) {
+                        OverlayEventBus.onBubble?.invoke("✅ Udah diklik~")
+                    } else {
+                        var launched = false
+                        for (v in variants) {
+                            if (AppLauncher.open(context, v)) {
+                                OverlayEventBus.onBubble?.invoke("📱 Membuka $v")
+                                launched = true
+                                break
+                            }
+                        }
+                        if (!launched) {
+                            OverlayEventBus.onBubble?.invoke("❌ Nggak nemu \"$keyword\"")
+                        }
+                    }
+                }
+            }
+            "scroll_down" -> {
+                if (OverlayEventBus.accessibilityService?.performScrollDown() == true) {
+                    OverlayEventBus.onBubble?.invoke("📜 Scroll ke bawah")
+                } else {
+                    OverlayEventBus.onBubble?.invoke("❌ Gagal scroll")
+                }
+            }
+            "scroll_up" -> {
+                if (OverlayEventBus.accessibilityService?.performScrollUp() == true) {
+                    OverlayEventBus.onBubble?.invoke("📜 Scroll ke atas")
+                } else {
+                    OverlayEventBus.onBubble?.invoke("❌ Gagal scroll")
+                }
+            }
+            "go_back" -> {
+                if (OverlayEventBus.accessibilityService?.performGlobalBack() == true) {
+                    OverlayEventBus.onBubble?.invoke("⬅ Kembali")
+                } else {
+                    OverlayEventBus.onBubble?.invoke("❌ Gagal kembali")
+                }
             }
             else -> {
                 OverlayEventBus.onBubble?.invoke("😕 Maaf, saya tidak mengerti command \"${result.command}\"")

@@ -14,10 +14,10 @@ import android.util.DisplayMetrics
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
-import android.view.Gravity
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.TextView
@@ -30,6 +30,7 @@ import com.silica.assistant.core.llm.LlmClient
 import com.silica.assistant.core.llm.WaifuNotifier
 import com.silica.assistant.core.llm.YamiQuotes
 import com.silica.assistant.core.overlay.OverlayEventBus
+import com.silica.assistant.core.screen.ScreenCaptureManager
 import com.silica.assistant.core.voice.VoiceManager
 import com.silica.assistant.overlay.GameModeManager
 import com.silica.assistant.overlay.WaifuExpressionController
@@ -41,6 +42,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
 class OverlayService : Service() {
@@ -86,6 +88,8 @@ class OverlayService : Service() {
     private var lastDetectedApp: String? = null
     private var lastCommentTime = 0L
     private var nextCommentDelay = Random.nextLong(20_000, 60_000)
+    private var lastAutoScreenCommentTime = 0L
+    private val autoScreenCommentInterval = 120_000L
     private var lastGameTouchTime = 0L
     private var detecting = false
 
@@ -209,6 +213,17 @@ class OverlayService : Service() {
             }
         }
 
+        VoiceManager.onErrorCallback = { error ->
+            val msg = when (error) {
+                7 -> "Hmph, aku nggak denger apa-apa..." // NO_MATCH
+                6 -> "Kok diem aja? Capek ya?" // SPEECH_TIMEOUT
+                5 -> "Duh, sistem suaranya lagi sibuk, coba bentar lagi ya~" // CLIENT
+                1, 2 -> "Aduh, koneksinya lagi ampas nih..." // NETWORK
+                else -> "Ada error dikit ($error), coba lagi nanti ya~"
+            }
+            showBubble(msg)
+        }
+
         WaifuStateManager.currentState = WaifuState.RELAX
 
         val overlayType =
@@ -245,6 +260,13 @@ class OverlayService : Service() {
         detecting = activityDetector.isUsageStatsGranted()
         activityScope.launch { detectActivityLoop() }
 
+        ScreenCaptureManager.init(this)
+        ScreenCaptureManager.tryRestore(this)
+
+        OverlayEventBus.screenCaptureCallback = {
+            handleScreenInfo()
+        }
+
         // Auto-redirect ke Settings kalau izin belum dikasih
         if (!detecting) {
             handler.postDelayed({
@@ -259,6 +281,12 @@ class OverlayService : Service() {
                     )
                 } catch (_: Exception) {}
             }, 2000)
+        }
+
+        if (OverlayEventBus.accessibilityService == null) {
+            handler.postDelayed({
+                showBubble("Aktifkan aksesibilitas Silica di Settings > Aksesibilitas")
+            }, 8000)
         }
     }
 
@@ -467,6 +495,8 @@ class OverlayService : Service() {
                         handler.post {
                             showBubble("Mode game dinonaktifkan")
                         }
+                    } else if (!isGame && !isGameModeApp) {
+                        handler.post { generateAutoScreenComment() }
                     }
                 }
 
@@ -521,6 +551,65 @@ class OverlayService : Service() {
         }
     }
 
+    private fun handleScreenInfo() {
+        activityScope.launch {
+            val acc = OverlayEventBus.accessibilityService
+            val uiText = withContext(Dispatchers.Main) {
+                acc?.getScreenText() ?: ""
+            }
+            val appName = lastDetectedApp ?: "unknown"
+            
+            // Re-check readiness inside the launch scope
+            val ready = ScreenCaptureManager.isReady()
+            
+            if (acc == null) {
+                showBubble("Aktifkan aksesibilitas Silica dulu di Settings > Aksesibilitas ya~")
+                return@launch
+            }
+            
+            if (!ready) {
+                showBubble("Aku butuh izin buat liat layar kamu bentar. Klik 'Start Now' di popup nanti ya~")
+                withContext(Dispatchers.Main) {
+                    handler.postDelayed({
+                        OverlayEventBus.navigateScreen.value = "request_screen_capture"
+                    }, 1500)
+                }
+                return@launch
+            }
+            
+            val screenshotJpeg = ScreenCaptureManager.captureScaledJpeg(800)
+
+            val comment = LlmClient.describeScreen(appName, uiText, screenshotJpeg)
+            if (comment != null) {
+                showBubble(comment)
+            } else {
+                showBubble("Hmm, lagi nggak ada yang menarik sih.")
+            }
+        }
+    }
+
+    private fun generateAutoScreenComment() {
+        if (!screenOn) return
+        val now = System.currentTimeMillis()
+        if (now - lastAutoScreenCommentTime < autoScreenCommentInterval) return
+        lastAutoScreenCommentTime = now
+
+        activityScope.launch {
+            val appName = lastDetectedApp?.let {
+                GameModeManager.getAppName(this@OverlayService, it)
+            } ?: return@launch
+
+            val uiText = withContext(Dispatchers.Main) {
+                OverlayEventBus.accessibilityService?.getScreenText() ?: ""
+            }
+
+            val comment = LlmClient.generateScreenComment(appName, uiText)
+            if (comment != null) {
+                showBubble(comment)
+            }
+        }
+    }
+
     // =========================
     // BUBBLE UI
     // =========================
@@ -546,27 +635,66 @@ class OverlayService : Service() {
         }
     }
 
+    private var bubbleTypingRunnable: Runnable? = null
+
     fun showBubble(text: String) {
 
         handler.post {
 
             if (!::bubbleText.isInitialized) return@post
 
-            bubbleText.text = text
+            bubbleTypingRunnable?.let { handler.removeCallbacks(it) }
+            bubbleHideRunnable?.let { handler.removeCallbacks(it) }
+
+            bubbleText.text = ""
             bubbleText.visibility = View.VISIBLE
+            bubbleText.alpha = 0f
+            bubbleText.scaleX = 0.8f
+            bubbleText.scaleY = 0.8f
+            
+            bubbleText.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(200)
+                .start()
+
             lastGameTouchTime = System.currentTimeMillis()
+
+            val density = resources.displayMetrics.density
+            val onRightSide = params.x > displayWidth / 2
+            val availableRight = (displayWidth - params.x - (8 * density).toInt()).coerceAtLeast((120 * density).toInt())
+            val maxW = availableRight.coerceAtMost((240 * density).toInt())
+            bubbleText.maxWidth = maxW
+            bubbleText.gravity = if (onRightSide) Gravity.END else Gravity.START
 
             playPopSound()
 
-            val duration = (2000L + text.length * 50L).coerceAtMost(8000L)
-
-            bubbleHideRunnable?.let { handler.removeCallbacks(it) }
-
-            bubbleHideRunnable = Runnable {
-                bubbleText.visibility = View.GONE
+            // Typing effect
+            var charIndex = 0
+            bubbleTypingRunnable = object : Runnable {
+                override fun run() {
+                    if (charIndex <= text.length) {
+                        bubbleText.text = text.substring(0, charIndex)
+                        charIndex++
+                        val delay = if (charIndex < text.length && text[charIndex-1] in listOf('.', '!', '?', ',')) 200L else 30L
+                        handler.postDelayed(this, delay)
+                    } else {
+                        val duration = (2000L + text.length * 30L).coerceAtMost(8000L)
+                        bubbleHideRunnable = Runnable {
+                            bubbleText.animate()
+                                .alpha(0f)
+                                .scaleX(0.8f)
+                                .scaleY(0.8f)
+                                .setDuration(200)
+                                .withEndAction { bubbleText.visibility = View.GONE }
+                                .start()
+                        }
+                        handler.postDelayed(bubbleHideRunnable!!, duration)
+                    }
+                }
             }
-
-            handler.postDelayed(bubbleHideRunnable!!, duration)
+            handler.post(bubbleTypingRunnable!!)
         }
     }
 
@@ -587,6 +715,8 @@ class OverlayService : Service() {
         try { unregisterReceiver(screenReceiver) } catch (_: Exception) {}
 
         VoiceManager.destroy()
+
+        OverlayEventBus.screenCaptureCallback = null
 
         activityScope.cancel()
 

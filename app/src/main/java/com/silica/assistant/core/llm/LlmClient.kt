@@ -146,6 +146,119 @@ object LlmClient {
         }
     }
 
+    suspend fun generateScreenComment(appName: String, uiText: String): String? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val prompt = "User sedang membuka $appName. Konten layar: $uiText. Beri komentar pendek 1 kalimat tentang apa yang user lihat. Khas Yami: tsundere, cool, santai. Langsung komentar saja tanpa perkenalan."
+                val msg = listOf(ChatMessage("user", prompt))
+                val payload = buildPayload(msg, "")
+                if (activeProvider == "Gemini") {
+                    try {
+                        val raw = httpPost(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout)
+                        val r = parseResponse(raw).getOrNull()?.content?.let { it.take(200) }
+                        if (r != null) return@withContext r
+                    } catch (_: Exception) {}
+                }
+                val raw = httpPost(LlmConfig.endpoint, payload)
+                parseResponse(raw).getOrNull()?.content?.take(200)
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    suspend fun describeScreen(appName: String, uiText: String, screenshotJpeg: ByteArray?): String? {
+        return withContext(Dispatchers.IO) {
+            try {
+                quickHealthCheck()
+                val textHint = if (uiText.isBlank()) "(tidak ada teks)" else uiText.take(200)
+                val prompt = "Aplikasi: $appName. Teks: $textHint. Dari screenshot, deskripsikan singkat apa yang user lihat — 1 kalimat max 100 karakter. Khas Yami: tsundere, cool, santai."
+
+                // 1) Try Gemini vision (with screenshot)
+                if (activeProvider == "Gemini" && screenshotJpeg != null) {
+                    try {
+                        val base64 = android.util.Base64.encodeToString(screenshotJpeg, android.util.Base64.NO_WRAP)
+                        val payload = buildVisionPayload(listOf(ChatMessage("user", prompt)), listOf(base64))
+                        val raw = httpPostJson(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout + 20000)
+                        val r = parseResponse(raw).getOrNull()?.content
+                        if (r != null) return@withContext codepointAwareTake(r, 150)
+                    } catch (_: Exception) {}
+                }
+
+                // 2) Vision failed + no screen text → can't describe
+                if (uiText.isBlank()) {
+                    return@withContext "Hmm, gelap. Nggak kelihatan apa-apa."
+                }
+
+                // 3) Try Gemini text-only (has text hint but no screenshot)
+                if (activeProvider == "Gemini") {
+                    try {
+                        val msg = listOf(ChatMessage("user", prompt))
+                        val payload = buildPayload(msg, "")
+                        val raw = httpPost(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout)
+                        val r = parseResponse(raw).getOrNull()?.content
+                        if (r != null) return@withContext codepointAwareTake(r, 150)
+                    } catch (_: Exception) {}
+                }
+
+                return@withContext "Hmm, nggak bisa lihat layar sekarang."
+            } catch (_: Exception) { null }
+        }
+    }
+
+    private fun codepointAwareTake(text: String, max: Int): String {
+        if (text.length <= max) return text
+        val truncated = text.take(max)
+        return if (truncated.isNotEmpty() && truncated.last().isHighSurrogate()) {
+            text.take(max + 1)
+        } else truncated
+    }
+
+    private fun buildVisionPayload(messages: List<ChatMessage>, base64Images: List<String>): String {
+        val arr = JSONArray()
+        arr.put(JSONObject().apply {
+            put("role", "system")
+            put("content", "Kamu adalah Konjiki no Yami, assassin dari planet asing dalam anime To Love-Ru. Kepribadian: cool, kalem, formal, blak-blakan, jujur. Tsundere — mudah malu saat dipuji tapi tidak akan mengaku. Gunakan Bahasa Indonesia.")
+        })
+        for (msg in messages) {
+            arr.put(JSONObject().apply {
+                put("role", msg.role)
+                put("content", msg.content)
+            })
+        }
+        return JSONObject().apply {
+            put("model", LlmConfig.model)
+            put("messages", arr)
+            put("images", JSONArray(base64Images))
+            put("stream", false)
+        }.toString()
+    }
+
+    private fun httpPostJson(urlString: String, jsonPayload: String, useAuth: Boolean = true, timeout: Int = 30000): String {
+        val url = URL(urlString)
+        val conn = url.openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.setRequestProperty("Content-Type", "application/json")
+        if (useAuth) {
+            conn.setRequestProperty("Authorization", "Bearer ${LlmConfig.apiKey}")
+        } else if (LlmConfig.geminiSecret.isNotBlank()) {
+            conn.setRequestProperty("Authorization", "Bearer ${LlmConfig.geminiSecret}")
+        }
+        conn.doOutput = true
+        conn.connectTimeout = timeout
+        conn.readTimeout = timeout
+        OutputStreamWriter(conn.outputStream).use { it.write(jsonPayload) }
+        val code = conn.responseCode
+        val body = if (code in 200..299) {
+            conn.inputStream.bufferedReader().use { it.readText() }
+        } else {
+            val err = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+            throw Exception("HTTP $code: ${err.take(200)}")
+        }
+        conn.disconnect()
+        return body
+    }
+
     private fun limitSentence(text: String): String {
         if (text.length <= 160) return text.trim()
         val cut = text.take(160)

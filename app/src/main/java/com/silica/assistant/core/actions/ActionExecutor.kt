@@ -40,6 +40,11 @@ object ActionExecutor {
                 val intent = Intent(context, OverlayService::class.java)
                 context.startService(intent)
             }
+            is Action.ScreenInfo -> {}
+            is Action.ClickElement -> {}
+            is Action.ScrollDown -> {}
+            is Action.ScrollUp -> {}
+            is Action.GoBack -> {}
             is Action.Unknown -> {
                 Toast.makeText(context, "Unknown action: ${action.raw}", Toast.LENGTH_SHORT).show()
             }

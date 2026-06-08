@@ -92,6 +92,9 @@ fun GuideScreen(onBack: () -> Unit) {
     }
 }
 
+// ==============================
+// TAB 1: PERINTAH SUARA
+// ==============================
 @Composable
 private fun CommandsTab() {
     Column(
@@ -114,25 +117,79 @@ private fun CommandsTab() {
             ) {
                 TipItem("Typo dikit masih kebaca, misal \"spotifi\" \u2192 spotify")
                 TipItem("Gak perlu hafal semua, tinggal bilang aja apa yang mau dilakukan")
+                TipItem("Wake word \"Silica\" bisa dipakai atau dimatikan di pengaturan")
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-                CommandItem("ssh_status", "Cek status koneksi SSH")
-                CommandItem("ssh_connect", "Connect ke laptop")
-                CommandItem("ssh_disconnect", "Putuskan koneksi SSH")
-                CommandItem("laptop_info", "Tampilkan info laptop (uptime, RAM, disk)")
-                CommandItem("volume [up/down/mute]", "Kontrol volume HP")
-                CommandItem("brightness [up/down]", "Kontrol kecerahan layar")
-                CommandItem("buka [nama app]", "Buka app apapun (WhatsApp, Telegram, game)")
-                CommandItem("cari / google [query]", "Cari sesuatu di Google")
-                CommandItem("play musik / next song", "Kontrol media player")
-                CommandItem("tier list genshin / ml / valorant", "Info tier list game")
-                CommandItem("silica ...", "Wake word (bisa dimatikan di pengaturan)")
+                SectionLabel("Aplikasi")
+                CommandItem("buka spotify / spotify / play lagu", "Buka Spotify")
+                CommandItem("buka youtube / youtube / video", "Buka YouTube")
+                CommandItem("buka browser / chrome / internet", "Buka browser")
+                CommandItem("buka pengaturan / settings", "Buka Settings HP")
+                CommandItem("buka [nama app]", "Buka app apapun (wa, ig, telegram, game, dll)")
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                SectionLabel("Media & Suara")
+                CommandItem("play musik / pause musik / nyalain musik", "Play/Pause musik")
+                CommandItem("next song / lagu berikutnya / skip", "Lagu berikutnya")
+                CommandItem("previous song / lagu sebelumnya", "Lagu sebelumnya")
+                CommandItem("volume naik / besarkan suara", "Volume naik")
+                CommandItem("volume turun / kecilkan suara", "Volume turun")
+                CommandItem("mute / matikan suara", "Mute volume")
+                CommandItem("volume maksimal / full volume", "Volume maksimal")
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                SectionLabel("Layar")
+                CommandItem("brightness naik / cerahkan layar", "Kecerahan naik")
+                CommandItem("brightness turun / gelapkan layar", "Kecerahan turun")
+                CommandItem("brightness maksimal / layar paling terang", "Kecerahan maksimal")
+                CommandItem("brightness minimum / layar paling redup", "Kecerahan minimum")
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                SectionLabel("Layar (Aksesibilitas)")
+                CommandItem("ini apa / apa ini / deskripsi layar", "AI deskripsikan isi layar (text + screenshot)")
+                CommandItem("klik [teks] / tekan [teks]", "Cari & klik elemen yang berisi teks tertentu")
+                CommandItem("scroll ke bawah / scroll down", "Gulir layar ke bawah")
+                CommandItem("scroll ke atas / scroll up", "Gulir layar ke atas")
+                CommandItem("kembali / back / mundur", "Tombol navigasi kembali")
+                CommandItem("beranda / home", "Kembali ke layar utama")
+                CommandItem("notifikasi / notifications", "Buka panel notifikasi")
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                SectionLabel("Game Mode")
+                CommandItem("mode game / game mode / aktifkan mode game", "Aktifkan mode game (waifu transparan)")
+                CommandItem("stop game mode / matikan mode game", "Nonaktifkan mode game")
+                CommandItem("ini game mode ku / set game mode", "Set app sekarang sbg game mode auto")
+                CommandItem("hapus game mode / reset game mode", "Hapus app game mode")
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                SectionLabel("SSH & Laptop")
+                CommandItem("status ssh / cek ssh / koneksi laptop", "Cek status koneksi SSH")
+                CommandItem("konek ssh / hubungkan laptop", "Buka layar koneksi SSH")
+                CommandItem("putuskan ssh / disconnect ssh", "Putuskan koneksi SSH")
+                CommandItem("info laptop / status laptop", "Tampilkan info laptop (uptime, RAM, disk)")
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                SectionLabel("Chat & Lainnya")
+                CommandItem("chat / chat ai / tanya", "Buka chat AI (ngobrol dengan Yami)")
+                CommandItem("cari [query] / google [query]", "Cari sesuatu di Google")
+                CommandItem("tier list genshin / ml / valorant", "Info tier list karakter game")
+                CommandItem("overlay / waifu / start overlay", "Tampilkan overlay waifu")
+                CommandItem("tutup overlay / stop waifu", "Sembunyikan overlay waifu")
             }
         }
     }
 }
 
+// ==============================
+// TAB 2: OVERLAY
+// ==============================
 @Composable
 private fun OverlayTab() {
     Column(
@@ -156,38 +213,66 @@ private fun OverlayTab() {
                 OverlayStep(
                     icon = Icons.Filled.Visibility,
                     title = "Aktifkan Overlay",
-                    desc = "Tekan tombol Start pada panel Overlay di halaman utama."
+                    desc = "Tekan tombol Start di halaman utama, atau bilang \"overlay\"."
                 )
                 OverlayStep(
                     icon = Icons.Filled.TouchApp,
                     title = "Tap untuk Voice",
-                    desc = "Tap sekali pada karakter waifu untuk memulai voice command."
-                )
-                OverlayStep(
-                    icon = Icons.Filled.OpenWith,
-                    title = "Drag untuk Pindah",
-                    desc = "Geser karakter ke posisi mana pun di layar."
+                    desc = "Tap waifu untuk toggle listening ON/OFF."
                 )
                 OverlayStep(
                     icon = Icons.Filled.Mic,
                     title = "Long Press untuk Voice",
-                    desc = "Tekan dan tahan karakter untuk langsung voice command."
+                    desc = "Tekan & tahan waifu (600ms) untuk langsung voice command."
+                )
+                OverlayStep(
+                    icon = Icons.Filled.OpenWith,
+                    title = "Drag & Snap",
+                    desc = "Geser waifu ke posisi mana pun. Lepas di dekat tepi \u2192 snap otomatis."
                 )
                 OverlayStep(
                     icon = Icons.Filled.Face,
                     title = "Ekspresi Waifu",
-                    desc = "Karakter berubah ekspresi sesuai keadaan: RELAX, TALK, LISTEN."
+                    desc = "Relax (diam), Talk (bicara), Listen (mendengar) — berganti otomatis."
                 )
                 OverlayStep(
                     icon = Icons.Filled.ChatBubble,
                     title = "Bubble Chat",
-                    desc = "Waifu menampilkan gelembung chat sebagai respons atas perintah Anda."
+                    desc = "Gelembung teks sebagai respons. Posisi otomatis menyesuaikan."
+                )
+                OverlayStep(
+                    icon = Icons.Filled.PhotoCamera,
+                    title = "Screen Capture",
+                    desc = "Untuk fitur \"ini apa\" dan auto-comment, butuh izin screen capture."
+                )
+                OverlayStep(
+                    icon = Icons.Filled.Description,
+                    title = "Aksesibilitas",
+                    desc = "Untuk klik, scroll, back, baca teks layar — aktifkan Silica di Settings > Aksesibilitas."
+                )
+                OverlayStep(
+                    icon = Icons.Filled.Gamepad,
+                    title = "Game Mode",
+                    desc = "Otomatis aktif saat buka game. Waifu transparan (0.55) & pindah ke atas."
+                )
+                OverlayStep(
+                    icon = Icons.Filled.AutoAwesome,
+                    title = "Auto Comment",
+                    desc = "Waifu komen otomatis tiap ganti app (via AI). Di game tiap 20-90 detik."
+                )
+                OverlayStep(
+                    icon = Icons.Filled.Star,
+                    title = "Random Quotes",
+                    desc = "Waifu ngomong random quote saat nganggur. Gaya tsundere khas Yami."
                 )
             }
         }
     }
 }
 
+// ==============================
+// TAB 3: LAINNYA
+// ==============================
 @Composable
 private fun OthersTab() {
     Column(
@@ -198,12 +283,19 @@ private fun OthersTab() {
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         FiturUtamaSection()
+        Spacer(Modifier.height(8.dp))
         SshConnectionSection()
+        Spacer(Modifier.height(8.dp))
+        PermissionsSection()
+        Spacer(Modifier.height(8.dp))
         ThemeSection()
         Spacer(Modifier.height(16.dp))
     }
 }
 
+// ==============================
+// REUSABLE COMPONENTS
+// ==============================
 @Composable
 private fun OverlayStep(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -291,13 +383,28 @@ private fun CommandItem(command: String, description: String) {
 }
 
 @Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text = text,
+        fontWeight = FontWeight.Bold,
+        fontSize = 14.sp,
+        color = DeepRose,
+        modifier = Modifier.padding(vertical = 2.dp)
+    )
+}
+
+@Composable
 private fun FiturUtamaSection() {
     val items = listOf(
-        "Voice Command" to "Perintah suara otomatis diproses. Hasil parsing tampil di layar utama.",
-        "SSH Terminal" to "Akses terminal laptop via SSH.",
-        "SSH File Manager" to "Browse, upload, download file laptop via SFTP.",
-        "Laptop Info" to "Monitor uptime, RAM, disk real-time.",
-        "Buka Aplikasi" to "Buka app apa saja yang terinstall di HP. Support label + alias (wa, ig, fb). Bahasa Indonesia & English."
+        "AI Chat (Yami)" to "Ngobrol dengan Konjiki no Yami lewat teks. Dual provider: OpenRouter (utama) + Gemini (cadangan).",
+        "Voice Command" to "Perintah suara otomatis diproses. Support bahasa Indonesia + Inggris + typo tolerance.",
+        "Screen-Aware" to "Waifu bisa baca teks layar (aksesibilitas) + lihat screenshot (media projection). Deskripsi otomatis tiap 2 menit.",
+        "Klik & Scroll" to "Klik elemen berdasarkan teks, scroll, back, home — semua via AccessibilityService.",
+        "SSH Terminal" to "Akses terminal laptop via SSH. Juga ada file manager SFTP + monitor live.",
+        "Game Mode" to "Auto-detect game. Waifu transparan di atas layar, komentar otomatis selama main.",
+        "Knowledge Base" to "Tanya tier list & karakter terbaik Genshin Impact, Mobile Legends, Valorant.",
+        "Buka App Pintar" to "Buka app apa pun dengan nama/shorthand (wa=WhatsApp, ig=Instagram, dll). Fallback Google search.",
+        "Command History" to "Semua perintah tercatat & bisa dilihat di layar utama.",
     )
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -370,12 +477,42 @@ private fun SshConnectionSection() {
                 StepItem(1, "Isi Host, Port (22), Username, Password")
                 StepItem(2, "Tekan Connect")
                 StepItem(3, "Gunakan Terminal untuk eksekusi command")
-                StepItem(4, "Gunakan Files untuk upload/download")
+                StepItem(4, "Gunakan Files untuk upload/download file")
                 StepItem(5, "Tombol LinkOff \u2192 disconnect")
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                 TipItem("Back ke layar utama tetap connect")
                 TipItem("Session auto-terdeteksi jika koneksi putus")
+                TipItem("SSH Key authentication juga didukung (generasi RSA 2048)")
             }
+        }
+    }
+}
+
+@Composable
+private fun PermissionsSection() {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SectionHeader("Izin Dibutuhkan", Icons.Filled.Security, Color(0xFFFF6B6B))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                PermItem("Overlay (SYSTEM_ALERT_WINDOW)", "Menampilkan waifu mengambang")
+                PermItem("Mikrofon (RECORD_AUDIO)", "Voice command")
+                PermItem("Akses Penggunaan (Usage Stats)", "Deteksi game otomatis")
+                PermItem("Screen Capture (MediaProjection)", "Fitur ini apa & deskripsi layar")
+                PermItem("Aksesibilitas (AccessibilityService)", "Baca teks, klik, scroll, back")
+                PermItem("Ubah Setelan (WRITE_SETTINGS)", "Kontrol brightness")
+            }
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            TipItem("Aktifkan Aksesibilitas: Setelan > Aksesibilitas > Silica Assistant")
+            TipItem("Aktifkan Izin Lain: Akan muncul otomatis saat fitur dipakai pertama")
         }
     }
 }
@@ -414,9 +551,35 @@ private fun TipItem(text: String) {
 }
 
 @Composable
+private fun PermItem(label: String, desc: String) {
+    Row(verticalAlignment = Alignment.Top) {
+        Icon(
+            Icons.Filled.CheckCircle,
+            contentDescription = null,
+            tint = Color(0xFF00FF88),
+            modifier = Modifier.size(18.dp).padding(top = 2.dp)
+        )
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(
+                text = label,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Text(
+                text = desc,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
 private fun ThemeSection() {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionHeader("Tema", Icons.Filled.Palette, Color(0xFFE8919A))
+        SectionHeader("Tema & Kustomisasi", Icons.Filled.Palette, Color(0xFFE8919A))
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(14.dp),
@@ -428,9 +591,13 @@ private fun ThemeSection() {
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                ThemeRow("Aksen", "DeepRose (merah) + Espresso (coklat)")
-                ThemeRow("Header", "Gambar anime, sapaan berdasarkan waktu")
-                ThemeRow("Status Bar", "Menampilkan status SSH dan info lainnya")
+                ThemeRow("Warna aksen", "DeepRose (merah) + Espresso (coklat)")
+                ThemeRow("Header", "Gambar anime + sapaan berdasarkan waktu")
+                ThemeRow("Status Bar", "Status SSH, koneksi, dan info lainnya")
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                TipItem("Ganti sprite waifu (idle, happy, listening, game) di halaman Customize")
+                TipItem("Ganti pop sound & header gambar juga bisa")
+                TipItem("Sapaan bisa dikustom per waktu (pagi/siang/sore/malam)")
             }
         }
     }
