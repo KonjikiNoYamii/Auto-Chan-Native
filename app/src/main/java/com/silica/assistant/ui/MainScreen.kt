@@ -107,11 +107,6 @@ fun MainScreen() {
         if (!activityDetector.isUsageStatsGranted()) {
             showUsagePermissionDialog = true
         }
-
-        // 4. Check Screen Capture
-        if (!ScreenCaptureManager.isReady()) {
-            pendingScreenCapture = true
-        }
     }
 
     if (showOverlayPermissionDialog) {
