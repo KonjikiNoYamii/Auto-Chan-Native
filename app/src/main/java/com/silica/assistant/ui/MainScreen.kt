@@ -106,14 +106,16 @@ fun MainScreen() {
     val screenCaptureLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        ScreenCaptureManager.init(context)
-        ScreenCaptureManager.resultCode = result.resultCode
-        ScreenCaptureManager.resultData = result.data
-        // Izin diberikan, coba setup langsung.
-        // Kalau gagal (butuh foreground service di Android 14+), overlay akan init via tryRestore().
-        try { ScreenCaptureManager.setupProjection(context) } catch (_: Exception) { }
-        if (ScreenCaptureManager.isReady()) {
-            Toast.makeText(context, "Screen capture siap", Toast.LENGTH_SHORT).show()
+        try {
+            ScreenCaptureManager.init(context)
+            ScreenCaptureManager.resultCode = result.resultCode
+            ScreenCaptureManager.resultData = result.data
+            ScreenCaptureManager.setupProjection(context)
+            if (ScreenCaptureManager.isReady()) {
+                Toast.makeText(context, "Screen capture siap", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MainScreen", "screen capture callback error", e)
         }
     }
 
@@ -135,6 +137,7 @@ fun MainScreen() {
         }
 
         // 4. Screen Capture
+        try { ScreenCaptureManager.init(context) } catch (_: Exception) { }
         if (!ScreenCaptureManager.isReady()) {
             pendingScreenCapture = true
         }

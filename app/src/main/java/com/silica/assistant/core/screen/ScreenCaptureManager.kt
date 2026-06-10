@@ -40,23 +40,16 @@ object ScreenCaptureManager {
         displayDensity = metrics.densityDpi
     }
 
-    fun setupProjection(context: Context): Boolean {
+    fun setupProjection(context: Context) {
         try {
             val mgr = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            android.util.Log.d("ScreenCapture", "setupProjection: rc=$resultCode rd=$resultData w=${displayWidth}x${displayHeight}")
-            if (resultCode == Activity.RESULT_OK && resultData != null && displayWidth > 0 && displayHeight > 0) {
+            if (resultCode == Activity.RESULT_OK && resultData != null) {
                 mediaProjection = mgr.getMediaProjection(resultCode, resultData!!)
                 startCapture()
-                val ready = isReady()
-                android.util.Log.d("ScreenCapture", "setupProjection done: ready=$ready")
-                return ready
             }
-            android.util.Log.w("ScreenCapture", "setupProjection skipped: rc=$resultCode rd=${resultData != null} w=$displayWidth h=$displayHeight")
-            return false
         } catch (e: Exception) {
             android.util.Log.e("ScreenCapture", "setupProjection failed", e)
             mediaProjection = null
-            return false
         }
     }
 
@@ -77,16 +70,8 @@ object ScreenCaptureManager {
 
     fun isReady(): Boolean = mediaProjection != null && imageReader != null
 
-    private var captureThread: android.os.HandlerThread? = null
-    private var backgroundHandler: Handler? = null
-
     private fun startCapture() {
         try {
-            if (captureThread == null) {
-                captureThread = android.os.HandlerThread("ScreenCapture").apply { start() }
-                backgroundHandler = Handler(captureThread!!.looper)
-            }
-
             imageReader?.close()
             imageReader = ImageReader.newInstance(
                 displayWidth, displayHeight,
@@ -98,7 +83,7 @@ object ScreenCaptureManager {
                 "ScreenCapture",
                 displayWidth, displayHeight, displayDensity,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                imageReader?.surface, null, backgroundHandler
+                imageReader?.surface, null, null
             )
         } catch (e: Exception) {
             android.util.Log.e("ScreenCapture", "startCapture failed", e)
@@ -171,8 +156,5 @@ object ScreenCaptureManager {
         imageReader = null
         mediaProjection?.stop()
         mediaProjection = null
-        captureThread?.quitSafely()
-        captureThread = null
-        backgroundHandler = null
     }
 }

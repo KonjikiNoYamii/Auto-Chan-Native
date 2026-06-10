@@ -871,6 +871,7 @@ class OverlayService : Service() {
     private var bubbleDotsRunnable: Runnable? = null
 
     fun setBubbleText(text: String) {
+        randomQuoteHandler.removeCallbacksAndMessages(null)
         handler.post {
             if (!::bubbleText.isInitialized) return@post
             bubbleText.text = text
@@ -886,6 +887,7 @@ class OverlayService : Service() {
             bubbleTypingRunnable?.let { handler.removeCallbacks(it) }
             bubbleHideRunnable?.let { handler.removeCallbacks(it) }
             bubbleDotsRunnable?.let { handler.removeCallbacks(it) }
+            randomQuoteHandler.removeCallbacksAndMessages(null)
 
             bubbleText.text = ""
             bubbleText.visibility = View.VISIBLE
@@ -947,7 +949,10 @@ class OverlayService : Service() {
                                     .scaleX(0.8f)
                                     .scaleY(0.8f)
                                     .setDuration(200)
-                                    .withEndAction { bubbleText.visibility = View.GONE }
+                                    .withEndAction {
+                                        bubbleText.visibility = View.GONE
+                                        scheduleRandomQuote()
+                                    }
                                     .start()
                             }
                             handler.postDelayed(bubbleHideRunnable!!, duration)
