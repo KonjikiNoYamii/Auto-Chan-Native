@@ -11,6 +11,7 @@ object OverlayEventBus {
 
     var accessibilityService: SilicaAccessibilityService? = null
     var screenCaptureCallback: (() -> Unit)? = null
+    var gameCommentCallback: ((String) -> Unit)? = null
 
     fun send(text: String) {
         onBubble?.invoke(text)

@@ -5,6 +5,9 @@ import android.widget.ImageView
 import com.silica.assistant.R
 import com.silica.assistant.core.CustomAssetManager
 
+import android.view.animation.CycleInterpolator
+import android.view.animation.TranslateAnimation
+
 class WaifuExpressionController(
     private val imageView: ImageView,
     private val context: Context
@@ -12,7 +15,9 @@ class WaifuExpressionController(
     private var lastState: WaifuState? = null
 
     fun update() {
-        val state = WaifuStateManager.currentState
+        // Force GAME state when game mode is active
+        val state = if (GameModeManager.isGameMode) WaifuState.GAME else WaifuStateManager.currentState
+        
         if (state == lastState) return
         lastState = state
 
@@ -46,5 +51,13 @@ class WaifuExpressionController(
             }
             imageView.setImageResource(resId)
         }
+    }
+
+    fun shake() {
+        val shake = TranslateAnimation(0f, 10f, 0f, 0f).apply {
+            duration = 500
+            interpolator = CycleInterpolator(5f)
+        }
+        imageView.startAnimation(shake)
     }
 }

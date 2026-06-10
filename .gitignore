@@ -19,3 +19,4 @@ keystore.properties
 
 # Ignore environment file
 .env
+.aider*

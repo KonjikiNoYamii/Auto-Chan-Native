@@ -70,8 +70,16 @@ object ScreenCaptureManager {
 
     fun isReady(): Boolean = mediaProjection != null && imageReader != null
 
+    private var captureThread: android.os.HandlerThread? = null
+    private var backgroundHandler: Handler? = null
+
     private fun startCapture() {
         try {
+            if (captureThread == null) {
+                captureThread = android.os.HandlerThread("ScreenCapture").apply { start() }
+                backgroundHandler = Handler(captureThread!!.looper)
+            }
+
             imageReader?.close()
             imageReader = ImageReader.newInstance(
                 displayWidth, displayHeight,
@@ -83,7 +91,7 @@ object ScreenCaptureManager {
                 "ScreenCapture",
                 displayWidth, displayHeight, displayDensity,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                imageReader?.surface, null, null
+                imageReader?.surface, null, backgroundHandler
             )
         } catch (e: Exception) {
             android.util.Log.e("ScreenCapture", "startCapture failed", e)
@@ -156,5 +164,8 @@ object ScreenCaptureManager {
         imageReader = null
         mediaProjection?.stop()
         mediaProjection = null
+        captureThread?.quitSafely()
+        captureThread = null
+        backgroundHandler = null
     }
 }

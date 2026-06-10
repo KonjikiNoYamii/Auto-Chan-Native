@@ -26,6 +26,9 @@ import com.silica.assistant.R
 import com.silica.assistant.core.ActivityDetector
 import com.silica.assistant.core.CommandManager
 import com.silica.assistant.core.CustomAssetManager
+import com.silica.assistant.core.debug.CommentDebugEntry
+import com.silica.assistant.core.debug.CommentDebugger
+import com.silica.assistant.core.debug.DebugTier
 import com.silica.assistant.core.llm.LlmClient
 import com.silica.assistant.core.llm.WaifuNotifier
 import com.silica.assistant.core.llm.YamiQuotes
@@ -43,6 +46,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.random.Random
 
 class OverlayService : Service() {
@@ -92,6 +96,8 @@ class OverlayService : Service() {
     private val autoScreenCommentInterval = 120_000L
     private var lastGameTouchTime = 0L
     private var detecting = false
+    private var nonGameCount = 0
+    private var isCommentPending = false
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -240,14 +246,21 @@ class OverlayService : Service() {
         }
 
         VoiceManager.onErrorCallback = { error ->
-            val msg = when (error) {
-                7 -> "Hmph, aku nggak denger apa-apa..." // NO_MATCH
-                6 -> "Kok diem aja? Capek ya?" // SPEECH_TIMEOUT
-                5 -> "Duh, sistem suaranya lagi sibuk, coba bentar lagi ya~" // CLIENT
-                1, 2 -> "Aduh, koneksinya lagi ampas nih..." // NETWORK
-                else -> "Ada error dikit ($error), coba lagi nanti ya~"
+            if (!(isCommentPending && error == 5)) {
+                val msg = when (error) {
+                    7 -> "Hmph, aku nggak denger apa-apa..." // NO_MATCH
+                    6 -> "Kok diem aja? Capek ya?" // SPEECH_TIMEOUT
+                    5 -> "Duh, sistem suaranya lagi sibuk, coba bentar lagi ya~" // CLIENT
+                    1, 2 -> "Aduh, koneksinya lagi ampas nih..." // NETWORK
+                    else -> "Ada error dikit ($error), coba lagi nanti ya~"
+                }
+                showBubble(msg)
+                CommentDebugger.record(CommentDebugEntry(
+                    appName = "VoiceSystem", contextHint = "Audio Input",
+                    promptSent = "Error code: $error", response = null,
+                    tier = DebugTier.ERROR, durationMs = 0,
+                    errorMessage = msg, provider = "Android System"))
             }
-            showBubble(msg)
         }
 
         WaifuStateManager.currentState = WaifuState.RELAX
@@ -291,6 +304,32 @@ class OverlayService : Service() {
 
         OverlayEventBus.screenCaptureCallback = {
             handleScreenInfo()
+        }
+
+        OverlayEventBus.gameCommentCallback = label@{ contextHint ->
+            val appName = GameModeManager.currentAppName ?: lastDetectedApp ?: "Game"
+            val screenText = OverlayEventBus.accessibilityService?.getScreenText() ?: ""
+            if (GameModeManager.isGameMode) {
+                if (!ScreenCaptureManager.isReady()) {
+                    handler.post {
+                        showBubble("Aku butuh izin buat liat layar kamu bentar. Klik 'Start Now' di popup nanti ya~")
+                    }
+                    handler.postDelayed({
+                        OverlayEventBus.navigateScreen.value = "request_screen_capture"
+                    }, 1500)
+                    return@label
+                }
+                handler.post {
+                    if (contextHint.isNullOrBlank()) {
+                        showBubble("Hmm, biarkan aku lihat...")
+                    } else {
+                        showBubble("$contextHint? Biarkan aku lihat...")
+                    }
+                }
+                generateGameComment(appName, screenText, contextHint)
+            } else {
+                generateContextComment(appName, false)
+            }
         }
 
         // Auto-redirect ke Settings kalau izin belum dikasih
@@ -502,8 +541,10 @@ class OverlayService : Service() {
 
                     if (!GameModeManager.manualMode) {
                         val isGameModeApp = pkg == GameModeManager.gameModeAppPackage
-                        // Relax condition: trigger if it's a game AND not already in game mode
-                        if ((isGameModeApp || isGame) && !GameModeManager.isGameMode) {
+                        val isGameOrModeApp = isGameModeApp || isGame
+
+                        if (isGameOrModeApp && !GameModeManager.isGameMode) {
+                            nonGameCount = 0
                             android.util.Log.d("GameModeDebug", "Entering Game Mode for $pkg")
                             val den = if (waifuWidth > 0) waifuWidth / 120f else 2f
                             GameModeManager.enterGameMode(this, params.x, params.y, displayWidth, displayHeight, den, auto = true)
@@ -514,10 +555,25 @@ class OverlayService : Service() {
                                 params.y = 0
                                 windowManager.updateViewLayout(overlayView, params)
                             }
-                        } else if (!isGameModeApp && !isGame && GameModeManager.autoGameMode && GameModeManager.isGameMode) {
-                            android.util.Log.d("GameModeDebug", "Exiting Game Mode")
-                            GameModeManager.exitGameMode()
-                            handler.post { showBubble("Mode game dinonaktifkan") }
+                            // Show accessibility level after enough samples (~12dtk)
+                            activityScope.launch {
+                                delay(12000)
+                                val level = GameModeManager.getAccessibilityLevel(pkg)
+                                if (level != com.silica.assistant.overlay.GameAccessibilityLevel.UNKNOWN) {
+                                    handler.post { showBubble("📊 Aksesibilitas game: $level") }
+                                }
+                            }
+                        } else if (!isGameOrModeApp && GameModeManager.autoGameMode && GameModeManager.isGameMode) {
+                            nonGameCount++
+                            android.util.Log.d("GameModeDebug", "Non-game count: $nonGameCount")
+                            if (nonGameCount >= 2) {
+                                nonGameCount = 0
+                                android.util.Log.d("GameModeDebug", "Exiting Game Mode")
+                                GameModeManager.exitGameMode()
+                                handler.post { showBubble("Mode game dinonaktifkan") }
+                            }
+                        } else if (isGameOrModeApp && GameModeManager.isGameMode) {
+                            nonGameCount = 0
                         }
                     }
                     lastDetectedApp = pkg
@@ -526,18 +582,20 @@ class OverlayService : Service() {
                 // Periodic comment logic (only if screen on and in game mode)
                 if (screenOn && GameModeManager.isGameMode) {
                     val elapsed = System.currentTimeMillis() - lastCommentTime
-                    
-                    // Event-based reaction: check screen text for triggers
-                    val screenText = acc?.getScreenText()?.lowercase() ?: ""
-                    val isEventTrigger = screenText.contains("victory") || screenText.contains("defeat") || screenText.contains("loading")
-                    
-                    if (isEventTrigger || elapsed > nextCommentDelay) {
+                    val rawScreenText = acc?.getScreenText() ?: ""
+
+                    // Record accessibility level for this game
+                    GameModeManager.recordAccessibilitySample(
+                        GameModeManager.currentAppPackage ?: "",
+                        rawScreenText.isNotBlank()
+                    )
+
+                    if (elapsed > nextCommentDelay) {
                         lastCommentTime = System.currentTimeMillis()
-                        // Interval set to 3-5 minutes for token optimization
                         nextCommentDelay = Random.nextLong(180_000, 300_000)
-                        val triggerType = if (isEventTrigger) "event" else "periodic"
-                        android.util.Log.d("GameModeDebug", "Triggering comment: $triggerType")
-                        generateContextComment(GameModeManager.currentAppName ?: "Game", true)
+                        android.util.Log.d("GameModeDebug", "Triggering: periodic AI")
+                        val appName = GameModeManager.currentAppName ?: "Game"
+                        generateGameComment(appName, rawScreenText)
                     }
                 }
             } catch (e: Exception) {
@@ -547,35 +605,101 @@ class OverlayService : Service() {
         }
     }
 
-    private val gameFallbackComments = listOf(
-        "Seru juga mainnya, tapi masih kalah sama latihanku~",
-        "Hmph, bagus sih, tapi jangan lupa latihan juga!",
-        "Fufu, kamu cukup mahir juga ternyata.",
-        "Mainnya oke, tapi jangan keseringan ya.",
-        "... Lumayan. Tapi jangan lupa istirahat.",
-        "Gamenya menarik? Ceritain dong~",
-    )
-
-    private val appFallbackComments = listOf(
-        "Aplikasi itu, ya? Hmm, nggak terlalu menarik sih…",
-        "Lagi sibuk ya? Baiklah, aku di sini aja.",
-        "Fufu, kamu sibuk sekali hari ini.",
-        "... Ada yang bisa aku bantu?",
-        "Hmm, kamu betah juga di aplikasi itu.",
-    )
+    // ── Game mode: pure AI only ──
 
     private fun generateContextComment(appName: String, isGame: Boolean) {
+        isCommentPending = true
+        showBubble("Mari kita lihat...", persistent = true)
+        val startTime = System.currentTimeMillis()
         activityScope.launch {
-            val comment = LlmClient.generateActivityComment(appName, isGame)
-            if (comment != null) {
-                showBubble(comment)
-            } else {
-                val fallback = if (isGame) {
-                    gameFallbackComments.random()
+            try {
+                val comment = LlmClient.generateActivityComment(appName, isGame)
+                if (comment != null) {
+                    showBubble(comment)
+                    CommentDebugger.record(CommentDebugEntry(
+                        appName = appName, contextHint = if (isGame) "Auto-Game" else "Auto-App",
+                        promptSent = "app_name: $appName", response = comment,
+                        tier = DebugTier.APP_AI, durationMs = System.currentTimeMillis() - startTime,
+                        provider = LlmClient.activeProvider))
                 } else {
-                    appFallbackComments.random()
+                    showBubble("Hmm, lagi bingung lihatnya. Coba lain kali ya~")
+                    CommentDebugger.record(CommentDebugEntry(
+                        appName = appName, contextHint = if (isGame) "Auto-Game" else "Auto-App",
+                        promptSent = "app_name: $appName", response = null,
+                        tier = DebugTier.ERROR, durationMs = System.currentTimeMillis() - startTime,
+                        errorMessage = "Activity comment null", provider = LlmClient.activeProvider))
                 }
-                showBubble(fallback)
+            } finally {
+                isCommentPending = false
+            }
+        }
+    }
+
+    private fun generateGameComment(appName: String, screenText: String, contextHint: String? = null) {
+        isCommentPending = true
+        if (contextHint.isNullOrBlank()) {
+            showBubble("Mari kita lihat...", persistent = true)
+        } else {
+            showBubble("$contextHint? Sebentar...", persistent = true)
+        }
+        val startTime = System.currentTimeMillis()
+        activityScope.launch {
+            try {
+                // Tier 1: Screenshot + Gemini vision (pure AI)
+                val startT1 = System.currentTimeMillis()
+                val visionResult = withTimeoutOrNull(30_000L) {
+                    if (ScreenCaptureManager.isReady() && LlmClient.activeProvider == "Gemini") {
+                        val screenshot = ScreenCaptureManager.captureScaledJpeg(800)
+                        if (screenshot != null) {
+                            LlmClient.describeScreen(appName, screenText, screenshot, contextHint)
+                        } else null
+                    } else null
+                }
+                if (visionResult != null) {
+                    showBubble(visionResult)
+                    CommentDebugger.record(CommentDebugEntry(
+                        appName = appName, contextHint = contextHint,
+                        promptSent = contextHint ?: "(periodik)", response = visionResult,
+                        tier = DebugTier.VISION, durationMs = System.currentTimeMillis() - startT1,
+                        screenshotUsed = true, provider = LlmClient.activeProvider))
+                    return@launch
+                }
+
+                // Tier 2: Text-based LLM (pure AI from accessibility text)
+                if (screenText.length > 10) {
+                    val startT2 = System.currentTimeMillis()
+                    val screenComment = LlmClient.generateScreenComment(appName, screenText)
+                    if (screenComment != null) {
+                        showBubble(screenComment)
+                        CommentDebugger.record(CommentDebugEntry(
+                            appName = appName, contextHint = contextHint,
+                            promptSent = "screen_text: ${screenText.take(100)}", response = screenComment,
+                            tier = DebugTier.TEXT_AI, durationMs = System.currentTimeMillis() - startT2,
+                            provider = LlmClient.activeProvider))
+                        return@launch
+                    }
+                }
+
+                // Tier 3: App-name LLM fallback (pure AI)
+                val startT3 = System.currentTimeMillis()
+                val appComment = LlmClient.generateActivityComment(appName, true)
+                if (appComment != null) {
+                    showBubble(appComment)
+                    CommentDebugger.record(CommentDebugEntry(
+                        appName = appName, contextHint = contextHint,
+                        promptSent = "app_name: $appName", response = appComment,
+                        tier = DebugTier.APP_AI, durationMs = System.currentTimeMillis() - startT3,
+                        provider = LlmClient.activeProvider))
+                } else {
+                    showBubble("Hmm, lagi bingung lihatnya. Coba lain kali ya~")
+                    CommentDebugger.record(CommentDebugEntry(
+                        appName = appName, contextHint = contextHint,
+                        promptSent = "app_name: $appName", response = null,
+                        tier = DebugTier.ERROR, durationMs = System.currentTimeMillis() - startTime,
+                        errorMessage = "Semua tier gagal", provider = LlmClient.activeProvider))
+                }
+            } finally {
+                isCommentPending = false
             }
         }
     }
@@ -587,38 +711,68 @@ class OverlayService : Service() {
             return
         }
 
+        isCommentPending = true
+        showBubble("Mari kita lihat...", persistent = true)
         activityScope.launch {
-            val acc = OverlayEventBus.accessibilityService
-            val uiText = withContext(Dispatchers.Main) {
-                acc?.getScreenText() ?: ""
-            }
-            val appName = lastDetectedApp ?: "unknown"
-            
-            // Re-check readiness inside the launch scope
-            val ready = ScreenCaptureManager.isReady()
-            
-            if (acc == null) {
-                showBubble("Aktifkan aksesibilitas Silica dulu di Settings > Aksesibilitas ya~")
-                return@launch
-            }
-            
-            if (!ready) {
-                showBubble("Aku butuh izin buat liat layar kamu bentar. Klik 'Start Now' di popup nanti ya~")
-                withContext(Dispatchers.Main) {
-                    handler.postDelayed({
-                        OverlayEventBus.navigateScreen.value = "request_screen_capture"
-                    }, 1500)
+            try {
+                val acc = OverlayEventBus.accessibilityService
+                val uiText = withContext(Dispatchers.Main) {
+                    acc?.getScreenText() ?: ""
                 }
-                return@launch
-            }
-            
-            val screenshotJpeg = ScreenCaptureManager.captureScaledJpeg(800)
+                val appName = lastDetectedApp ?: "unknown"
+                
+                // Re-check readiness inside the launch scope
+                val ready = ScreenCaptureManager.isReady()
+                
+                if (acc == null) {
+                    showBubble("Aktifkan aksesibilitas Silica dulu di Settings > Aksesibilitas ya~")
+                    return@launch
+                }
+                
+                if (!ready) {
+                    showBubble("Aku butuh izin buat liat layar kamu bentar. Klik 'Start Now' di popup nanti ya~")
+                    withContext(Dispatchers.Main) {
+                        handler.postDelayed({
+                            OverlayEventBus.navigateScreen.value = "request_screen_capture"
+                        }, 1500)
+                    }
+                    return@launch
+                }
+                
+                val screenshotJpeg = ScreenCaptureManager.captureScaledJpeg(800)
+                val startTime = System.currentTimeMillis()
 
-            val comment = LlmClient.describeScreen(appName, uiText, screenshotJpeg)
-            if (comment != null) {
-                showBubble(comment)
-            } else {
-                showBubble("Hmm, lagi nggak ada yang menarik sih.")
+                try {
+                    val comment = LlmClient.describeScreen(appName, uiText, screenshotJpeg)
+                    if (comment != null) {
+                        showBubble(comment)
+                        CommentDebugger.record(CommentDebugEntry(
+                            appName = appName, contextHint = "Manual Scan",
+                            promptSent = "screen_info request", response = comment,
+                            tier = if (screenshotJpeg != null) DebugTier.VISION else DebugTier.TEXT_AI,
+                            durationMs = System.currentTimeMillis() - startTime,
+                            screenshotUsed = screenshotJpeg != null,
+                            provider = LlmClient.activeProvider))
+                    } else {
+                        showBubble("Hmm, lagi nggak ada yang menarik sih.")
+                        CommentDebugger.record(CommentDebugEntry(
+                            appName = appName, contextHint = "Manual Scan",
+                            promptSent = "screen_info request", response = null,
+                            tier = DebugTier.ERROR, durationMs = System.currentTimeMillis() - startTime,
+                            errorMessage = "Describe screen null",
+                            provider = LlmClient.activeProvider))
+                    }
+                } catch (e: Exception) {
+                    showBubble("Hmm, lagi nggak bisa lihat layar sekarang.")
+                    CommentDebugger.record(CommentDebugEntry(
+                        appName = appName, contextHint = "Manual Scan",
+                        promptSent = "screen_info request", response = null,
+                        tier = DebugTier.ERROR, durationMs = System.currentTimeMillis() - startTime,
+                        errorMessage = e.message ?: "Unknown error",
+                        provider = LlmClient.activeProvider))
+                }
+            } finally {
+                isCommentPending = false
             }
         }
     }
@@ -629,18 +783,37 @@ class OverlayService : Service() {
         if (now - lastAutoScreenCommentTime < autoScreenCommentInterval) return
         lastAutoScreenCommentTime = now
 
+        isCommentPending = true
+        showBubble("Hmm...", persistent = true)
         activityScope.launch {
-            val appName = lastDetectedApp?.let {
-                GameModeManager.getAppName(this@OverlayService, it)
-            } ?: return@launch
+            try {
+                val appName = lastDetectedApp?.let {
+                    GameModeManager.getAppName(this@OverlayService, it)
+                } ?: return@launch
 
-            val uiText = withContext(Dispatchers.Main) {
-                OverlayEventBus.accessibilityService?.getScreenText() ?: ""
-            }
+                val uiText = withContext(Dispatchers.Main) {
+                    OverlayEventBus.accessibilityService?.getScreenText() ?: ""
+                }
 
-            val comment = LlmClient.generateScreenComment(appName, uiText)
-            if (comment != null) {
-                showBubble(comment)
+                val startTime = System.currentTimeMillis()
+                val comment = LlmClient.generateScreenComment(appName, uiText)
+                if (comment != null) {
+                    showBubble(comment)
+                    CommentDebugger.record(CommentDebugEntry(
+                        appName = appName, contextHint = "Auto Screen",
+                        promptSent = "screen_text: ${uiText.take(100)}", response = comment,
+                        tier = DebugTier.TEXT_AI, durationMs = System.currentTimeMillis() - startTime,
+                        provider = LlmClient.activeProvider))
+                } else {
+                    CommentDebugger.record(CommentDebugEntry(
+                        appName = appName, contextHint = "Auto Screen",
+                        promptSent = "screen_text: ${uiText.take(100)}", response = null,
+                        tier = DebugTier.ERROR, durationMs = System.currentTimeMillis() - startTime,
+                        errorMessage = "Auto screen comment null",
+                        provider = LlmClient.activeProvider))
+                }
+            } finally {
+                isCommentPending = false
             }
         }
     }
@@ -671,8 +844,9 @@ class OverlayService : Service() {
     }
 
     private var bubbleTypingRunnable: Runnable? = null
+    private var bubbleDotsRunnable: Runnable? = null
 
-    fun showBubble(text: String) {
+    fun showBubble(text: String, persistent: Boolean = false) {
 
         handler.post {
 
@@ -680,6 +854,7 @@ class OverlayService : Service() {
 
             bubbleTypingRunnable?.let { handler.removeCallbacks(it) }
             bubbleHideRunnable?.let { handler.removeCallbacks(it) }
+            bubbleDotsRunnable?.let { handler.removeCallbacks(it) }
 
             bubbleText.text = ""
             bubbleText.visibility = View.VISIBLE
@@ -695,6 +870,13 @@ class OverlayService : Service() {
                 .start()
 
             lastGameTouchTime = System.currentTimeMillis()
+
+            // Shake effect for emotional reactions
+            val lowerText = text.lowercase()
+            val emotionalKeywords = listOf("!", "wah", "aduh", "ah", "gagal", "menang", "kalah", "hebat")
+            if (emotionalKeywords.any { lowerText.contains(it) } && ::controller.isInitialized) {
+                controller.shake()
+            }
 
             val density = resources.displayMetrics.density
             val onRightSide = params.x > displayWidth / 2
@@ -715,17 +897,30 @@ class OverlayService : Service() {
                         val delay = if (charIndex < text.length && text[charIndex-1] in listOf('.', '!', '?', ',')) 200L else 30L
                         handler.postDelayed(this, delay)
                     } else {
-                        val duration = (2000L + text.length * 30L).coerceAtMost(8000L)
-                        bubbleHideRunnable = Runnable {
-                            bubbleText.animate()
-                                .alpha(0f)
-                                .scaleX(0.8f)
-                                .scaleY(0.8f)
-                                .setDuration(200)
-                                .withEndAction { bubbleText.visibility = View.GONE }
-                                .start()
+                        if (persistent && text.endsWith("...")) {
+                            val baseText = text.removeSuffix("...")
+                            var dots = 3
+                            bubbleDotsRunnable = object : Runnable {
+                                override fun run() {
+                                    dots = if (dots >= 3) 1 else dots + 1
+                                    bubbleText.text = baseText + ".".repeat(dots)
+                                    handler.postDelayed(this, 500)
+                                }
+                            }
+                            handler.postDelayed(bubbleDotsRunnable!!, 500)
+                        } else {
+                            val duration = (2000L + text.length * 30L).coerceAtMost(8000L)
+                            bubbleHideRunnable = Runnable {
+                                bubbleText.animate()
+                                    .alpha(0f)
+                                    .scaleX(0.8f)
+                                    .scaleY(0.8f)
+                                    .setDuration(200)
+                                    .withEndAction { bubbleText.visibility = View.GONE }
+                                    .start()
+                            }
+                            handler.postDelayed(bubbleHideRunnable!!, duration)
                         }
-                        handler.postDelayed(bubbleHideRunnable!!, duration)
                     }
                 }
             }

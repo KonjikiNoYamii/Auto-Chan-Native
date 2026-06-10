@@ -75,7 +75,7 @@ object LlmClient {
                 quickHealthCheck()
                 if (activeProvider == "Gemini") {
                     try {
-                        val payload = buildPayload(messages, memoryContext)
+                        val payload = buildPayload(messages, memoryContext, stream = false)
                         return@withContext parseResponse(
                             httpPost(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout)
                         )
@@ -83,13 +83,106 @@ object LlmClient {
                         activeProvider = "OpenRouter"
                     }
                 }
-                val payload = buildPayload(messages, memoryContext)
+                val payload = buildPayload(messages, memoryContext, stream = false)
                 val response = httpPost(LlmConfig.endpoint, payload)
                 parseResponse(response)
             } catch (e: Exception) {
                 Result.failure(e)
             }
         }
+    }
+
+    suspend fun chatStream(
+        messages: List<ChatMessage>,
+        memoryContext: String = "",
+        onToken: (String) -> Unit
+    ): Result<ChatMessage> {
+        return withContext(Dispatchers.IO) {
+            try {
+                quickHealthCheck()
+                if (activeProvider == "Gemini") {
+                    try {
+                        return@withContext chatStreamGemini(messages, memoryContext, onToken)
+                    } catch (_: Exception) {
+                        activeProvider = "OpenRouter"
+                    }
+                }
+                val payload = buildPayload(messages, memoryContext, stream = false)
+                val response = httpPost(LlmConfig.endpoint, payload)
+                val result = parseResponse(response)
+                result.getOrNull()?.let { onToken(it.content) }
+                result
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    private suspend fun chatStreamGemini(
+        messages: List<ChatMessage>,
+        memoryContext: String,
+        onToken: (String) -> Unit
+    ): Result<ChatMessage> {
+        val payload = buildPayload(messages, memoryContext, stream = true)
+        val url = URL(LlmConfig.geminiEndpoint)
+        val conn = url.openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.setRequestProperty("Content-Type", "application/json")
+        conn.setRequestProperty("Accept", "text/event-stream")
+        if (LlmConfig.geminiSecret.isNotBlank()) {
+            conn.setRequestProperty("Authorization", "Bearer ${LlmConfig.geminiSecret}")
+        }
+        conn.doOutput = true
+        conn.connectTimeout = LlmConfig.geminiTimeout
+        conn.readTimeout = 0
+
+        OutputStreamWriter(conn.outputStream).use { it.write(payload) }
+
+        val code = conn.responseCode
+        if (code !in 200..299) {
+            val err = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+            conn.disconnect()
+            throw Exception("HTTP $code: ${err.take(200)}")
+        }
+
+        val reader = conn.inputStream.bufferedReader()
+        val fullContent = StringBuilder()
+
+        try {
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                val l = line ?: continue
+                if (l.startsWith("data: ")) {
+                    val data = l.removePrefix("data: ").trim()
+                    if (data == "[DONE]") break
+                    try {
+                        val json = JSONObject(data)
+                        if (json.has("error")) {
+                            val errMsg = json.getJSONObject("error").optString("message", "Stream error")
+                            throw Exception(errMsg)
+                        }
+                        val choices = json.optJSONArray("choices")
+                        if (choices != null && choices.length() > 0) {
+                            val delta = choices.getJSONObject(0).optJSONObject("delta")
+                            val content = delta?.optString("content", "") ?: ""
+                            if (content.isNotEmpty()) {
+                                fullContent.append(content)
+                                onToken(content)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        if (e.message == "Stream error") throw e
+                    }
+                }
+            }
+        } finally {
+            conn.disconnect()
+        }
+
+        val resultText = fullContent.toString()
+        if (resultText.isBlank()) throw Exception("Respon kosong dari server.")
+        val safe = safeContent(resultText)
+        return Result.success(ChatMessage(role = "assistant", content = safe))
     }
 
     private fun httpPost(urlString: String, jsonPayload: String, useAuth: Boolean = true, timeout: Int = 30000): String {
@@ -124,9 +217,9 @@ object LlmClient {
         return withContext(Dispatchers.IO) {
             try {
                 val prompt = if (isGame) {
-                    "User sedang main $appName. Beri komentar singkat MAXIMAL 1 KALIMAT tentang game ini. Khas Yami: tsundere, cool, santai. Langsung komentar saja tanpa perkenalan."
+                    "User sedang main $appName. Beri REAKSI singkat 1 kalimat. Jangan mendeskripsikan game-nya, tapi berikan REAKSI spontan seolah kamu ikut menonton. ${LlmConfig.personalityPrompt} Langsung komentar saja."
                 } else {
-                    "User sedang membuka $appName. Beri komentar pendek 1-2 kalimat. Khas Yami: tsundere, cool, santai. Langsung komentar saja tanpa perkenalan."
+                    "User sedang membuka $appName. Beri REAKSI pendek 1-2 kalimat tentang situasinya. Jangan cuma deskripsi fitur, tapi berikan REAKSI natural. ${LlmConfig.personalityPrompt} Langsung komentar saja."
                 }
                 val msg = listOf(ChatMessage("user", prompt))
                 val payload = buildPayload(msg, "")
@@ -149,7 +242,7 @@ object LlmClient {
     suspend fun generateScreenComment(appName: String, uiText: String): String? {
         return withContext(Dispatchers.IO) {
             try {
-                val prompt = "User sedang membuka $appName. Konten layar: $uiText. Beri komentar pendek 1 kalimat tentang apa yang user lihat. Khas Yami: tsundere, cool, santai. Langsung komentar saja tanpa perkenalan."
+                val prompt = "User sedang membuka $appName. Konten layar: $uiText. Beri REAKSI pendek 1 kalimat. Fokus pada reaksi emosional/spontan terhadap situasi di layar, jangan sekadar membacakan teksnya. ${LlmConfig.personalityPrompt} Langsung komentar saja."
                 val msg = listOf(ChatMessage("user", prompt))
                 val payload = buildPayload(msg, "")
                 if (activeProvider == "Gemini") {
@@ -167,12 +260,13 @@ object LlmClient {
         }
     }
 
-    suspend fun describeScreen(appName: String, uiText: String, screenshotJpeg: ByteArray?): String? {
+    suspend fun describeScreen(appName: String, uiText: String, screenshotJpeg: ByteArray?, contextHint: String? = null): String? {
         return withContext(Dispatchers.IO) {
             try {
                 quickHealthCheck()
-                val textHint = if (uiText.isBlank()) "(tidak ada teks)" else uiText.take(200)
-                val prompt = "Aplikasi: $appName. Teks: $textHint. Dari screenshot, deskripsikan singkat apa yang user lihat — 1 kalimat max 100 karakter. Khas Yami: tsundere, cool, santai."
+                val textHint = if (uiText.isBlank()) "" else "\nTeks layar: ${uiText.take(200)}"
+                val focus = if (contextHint != null) "\nUser minta dikomentari soal: $contextHint" else ""
+                val prompt = "User lagi buka $appName.$textHint$focus\nLihat screenshot, beri REAKSI spontan 1 kalimat natural tentang situasinya (misal: menang, kalah, momen seru, atau situasi lucu). Jangan mendeskripsikan secara teknis (seperti 'ada tombol X'), tapi berikan REAKSI emosional. ${LlmConfig.personalityPrompt} Bahasa Indonesia. Langsung respon."
 
                 // 1) Try Gemini vision (with screenshot)
                 if (activeProvider == "Gemini" && screenshotJpeg != null) {
@@ -187,7 +281,7 @@ object LlmClient {
 
                 // 2) Vision failed + no screen text → can't describe
                 if (uiText.isBlank()) {
-                    return@withContext "Hmm, gelap. Nggak kelihatan apa-apa."
+                    throw Exception("Layar kosong (tidak ada teks)")
                 }
 
                 // 3) Try Gemini text-only (has text hint but no screenshot)
@@ -198,11 +292,15 @@ object LlmClient {
                         val raw = httpPost(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout)
                         val r = parseResponse(raw).getOrNull()?.content
                         if (r != null) return@withContext codepointAwareTake(r, 150)
-                    } catch (_: Exception) {}
+                    } catch (e: Exception) {
+                        throw Exception("Vision & Text fallback gagal: ${e.message}")
+                    }
                 }
 
-                return@withContext "Hmm, nggak bisa lihat layar sekarang."
-            } catch (_: Exception) { null }
+                throw Exception("Provider tidak mendukung vision/text fallback saat ini")
+            } catch (e: Exception) {
+                throw e
+            }
         }
     }
 
@@ -214,7 +312,7 @@ object LlmClient {
         } else truncated
     }
 
-    private fun buildVisionPayload(messages: List<ChatMessage>, base64Images: List<String>): String {
+    private fun buildVisionPayload(messages: List<ChatMessage>, base64Images: List<String>, stream: Boolean = false): String {
         val arr = JSONArray()
         arr.put(JSONObject().apply {
             put("role", "system")
@@ -230,7 +328,7 @@ object LlmClient {
             put("model", LlmConfig.model)
             put("messages", arr)
             put("images", JSONArray(base64Images))
-            put("stream", false)
+            put("stream", stream)
         }.toString()
     }
 
@@ -267,7 +365,7 @@ object LlmClient {
         return trimmed.trim()
     }
 
-    private fun buildPayload(messages: List<ChatMessage>, memoryContext: String = ""): String {
+    private fun buildPayload(messages: List<ChatMessage>, memoryContext: String = "", stream: Boolean = false): String {
         val arr = JSONArray()
 
         arr.put(JSONObject().apply {
@@ -292,7 +390,7 @@ object LlmClient {
         return JSONObject().apply {
             put("model", LlmConfig.model)
             put("messages", arr)
-            put("stream", false)
+            put("stream", stream)
         }.toString()
     }
 
@@ -311,12 +409,27 @@ object LlmClient {
                 return Result.failure(Exception("Respon tidak dikenal: ${raw.take(200)}"))
             }
             val msg = choices.getJSONObject(0).getJSONObject("message")
+            val content = safeContent(msg.getString("content"))
             Result.success(ChatMessage(
                 role = msg.getString("role"),
-                content = msg.getString("content")
+                content = content
             ))
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private fun safeContent(text: String): String {
+        val lower = text.lowercase()
+        val safetyPhrases = listOf(
+            "safety", "violence", "harmful", "inappropriate",
+            "blocked", "cannot comment",
+            "tidak bisa", "tidak pantas", "tidak sesuai",
+        )
+        val matchCount = safetyPhrases.count { lower.contains(it) }
+        if (matchCount >= 2 && text.length < 150) {
+            return "Hmm, nggak bisa komentar soal itu~"
+        }
+        return text
     }
 }

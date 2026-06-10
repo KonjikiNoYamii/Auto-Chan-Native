@@ -16,18 +16,22 @@
         android:src="@drawable/mybinik"
         android:scaleType="fitCenter"/>
 
-    <!-- Speech Bubble (below image — no translationY needed) -->
+    <!-- Speech Bubble (below image) -->
     <TextView
         android:id="@+id/bubbleText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center_horizontal"
-        android:padding="10dp"
+        android:layout_marginTop="4dp"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="10dp"
         android:textColor="#FFFFFF"
-        android:background="#AA000000"
+        android:background="@drawable/bubble_background"
         android:visibility="gone"
         android:text="..."
-        android:textSize="14sp"
-        android:maxWidth="240dp" />
+        android:textSize="13sp"
+        android:lineSpacingExtra="2dp"
+        android:maxWidth="240dp"
+        android:elevation="4dp" />
 
 </LinearLayout>

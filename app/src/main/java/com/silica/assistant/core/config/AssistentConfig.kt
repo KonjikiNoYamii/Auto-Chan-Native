@@ -8,6 +8,9 @@ object AssistantConfig {
     // nama assistant
     var assistantName = "silica"
 
+    // sapaan instan saat nama dipanggil
+    var customGreeting = ""
+
     // efek suara bubble
     var enableVoiceSound = true
 

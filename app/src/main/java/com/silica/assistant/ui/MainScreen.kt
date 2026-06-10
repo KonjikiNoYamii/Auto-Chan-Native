@@ -55,6 +55,7 @@ import com.silica.assistant.ui.customize.CustomizeScreen
 import com.silica.assistant.ui.guide.GuideScreen
 import com.silica.assistant.ui.tutorial.OverlayTutorialScreen
 import com.silica.assistant.ui.chat.ChatScreen
+import com.silica.assistant.ui.debug.DebugScreen
 import com.silica.assistant.ui.ssh.LaptopInfoScreen
 import com.silica.assistant.ui.ssh.SshScreen
 import com.silica.assistant.ui.theme.DeepRose
@@ -72,6 +73,7 @@ private sealed class Screen {
     data object Customize : Screen()
     data object OverlayTutorial : Screen()
     data object Chat : Screen()
+    data object Debug : Screen()
 }
 
 @Composable
@@ -175,6 +177,7 @@ fun MainScreen() {
                             when (dest) {
                                 "ssh" -> Screen.Ssh(tab = 0)
                                 "chat" -> Screen.Chat
+                                "debug" -> Screen.Debug
                                 else -> Screen.Main
                             }
                     OverlayEventBus.navigateScreen.value = null
@@ -252,11 +255,14 @@ fun MainScreen() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         try {
+            ScreenCaptureManager.init(context)
             ScreenCaptureManager.resultCode = result.resultCode
             ScreenCaptureManager.resultData = result.data
             ScreenCaptureManager.setupProjection(context)
             if (ScreenCaptureManager.isReady()) {
                 Toast.makeText(context, "Screen capture siap", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "Screen capture gagal diinisialisasi", Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
             android.util.Log.e("MainScreen", "screen capture callback error", e)
@@ -307,6 +313,7 @@ fun MainScreen() {
                                         "Chat" -> currentScreen = Screen.Chat
                                         "Guide" -> currentScreen = Screen.Guide
                                         "Customize" -> currentScreen = Screen.Customize
+                                        "Debug" -> currentScreen = Screen.Debug
                                     }
                                 }
                         )
@@ -342,6 +349,10 @@ fun MainScreen() {
 
                         Spacer(modifier = Modifier.height(16.dp))
 
+                        DebugOutputSection()
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
                         OverlayControlSection()
 
                         Spacer(modifier = Modifier.height(48.dp))
@@ -374,6 +385,9 @@ fun MainScreen() {
         }
         is Screen.Chat -> {
             ChatScreen(onBack = { currentScreen = Screen.Main })
+        }
+        is Screen.Debug -> {
+            DebugScreen(onBack = { currentScreen = Screen.Main })
         }
     }
 
@@ -511,6 +525,7 @@ private fun QuickActionChips(onChipClick: (String) -> Unit = {}) {
                     ChipData("Info", Icons.Filled.Info, DeepRose),
                     ChipData("Guide", Icons.AutoMirrored.Filled.MenuBook, DeepRose),
             ChipData("Customize", Icons.Filled.Palette, DeepRose),
+            ChipData("Debug", Icons.Filled.BugReport, DeepRose),
     )
 
     Row(

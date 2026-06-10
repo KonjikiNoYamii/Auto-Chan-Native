@@ -9,6 +9,8 @@ enum class GameModePosition {
     BOTTOM_LEFT, BOTTOM_CENTER, BOTTOM_RIGHT
 }
 
+enum class GameAccessibilityLevel { UNKNOWN, NONE, PARTIAL, FULL }
+
 object GameModeManager {
     var isGameMode = false
     var gameModePosition = GameModePosition.TOP_CENTER
@@ -148,6 +150,28 @@ object GameModeManager {
         WaifuStateManager.currentState = previousState
         return previousX to previousY
     }
+
+    // ── Accessibility level tracking per game ──
+    fun getAccessibilityLevel(pkg: String): GameAccessibilityLevel =
+        accessibilityCache[pkg] ?: GameAccessibilityLevel.UNKNOWN
+
+    fun recordAccessibilitySample(pkg: String, hasText: Boolean) {
+        if (pkg.isBlank()) return
+        val samples = accessibilitySamples.getOrPut(pkg) { mutableListOf() }
+        samples.add(hasText)
+        if (samples.size > 10) samples.removeAt(0)
+        if (samples.size >= 3) {
+            val ratio = samples.count { it }.toFloat() / samples.size
+            accessibilityCache[pkg] = when {
+                ratio >= 0.6f -> GameAccessibilityLevel.FULL
+                ratio >= 0.2f -> GameAccessibilityLevel.PARTIAL
+                else -> GameAccessibilityLevel.NONE
+            }
+        }
+    }
+
+    private val accessibilitySamples = mutableMapOf<String, MutableList<Boolean>>()
+    private val accessibilityCache = mutableMapOf<String, GameAccessibilityLevel>()
 
     private fun positionForGameMode(w: Int, h: Int, density: Float): Pair<Int, Int> {
         val half = (60 * density).toInt()

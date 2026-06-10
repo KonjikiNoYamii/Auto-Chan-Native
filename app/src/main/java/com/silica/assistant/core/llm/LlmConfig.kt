@@ -10,5 +10,6 @@ object LlmConfig {
     var apiKey: String = BuildConfig.OPENROUTER_API_KEY
     var geminiSecret: String = ""
     var useGeminiFallback: Boolean = true
-    var geminiTimeout: Int = 6000
+    var geminiTimeout: Int = 30000
+    var personalityPrompt: String = "Khas Yami: tsundere, cool, kalem tapi peduli."
 }

@@ -57,9 +57,9 @@ fun ChatScreen(
         viewModel.loadMemories(context)
     }
 
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
+    LaunchedEffect(messages.size, viewModel.streamingContent) {
+        if (messages.isNotEmpty() || viewModel.streamingContent != null) {
+            listState.animateScrollToItem(Int.MAX_VALUE)
         }
     }
 
@@ -129,7 +129,14 @@ fun ChatScreen(
                         ChatBubble(message = msg)
                     }
 
-                    if (isLoading) {
+                    val streaming = viewModel.streamingContent
+                    if (streaming != null) {
+                        item {
+                            ChatBubble(message = ChatMessage(role = "assistant", content = streaming, timestamp = System.currentTimeMillis()))
+                        }
+                    }
+
+                    if (isLoading && streaming == null) {
                         item {
                             Box(
                                 modifier = Modifier.fillMaxWidth(),

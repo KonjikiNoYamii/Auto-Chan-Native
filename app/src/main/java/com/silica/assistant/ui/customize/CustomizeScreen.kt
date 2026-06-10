@@ -123,6 +123,80 @@ fun CustomizeScreen(onBack: () -> Unit) {
                 .verticalScroll(scroll)
                 .padding(16.dp)
         ) {
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                "Kepribadian & Nama",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "Tentukan nama panggilan dan sifat waifu Anda.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            var assistantName by remember { mutableStateOf(com.silica.assistant.core.config.AssistantConfig.assistantName) }
+            var personalityPrompt by remember { mutableStateOf(com.silica.assistant.core.llm.LlmConfig.personalityPrompt) }
+
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("Nama Panggilan", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = assistantName,
+                        onValueChange = { 
+                            assistantName = it
+                            com.silica.assistant.core.config.AssistantConfig.assistantName = it
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    var customGreeting by remember { mutableStateOf(com.silica.assistant.core.config.AssistantConfig.customGreeting) }
+                    Text("Sapaan Balik (Jika nama dipanggil)", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = customGreeting,
+                        onValueChange = { 
+                            customGreeting = it
+                            com.silica.assistant.core.config.AssistantConfig.customGreeting = it
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        placeholder = { Text("Kosongkan untuk otomatis...") }
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Text("System Prompt (Kepribadian)", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = personalityPrompt,
+                        onValueChange = { 
+                            personalityPrompt = it
+                            com.silica.assistant.core.llm.LlmConfig.personalityPrompt = it
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        placeholder = { Text("Contoh: Tsundere, galak tapi baik...") }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             Text(
                 "Ganti Tampilan",
                 style = MaterialTheme.typography.titleMedium,

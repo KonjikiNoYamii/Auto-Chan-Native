@@ -243,6 +243,27 @@ object CommandAliases {
             "back",
             "mundur",
             "keluar"
+        ),
+
+        "game_comment" to listOf(
+            "komentar",
+            "comment",
+            "komen",
+            "komentari",
+            "komentarin",
+            "komentari game",
+            "komentarin game",
+            "komen game",
+            "what do you think",
+            "apa pendapatmu"
+        ),
+
+        "open_debug" to listOf(
+            "debug",
+            "debug ai",
+            "buka debug",
+            "lihat debug",
+            "log komentar"
         )
     )
 }

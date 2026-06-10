@@ -10,15 +10,21 @@ import com.silica.assistant.core.knowledge.KnowledgeEngine
 import com.silica.assistant.core.knowledge.KnowledgeParser
 import com.silica.assistant.core.media.MediaController
 import com.silica.assistant.core.overlay.OverlayEventBus
+import com.silica.assistant.core.llm.LlmClient
+import com.silica.assistant.core.llm.LlmConfig
 import com.silica.assistant.core.parser.SearchCommandParser
 import com.silica.assistant.core.ssh.SshManager
 import com.silica.assistant.core.system.AppLauncher
 import com.silica.assistant.core.system.BrightnessController
 import com.silica.assistant.overlay.GameModeManager
 import com.silica.assistant.service.OverlayService
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 
 object CommandManager {
 
+    @OptIn(DelicateCoroutinesApi::class)
     private fun keywordVariants(keyword: String): List<String> {
         val base = keyword.lowercase().trim()
         val variants = mutableListOf<String>()
@@ -105,6 +111,60 @@ object CommandManager {
         }
 
         if (result == null) {
+            // Check if user is calling her name
+            val assistantName = AssistantConfig.assistantName.lowercase()
+            if (normalized == assistantName || normalized.startsWith("$assistantName ")) {
+                if (LlmClient.activeProvider == "Memeriksa...") {
+                    val msg = if (LlmConfig.personalityPrompt.lowercase().contains("dingin") || 
+                                 LlmConfig.personalityPrompt.lowercase().contains("cool")) {
+                        "Bentar, aku siap-siap dulu."
+                    } else {
+                        "Sebentar ya, aku siap-siap terlebih dahulu."
+                    }
+                    OverlayEventBus.onBubble?.invoke(msg)
+                    return
+                }
+
+                val query = if (normalized == assistantName) "" else normalized.removePrefix("$assistantName ").trim()
+                if (query.isEmpty()) {
+                    // 1. Priority: User-defined custom greeting (Hardcoded)
+                    val custom = AssistantConfig.customGreeting.trim()
+                    if (custom.isNotEmpty()) {
+                        OverlayEventBus.onBubble?.invoke(custom)
+                        return
+                    }
+
+                    // 2. Fallback: Smart Hardcoded Personality (Hardcoded)
+                    val personality = LlmConfig.personalityPrompt.lowercase()
+                    val reply = when {
+                        // Cool / Tsundere
+                        personality.contains("dingin") || personality.contains("cool") || 
+                        personality.contains("tsundere") || personality.contains("cuek") -> {
+                            listOf("Hmph, berisik.", "Ada apa?", "Cepat katakan.", "Kenapa panggil-panggil?", "Apa?", "Jangan ganggu.").random()
+                        }
+                        // Cheerful / Cute
+                        personality.contains("ceria") || personality.contains("semangat") || 
+                        personality.contains("ramah") || personality.contains("lucu") -> {
+                            listOf("Iyaaa? Tuan panggil aku?", "Hadir! Ada yang bisa dibantu?", "Halo! Hehe, kangen ya?", "Tuan butuh sesuatu?", "Iya sayang? Eh.. maksudku iya?").random()
+                        }
+                        // Polite / Formal
+                        personality.contains("sopan") || personality.contains("formal") || 
+                        personality.contains("pelayan") || personality.contains("maid") -> {
+                            listOf("Saya mendengarkan, Tuan.", "Iya, ada yang bisa saya bantu?", "Menunggu perintah Anda.", "Saya di sini, Tuan.").random()
+                        }
+                        else -> "Iya? Ada apa?"
+                    }
+                    OverlayEventBus.onBubble?.invoke(reply)
+                } else {
+                    // Chatting with her (use AI but very short)
+                    kotlinx.coroutines.GlobalScope.launch {
+                        val reply = LlmClient.generateScreenComment("Chat", "User bilang: \"$query\". Beri respon SANGAT PENDEK MAKSIMAL 1 KALIMAT. ${LlmConfig.personalityPrompt} Langsung respon.")
+                        OverlayEventBus.onBubble?.invoke(reply ?: "...")
+                    }
+                }
+                return
+            }
+
             if (!AppLauncher.open(context, effectiveInput)) {
                 OverlayEventBus.onBubble?.invoke("😕 Maaf, saya tidak mengerti \"$effectiveInput\". Coba buka Panduan untuk lihat command yang tersedia.")
             }
@@ -258,6 +318,14 @@ object CommandManager {
                 OverlayEventBus.onBubble?.invoke("🔍...")
                 OverlayEventBus.screenCaptureCallback?.invoke()
             }
+            "game_comment" -> {
+                val contextHint = extractContext(effectiveInput, "game_comment")
+                OverlayEventBus.gameCommentCallback?.invoke(contextHint)
+            }
+            "open_debug" -> {
+                OverlayEventBus.navigateScreen.value = "debug"
+                OverlayEventBus.onBubble?.invoke("📊 Membuka debug AI...")
+            }
             "click_element" -> {
                 val keyword = effectiveInput
                     .removePrefix("klik ").removePrefix("tekan ").removePrefix("tap ")
@@ -315,5 +383,16 @@ object CommandManager {
                 OverlayEventBus.onBubble?.invoke("😕 Maaf, saya tidak mengerti command \"${result.command}\"")
             }
         }
+    }
+
+    private fun extractContext(input: String, commandKey: String): String {
+        val lower = input.lowercase().trim()
+        val aliases = CommandAliases.aliases[commandKey] ?: return ""
+        for (alias in aliases.sortedByDescending { it.length }) {
+            if (lower.startsWith(alias)) {
+                return lower.removePrefix(alias).trim()
+            }
+        }
+        return ""
     }
 }
