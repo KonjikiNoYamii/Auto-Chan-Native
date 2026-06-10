@@ -62,6 +62,7 @@ import com.silica.assistant.ui.theme.DeepRose
 import com.silica.assistant.ui.theme.Espresso
 import com.silica.assistant.ui.viewmodel.AssistantViewModel
 import java.util.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 
@@ -87,9 +88,42 @@ fun MainScreen() {
     var isDownloading by remember { mutableStateOf(false) }
     var downloadProgress by remember { mutableFloatStateOf(0f) }
     var pendingAudioPermission by remember { mutableStateOf(false) }
-    var pendingScreenCapture by remember { mutableStateOf(false) }
+    var screenCaptureLaunched by remember { mutableStateOf(false) }
     var showOverlayPermissionDialog by remember { mutableStateOf(false) }
     var showUsagePermissionDialog by remember { mutableStateOf(false) }
+
+    val recordPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            WaifuStateManager.currentState = WaifuState.LISTEN
+            viewModel.setListening(true)
+            VoiceManager.start()
+        } else {
+            Toast.makeText(context, "Izin mikrofon diperlukan untuk voice command", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val screenCaptureLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        try {
+            ScreenCaptureManager.init(context)
+            ScreenCaptureManager.resultCode = result.resultCode
+            ScreenCaptureManager.resultData = result.data
+            ScreenCaptureManager.setupProjection(context)
+            if (ScreenCaptureManager.isReady()) {
+                Toast.makeText(context, "Screen capture siap", Toast.LENGTH_SHORT).show()
+            } else {
+                screenCaptureLaunched = false
+                Toast.makeText(context, "Screen capture gagal diinisialisasi", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MainScreen", "screen capture callback error", e)
+            screenCaptureLaunched = false
+            Toast.makeText(context, "Gagal: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     LaunchedEffect(Unit) {
         // 1. Check Audio
@@ -108,9 +142,18 @@ fun MainScreen() {
             showUsagePermissionDialog = true
         }
 
-        // 4. Check Screen Capture (only if not already pending)
-        if (!ScreenCaptureManager.isReady() && !pendingScreenCapture) {
-            pendingScreenCapture = true
+        // 4. Screen Capture — init & request once
+        ScreenCaptureManager.init(context)
+        if (!ScreenCaptureManager.isReady() && !screenCaptureLaunched) {
+            screenCaptureLaunched = true
+            delay(100)
+            try {
+                val mgr = context.getSystemService(android.content.Context.MEDIA_PROJECTION_SERVICE)
+                        as android.media.projection.MediaProjectionManager
+                screenCaptureLauncher.launch(mgr.createScreenCaptureIntent())
+            } catch (e: Exception) {
+                android.util.Log.e("MainScreen", "screen capture initial launch failed", e)
+            }
         }
     }
 
@@ -171,8 +214,15 @@ fun MainScreen() {
                 } else if (dest == "request_screen_capture") {
                     currentScreen = Screen.Main
                     OverlayEventBus.navigateScreen.value = null
-                    if (!pendingScreenCapture) {
-                        pendingScreenCapture = true
+                    if (!ScreenCaptureManager.isReady() && !screenCaptureLaunched) {
+                        screenCaptureLaunched = true
+                        try {
+                            val mgr = context.getSystemService(android.content.Context.MEDIA_PROJECTION_SERVICE)
+                                    as android.media.projection.MediaProjectionManager
+                            screenCaptureLauncher.launch(mgr.createScreenCaptureIntent())
+                        } catch (e: Exception) {
+                            android.util.Log.e("MainScreen", "screen capture overlay launch failed", e)
+                        }
                     }
                 } else {
                     currentScreen =
@@ -234,52 +284,10 @@ fun MainScreen() {
                 }
     }
 
-    val recordPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            WaifuStateManager.currentState = WaifuState.LISTEN
-            viewModel.setListening(true)
-            VoiceManager.start()
-        } else {
-            Toast.makeText(context, "Izin mikrofon diperlukan untuk voice command", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     LaunchedEffect(pendingAudioPermission) {
         if (pendingAudioPermission) {
             pendingAudioPermission = false
             recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        }
-    }
-
-    val screenCaptureLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        try {
-            ScreenCaptureManager.init(context)
-            ScreenCaptureManager.resultCode = result.resultCode
-            ScreenCaptureManager.resultData = result.data
-            ScreenCaptureManager.setupProjection(context)
-            if (ScreenCaptureManager.isReady()) {
-                Toast.makeText(context, "Screen capture siap", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(context, "Screen capture gagal diinisialisasi", Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("MainScreen", "screen capture callback error", e)
-            Toast.makeText(context, "Gagal: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    LaunchedEffect(pendingScreenCapture) {
-        if (pendingScreenCapture) {
-            pendingScreenCapture = false
-            // Delay agar activity fully resumed sebelum launch intent
-            kotlinx.coroutines.delay(300)
-            val mgr = context.getSystemService(android.content.Context.MEDIA_PROJECTION_SERVICE)
-                as android.media.projection.MediaProjectionManager
-            screenCaptureLauncher.launch(mgr.createScreenCaptureIntent())
         }
     }
 
