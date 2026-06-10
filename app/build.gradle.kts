@@ -24,11 +24,7 @@ android {
         applicationId = "com.silica.assistant"
         minSdk = 24
         targetSdk = 34
-        versionCode = if (project.gradle.startParameter.taskNames.any { it.contains("Debug", ignoreCase = true) }) {
-            (System.currentTimeMillis() / 1000).toInt()
-        } else {
-            4
-        }
+        versionCode = maxOf((System.currentTimeMillis() / 1000).toInt(), 4)
         versionName = "1.1"
         buildConfigField("String", "OPENROUTER_API_KEY", "\"${openRouterKey}\"")
         

@@ -351,6 +351,15 @@ class OverlayService : Service() {
         if (OverlayEventBus.accessibilityService == null) {
             handler.postDelayed({
                 showBubble("Aktifkan aksesibilitas Silica di Settings > Aksesibilitas")
+                try {
+                    startActivity(
+                        Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                        }
+                    )
+                } catch (_: Exception) {}
             }, 8000)
         }
     }
@@ -548,6 +557,7 @@ class OverlayService : Service() {
                             android.util.Log.d("GameModeDebug", "Entering Game Mode for $pkg")
                             val den = if (waifuWidth > 0) waifuWidth / 120f else 2f
                             GameModeManager.enterGameMode(this, params.x, params.y, displayWidth, displayHeight, den, auto = true)
+                            lastCommentTime = System.currentTimeMillis()
                             generateContextComment(appName, true)
                             handler.post {
                                 params.gravity = Gravity.TOP or Gravity.START
@@ -745,6 +755,9 @@ class OverlayService : Service() {
                 
                 if (acc == null) {
                     showBubble("Aktifkan aksesibilitas Silica dulu di Settings > Aksesibilitas ya~")
+                    withContext(Dispatchers.Main) {
+                        OverlayEventBus.navigateScreen.value = "accessibility_settings"
+                    }
                     return@launch
                 }
                 
@@ -878,6 +891,9 @@ class OverlayService : Service() {
         randomQuoteHandler.removeCallbacksAndMessages(null)
         handler.post {
             if (!::bubbleText.isInitialized) return@post
+            bubbleTypingRunnable?.let { handler.removeCallbacks(it) }
+            bubbleDotsRunnable?.let { handler.removeCallbacks(it) }
+            bubbleHideRunnable?.let { handler.removeCallbacks(it) }
             bubbleText.text = text
         }
     }

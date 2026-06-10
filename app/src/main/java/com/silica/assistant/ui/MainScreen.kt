@@ -62,7 +62,6 @@ import com.silica.assistant.ui.theme.DeepRose
 import com.silica.assistant.ui.theme.Espresso
 import com.silica.assistant.ui.viewmodel.AssistantViewModel
 import java.util.*
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 
@@ -88,7 +87,7 @@ fun MainScreen() {
     var isDownloading by remember { mutableStateOf(false) }
     var downloadProgress by remember { mutableFloatStateOf(0f) }
     var pendingAudioPermission by remember { mutableStateOf(false) }
-    var pendingScreenCapture by remember { mutableStateOf(false) }
+    var screenCaptureLaunched by remember { mutableStateOf(false) }
     var showOverlayPermissionDialog by remember { mutableStateOf(false) }
     var showUsagePermissionDialog by remember { mutableStateOf(false) }
 
@@ -96,9 +95,7 @@ fun MainScreen() {
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            WaifuStateManager.currentState = WaifuState.LISTEN
-            viewModel.setListening(true)
-            VoiceManager.start()
+            Toast.makeText(context, "Izin mikrofon diberikan. Tekan waifu untuk mulai bicara", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(context, "Izin mikrofon diperlukan untuk voice command", Toast.LENGTH_SHORT).show()
         }
@@ -107,6 +104,7 @@ fun MainScreen() {
     val screenCaptureLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
+        screenCaptureLaunched = false
         try {
             ScreenCaptureManager.init(context)
             ScreenCaptureManager.resultCode = result.resultCode
@@ -119,6 +117,8 @@ fun MainScreen() {
             android.util.Log.e("MainScreen", "screen capture callback error", e)
         }
     }
+
+    val handler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
 
     LaunchedEffect(Unit) {
         // 1. Check Audio
@@ -137,11 +137,6 @@ fun MainScreen() {
             showUsagePermissionDialog = true
         }
 
-        // 4. Screen Capture
-        try { ScreenCaptureManager.init(context) } catch (_: Exception) { }
-        if (!ScreenCaptureManager.isReady()) {
-            pendingScreenCapture = true
-        }
     }
 
     if (showOverlayPermissionDialog) {
@@ -188,6 +183,18 @@ fun MainScreen() {
     LaunchedEffect(Unit) {
         snapshotFlow { OverlayEventBus.navigateScreen.value }.collect { dest ->
             if (dest != null) {
+                // bring app to foreground first
+                val launchIntent =
+                        context.packageManager.getLaunchIntentForPackage(context.packageName)
+                if (launchIntent != null) {
+                    launchIntent.addFlags(
+                            Intent.FLAG_ACTIVITY_NEW_TASK or
+                                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                    )
+                    context.startActivity(launchIntent)
+                }
+
                 if (dest == "request_audio_permission") {
                     currentScreen = Screen.Main
                     OverlayEventBus.navigateScreen.value = null
@@ -198,11 +205,35 @@ fun MainScreen() {
                     ) {
                         pendingAudioPermission = true
                     }
+                } else if (dest == "accessibility_settings") {
+                    currentScreen = Screen.Main
+                    OverlayEventBus.navigateScreen.value = null
+                    try {
+                        context.startActivity(
+                            android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                                        android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                                        android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                            }
+                        )
+                    } catch (_: Exception) {}
                 } else if (dest == "request_screen_capture") {
                     currentScreen = Screen.Main
                     OverlayEventBus.navigateScreen.value = null
-                    if (!ScreenCaptureManager.isReady()) {
-                        pendingScreenCapture = true
+                    if (!ScreenCaptureManager.isReady() && !screenCaptureLaunched) {
+                        screenCaptureLaunched = true
+                        handler.postDelayed({
+                            if (!ScreenCaptureManager.isReady() && screenCaptureLaunched) {
+                                try {
+                                    val mgr = context.getSystemService(android.content.Context.MEDIA_PROJECTION_SERVICE)
+                                            as android.media.projection.MediaProjectionManager
+                                    screenCaptureLauncher.launch(mgr.createScreenCaptureIntent())
+                                } catch (e: Exception) {
+                                    android.util.Log.e("MainScreen", "screen capture overlay launch failed", e)
+                                    screenCaptureLaunched = false
+                                }
+                            }
+                        }, 200)
                     }
                 } else {
                     currentScreen =
@@ -213,17 +244,6 @@ fun MainScreen() {
                                 else -> Screen.Main
                             }
                     OverlayEventBus.navigateScreen.value = null
-                }
-                // bring app to foreground when triggered from overlay
-                val launchIntent =
-                        context.packageManager.getLaunchIntentForPackage(context.packageName)
-                if (launchIntent != null) {
-                    launchIntent.addFlags(
-                            Intent.FLAG_ACTIVITY_NEW_TASK or
-                                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                    )
-                    context.startActivity(launchIntent)
                 }
             }
         }
@@ -250,8 +270,6 @@ fun MainScreen() {
         }
     }
 
-    val handler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
-
     val greeting = remember {
         val cal = Calendar.getInstance()
         val hour = cal.get(Calendar.HOUR_OF_DAY)
@@ -268,16 +286,6 @@ fun MainScreen() {
         if (pendingAudioPermission) {
             pendingAudioPermission = false
             recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        }
-    }
-
-    LaunchedEffect(pendingScreenCapture) {
-        if (pendingScreenCapture) {
-            pendingScreenCapture = false
-            delay(200)
-            val mgr = context.getSystemService(android.content.Context.MEDIA_PROJECTION_SERVICE)
-                as android.media.projection.MediaProjectionManager
-            screenCaptureLauncher.launch(mgr.createScreenCaptureIntent())
         }
     }
 
