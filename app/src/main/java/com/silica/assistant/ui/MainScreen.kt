@@ -62,7 +62,6 @@ import com.silica.assistant.ui.theme.DeepRose
 import com.silica.assistant.ui.theme.Espresso
 import com.silica.assistant.ui.viewmodel.AssistantViewModel
 import java.util.*
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 
@@ -88,7 +87,7 @@ fun MainScreen() {
     var isDownloading by remember { mutableStateOf(false) }
     var downloadProgress by remember { mutableFloatStateOf(0f) }
     var pendingAudioPermission by remember { mutableStateOf(false) }
-    var screenCaptureLaunched by remember { mutableStateOf(false) }
+    var pendingScreenCapture by remember { mutableStateOf(false) }
     var showOverlayPermissionDialog by remember { mutableStateOf(false) }
     var showUsagePermissionDialog by remember { mutableStateOf(false) }
 
@@ -110,26 +109,11 @@ fun MainScreen() {
         ScreenCaptureManager.init(context)
         ScreenCaptureManager.resultCode = result.resultCode
         ScreenCaptureManager.resultData = result.data
-
-        when {
-            result.resultCode != android.app.Activity.RESULT_OK -> {
-                screenCaptureLaunched = false
-                Toast.makeText(context, "Izin screen capture diperlukan untuk overlay", Toast.LENGTH_LONG).show()
-            }
-            result.data == null -> {
-                screenCaptureLaunched = false
-                Toast.makeText(context, "Gagal mendapatkan izin screen capture", Toast.LENGTH_LONG).show()
-            }
-            else -> {
-                // Izin diberikan. Coba inisialisasi langsung.
-                // Kalau gagal (butuh foreground service), overlay akan init via tryRestore().
-                try {
-                    ScreenCaptureManager.setupProjection(context)
-                } catch (_: Exception) { }
-                if (ScreenCaptureManager.isReady()) {
-                    Toast.makeText(context, "Screen capture siap", Toast.LENGTH_SHORT).show()
-                }
-            }
+        // Izin diberikan, coba setup langsung.
+        // Kalau gagal (butuh foreground service di Android 14+), overlay akan init via tryRestore().
+        try { ScreenCaptureManager.setupProjection(context) } catch (_: Exception) { }
+        if (ScreenCaptureManager.isReady()) {
+            Toast.makeText(context, "Screen capture siap", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -150,18 +134,9 @@ fun MainScreen() {
             showUsagePermissionDialog = true
         }
 
-        // 4. Screen Capture — init & request once
-        ScreenCaptureManager.init(context)
-        if (!ScreenCaptureManager.isReady() && !screenCaptureLaunched) {
-            screenCaptureLaunched = true
-            delay(100)
-            try {
-                val mgr = context.getSystemService(android.content.Context.MEDIA_PROJECTION_SERVICE)
-                        as android.media.projection.MediaProjectionManager
-                screenCaptureLauncher.launch(mgr.createScreenCaptureIntent())
-            } catch (e: Exception) {
-                android.util.Log.e("MainScreen", "screen capture initial launch failed", e)
-            }
+        // 4. Screen Capture
+        if (!ScreenCaptureManager.isReady()) {
+            pendingScreenCapture = true
         }
     }
 
@@ -222,15 +197,8 @@ fun MainScreen() {
                 } else if (dest == "request_screen_capture") {
                     currentScreen = Screen.Main
                     OverlayEventBus.navigateScreen.value = null
-                    if (!ScreenCaptureManager.isReady() && !screenCaptureLaunched) {
-                        screenCaptureLaunched = true
-                        try {
-                            val mgr = context.getSystemService(android.content.Context.MEDIA_PROJECTION_SERVICE)
-                                    as android.media.projection.MediaProjectionManager
-                            screenCaptureLauncher.launch(mgr.createScreenCaptureIntent())
-                        } catch (e: Exception) {
-                            android.util.Log.e("MainScreen", "screen capture overlay launch failed", e)
-                        }
+                    if (!ScreenCaptureManager.isReady()) {
+                        pendingScreenCapture = true
                     }
                 } else {
                     currentScreen =
@@ -296,6 +264,15 @@ fun MainScreen() {
         if (pendingAudioPermission) {
             pendingAudioPermission = false
             recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    LaunchedEffect(pendingScreenCapture) {
+        if (pendingScreenCapture) {
+            pendingScreenCapture = false
+            val mgr = context.getSystemService(android.content.Context.MEDIA_PROJECTION_SERVICE)
+                as android.media.projection.MediaProjectionManager
+            screenCaptureLauncher.launch(mgr.createScreenCaptureIntent())
         }
     }
 
