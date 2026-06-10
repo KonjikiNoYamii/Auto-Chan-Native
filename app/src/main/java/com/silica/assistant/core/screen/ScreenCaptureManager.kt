@@ -40,16 +40,23 @@ object ScreenCaptureManager {
         displayDensity = metrics.densityDpi
     }
 
-    fun setupProjection(context: Context) {
+    fun setupProjection(context: Context): Boolean {
         try {
             val mgr = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            if (resultCode == Activity.RESULT_OK && resultData != null) {
+            android.util.Log.d("ScreenCapture", "setupProjection: rc=$resultCode rd=$resultData w=${displayWidth}x${displayHeight}")
+            if (resultCode == Activity.RESULT_OK && resultData != null && displayWidth > 0 && displayHeight > 0) {
                 mediaProjection = mgr.getMediaProjection(resultCode, resultData!!)
                 startCapture()
+                val ready = isReady()
+                android.util.Log.d("ScreenCapture", "setupProjection done: ready=$ready")
+                return ready
             }
+            android.util.Log.w("ScreenCapture", "setupProjection skipped: rc=$resultCode rd=${resultData != null} w=$displayWidth h=$displayHeight")
+            return false
         } catch (e: Exception) {
             android.util.Log.e("ScreenCapture", "setupProjection failed", e)
             mediaProjection = null
+            return false
         }
     }
 

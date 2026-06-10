@@ -116,12 +116,17 @@ fun MainScreen() {
                 Toast.makeText(context, "Screen capture siap", Toast.LENGTH_SHORT).show()
             } else {
                 screenCaptureLaunched = false
-                Toast.makeText(context, "Screen capture gagal diinisialisasi", Toast.LENGTH_SHORT).show()
+                val reason = when {
+                    result.resultCode != android.app.Activity.RESULT_OK -> "code=${result.resultCode}"
+                    result.data == null -> "intent null"
+                    else -> "init failed"
+                }
+                Toast.makeText(context, "Screen capture gagal ($reason)", Toast.LENGTH_LONG).show()
             }
         } catch (e: Exception) {
             android.util.Log.e("MainScreen", "screen capture callback error", e)
             screenCaptureLaunched = false
-            Toast.makeText(context, "Gagal: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Gagal: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
