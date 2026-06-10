@@ -273,6 +273,8 @@ fun MainScreen() {
     LaunchedEffect(pendingScreenCapture) {
         if (pendingScreenCapture) {
             pendingScreenCapture = false
+            // Delay agar activity fully resumed sebelum launch intent
+            kotlinx.coroutines.delay(300)
             val mgr = context.getSystemService(android.content.Context.MEDIA_PROJECTION_SERVICE)
                 as android.media.projection.MediaProjectionManager
             screenCaptureLauncher.launch(mgr.createScreenCaptureIntent())

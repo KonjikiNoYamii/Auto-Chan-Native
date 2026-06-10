@@ -213,7 +213,73 @@ object LlmClient {
         return body
     }
 
-    suspend fun generateActivityComment(appName: String, isGame: Boolean): String? {
+    private suspend fun httpPostStream(
+        urlString: String,
+        jsonPayload: String,
+        useAuth: Boolean,
+        timeout: Int,
+        onToken: (String) -> Unit
+    ): String? {
+        val url = URL(urlString)
+        val conn = url.openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.setRequestProperty("Content-Type", "application/json")
+        conn.setRequestProperty("Accept", "text/event-stream")
+        if (useAuth) {
+            conn.setRequestProperty("Authorization", "Bearer ${LlmConfig.apiKey}")
+            conn.setRequestProperty("HTTP-Referer", "https://github.com/KonjikiNoYamii/Auto-Chan-Native")
+        } else if (LlmConfig.geminiSecret.isNotBlank()) {
+            conn.setRequestProperty("Authorization", "Bearer ${LlmConfig.geminiSecret}")
+        }
+        conn.doOutput = true
+        conn.connectTimeout = timeout
+        conn.readTimeout = 0
+
+        OutputStreamWriter(conn.outputStream).use { it.write(jsonPayload) }
+
+        val code = conn.responseCode
+        if (code !in 200..299) {
+            val err = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+            conn.disconnect()
+            throw Exception("HTTP $code: ${err.take(200)}")
+        }
+
+        val reader = conn.inputStream.bufferedReader()
+        val fullContent = StringBuilder()
+        try {
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                val l = line ?: continue
+                if (l.startsWith("data: ")) {
+                    val data = l.removePrefix("data: ").trim()
+                    if (data == "[DONE]") break
+                    try {
+                        val json = JSONObject(data)
+                        if (json.has("error")) {
+                            val errMsg = json.getJSONObject("error").optString("message", "Stream error")
+                            throw Exception(errMsg)
+                        }
+                        val choices = json.optJSONArray("choices")
+                        if (choices != null && choices.length() > 0) {
+                            val delta = choices.getJSONObject(0).optJSONObject("delta")
+                            val content = delta?.optString("content", "") ?: ""
+                            if (content.isNotEmpty()) {
+                                fullContent.append(content)
+                                onToken(content)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        if (e.message == "Stream error") throw e
+                    }
+                }
+            }
+        } finally {
+            conn.disconnect()
+        }
+        return fullContent.toString().ifBlank { null }
+    }
+
+    suspend fun generateActivityComment(appName: String, isGame: Boolean, onToken: ((String) -> Unit)? = null): String? {
         return withContext(Dispatchers.IO) {
             try {
                 val prompt = if (isGame) {
@@ -222,11 +288,16 @@ object LlmClient {
                     "User sedang membuka $appName. Beri REAKSI pendek 1-2 kalimat tentang situasinya. Jangan cuma deskripsi fitur, tapi berikan REAKSI natural. ${LlmConfig.personalityPrompt} Langsung komentar saja."
                 }
                 val msg = listOf(ChatMessage("user", prompt))
-                val payload = buildPayload(msg, "")
+                val payload = buildPayload(msg, "", stream = onToken != null)
                 if (activeProvider == "Gemini") {
                     try {
-                        val raw = httpPost(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout)
-                        val r = parseResponse(raw).getOrNull()?.content?.let { c -> if (isGame) limitSentence(c) else c.take(300) }
+                        val text = if (onToken != null) {
+                            httpPostStream(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout, onToken = onToken)
+                        } else {
+                            val raw = httpPost(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout)
+                            parseResponse(raw).getOrNull()?.content
+                        }
+                        val r = text?.let { c -> if (isGame) limitSentence(c) else c.take(300) }
                         if (r != null) return@withContext r
                     } catch (_: Exception) {}
                 }
@@ -239,16 +310,21 @@ object LlmClient {
         }
     }
 
-    suspend fun generateScreenComment(appName: String, uiText: String): String? {
+    suspend fun generateScreenComment(appName: String, uiText: String, onToken: ((String) -> Unit)? = null): String? {
         return withContext(Dispatchers.IO) {
             try {
                 val prompt = "User sedang membuka $appName. Konten layar: $uiText. Beri REAKSI pendek 1 kalimat. Fokus pada reaksi emosional/spontan terhadap situasi di layar, jangan sekadar membacakan teksnya. ${LlmConfig.personalityPrompt} Langsung komentar saja."
                 val msg = listOf(ChatMessage("user", prompt))
-                val payload = buildPayload(msg, "")
+                val payload = buildPayload(msg, "", stream = onToken != null)
                 if (activeProvider == "Gemini") {
                     try {
-                        val raw = httpPost(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout)
-                        val r = parseResponse(raw).getOrNull()?.content?.let { it.take(200) }
+                        val text = if (onToken != null) {
+                            httpPostStream(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout, onToken = onToken)
+                        } else {
+                            val raw = httpPost(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout)
+                            parseResponse(raw).getOrNull()?.content
+                        }
+                        val r = text?.let { it.take(200) }
                         if (r != null) return@withContext r
                     } catch (_: Exception) {}
                 }
@@ -260,7 +336,7 @@ object LlmClient {
         }
     }
 
-    suspend fun describeScreen(appName: String, uiText: String, screenshotJpeg: ByteArray?, contextHint: String? = null): String? {
+    suspend fun describeScreen(appName: String, uiText: String, screenshotJpeg: ByteArray?, contextHint: String? = null, onToken: ((String) -> Unit)? = null): String? {
         return withContext(Dispatchers.IO) {
             try {
                 quickHealthCheck()
@@ -272,10 +348,14 @@ object LlmClient {
                 if (activeProvider == "Gemini" && screenshotJpeg != null) {
                     try {
                         val base64 = android.util.Base64.encodeToString(screenshotJpeg, android.util.Base64.NO_WRAP)
-                        val payload = buildVisionPayload(listOf(ChatMessage("user", prompt)), listOf(base64))
-                        val raw = httpPostJson(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout + 20000)
-                        val r = parseResponse(raw).getOrNull()?.content
-                        if (r != null) return@withContext codepointAwareTake(r, 150)
+                        val payload = buildVisionPayload(listOf(ChatMessage("user", prompt)), listOf(base64), stream = onToken != null)
+                        val text = if (onToken != null) {
+                            httpPostStream(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout + 20000, onToken = onToken)
+                        } else {
+                            val raw = httpPostJson(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout + 20000)
+                            parseResponse(raw).getOrNull()?.content
+                        }
+                        if (text != null) return@withContext codepointAwareTake(text, 150)
                     } catch (_: Exception) {}
                 }
 

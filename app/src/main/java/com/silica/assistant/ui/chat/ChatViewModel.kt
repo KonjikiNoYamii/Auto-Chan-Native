@@ -28,9 +28,6 @@ class ChatViewModel : ViewModel() {
     var isLoading by mutableStateOf(false)
         private set
 
-    var streamingContent by mutableStateOf<String?>(null)
-        private set
-
     var error by mutableStateOf<String?>(null)
         private set
 
@@ -84,17 +81,11 @@ class ChatViewModel : ViewModel() {
         messages = messages + userMsg
         isLoading = true
         error = null
-        streamingContent = ""
         val memoryCtx = MemoryManager.buildContext(context)
 
         viewModelScope.launch {
-            val fullText = StringBuilder()
-            LlmClient.chatStream(messages, memoryContext = memoryCtx, onToken = { token ->
-                fullText.append(token)
-                streamingContent = fullText.toString()
-            })
+            LlmClient.chat(messages, memoryContext = memoryCtx)
                 .onSuccess { reply ->
-                    streamingContent = null
                     val bubbles = splitResponse(reply.content)
                     for (i in bubbles.indices) {
                         val (cleanText, emotion) = EmotionMapper.parseEmotion(bubbles[i])
@@ -104,7 +95,6 @@ class ChatViewModel : ViewModel() {
                     }
                 }
                 .onFailure { e ->
-                    streamingContent = null
                     error = e.message ?: "Gagal terhubung ke AI."
                 }
             isLoading = false

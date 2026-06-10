@@ -611,9 +611,13 @@ class OverlayService : Service() {
         isCommentPending = true
         showBubble("Mari kita lihat...", persistent = true)
         val startTime = System.currentTimeMillis()
+        val tokenBuf = StringBuilder()
         activityScope.launch {
             try {
-                val comment = LlmClient.generateActivityComment(appName, isGame)
+                val comment = LlmClient.generateActivityComment(appName, isGame, onToken = { t ->
+                    tokenBuf.append(t)
+                    setBubbleText(tokenBuf.toString())
+                })
                 if (comment != null) {
                     showBubble(comment)
                     CommentDebugger.record(CommentDebugEntry(
@@ -645,13 +649,17 @@ class OverlayService : Service() {
         val startTime = System.currentTimeMillis()
         activityScope.launch {
             try {
-                // Tier 1: Screenshot + Gemini vision (pure AI)
+                // Tier 1: Screenshot + Gemini vision (pure AI) with streaming
                 val startT1 = System.currentTimeMillis()
+                val tokenBuf1 = StringBuilder()
                 val visionResult = withTimeoutOrNull(30_000L) {
                     if (ScreenCaptureManager.isReady() && LlmClient.activeProvider == "Gemini") {
                         val screenshot = ScreenCaptureManager.captureScaledJpeg(800)
                         if (screenshot != null) {
-                            LlmClient.describeScreen(appName, screenText, screenshot, contextHint)
+                            LlmClient.describeScreen(appName, screenText, screenshot, contextHint, onToken = { t ->
+                                tokenBuf1.append(t)
+                                setBubbleText(tokenBuf1.toString())
+                            })
                         } else null
                     } else null
                 }
@@ -668,7 +676,11 @@ class OverlayService : Service() {
                 // Tier 2: Text-based LLM (pure AI from accessibility text)
                 if (screenText.length > 10) {
                     val startT2 = System.currentTimeMillis()
-                    val screenComment = LlmClient.generateScreenComment(appName, screenText)
+                    val tokenBuf2 = StringBuilder()
+                    val screenComment = LlmClient.generateScreenComment(appName, screenText, onToken = { t ->
+                        tokenBuf2.append(t)
+                        setBubbleText(tokenBuf2.toString())
+                    })
                     if (screenComment != null) {
                         showBubble(screenComment)
                         CommentDebugger.record(CommentDebugEntry(
@@ -682,7 +694,11 @@ class OverlayService : Service() {
 
                 // Tier 3: App-name LLM fallback (pure AI)
                 val startT3 = System.currentTimeMillis()
-                val appComment = LlmClient.generateActivityComment(appName, true)
+                val tokenBuf3 = StringBuilder()
+                val appComment = LlmClient.generateActivityComment(appName, true, onToken = { t ->
+                    tokenBuf3.append(t)
+                    setBubbleText(tokenBuf3.toString())
+                })
                 if (appComment != null) {
                     showBubble(appComment)
                     CommentDebugger.record(CommentDebugEntry(
@@ -743,7 +759,11 @@ class OverlayService : Service() {
                 val startTime = System.currentTimeMillis()
 
                 try {
-                    val comment = LlmClient.describeScreen(appName, uiText, screenshotJpeg)
+                    val tokenBuf = StringBuilder()
+                    val comment = LlmClient.describeScreen(appName, uiText, screenshotJpeg, onToken = { t ->
+                        tokenBuf.append(t)
+                        setBubbleText(tokenBuf.toString())
+                    })
                     if (comment != null) {
                         showBubble(comment)
                         CommentDebugger.record(CommentDebugEntry(
@@ -796,7 +816,11 @@ class OverlayService : Service() {
                 }
 
                 val startTime = System.currentTimeMillis()
-                val comment = LlmClient.generateScreenComment(appName, uiText)
+                val tokenBuf = StringBuilder()
+                val comment = LlmClient.generateScreenComment(appName, uiText, onToken = { t ->
+                    tokenBuf.append(t)
+                    setBubbleText(tokenBuf.toString())
+                })
                 if (comment != null) {
                     showBubble(comment)
                     CommentDebugger.record(CommentDebugEntry(
@@ -845,6 +869,13 @@ class OverlayService : Service() {
 
     private var bubbleTypingRunnable: Runnable? = null
     private var bubbleDotsRunnable: Runnable? = null
+
+    fun setBubbleText(text: String) {
+        handler.post {
+            if (!::bubbleText.isInitialized) return@post
+            bubbleText.text = text
+        }
+    }
 
     fun showBubble(text: String, persistent: Boolean = false) {
 
