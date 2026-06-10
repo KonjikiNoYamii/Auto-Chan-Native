@@ -107,6 +107,11 @@ fun MainScreen() {
         if (!activityDetector.isUsageStatsGranted()) {
             showUsagePermissionDialog = true
         }
+
+        // 4. Check Screen Capture (only if not already pending)
+        if (!ScreenCaptureManager.isReady() && !pendingScreenCapture) {
+            pendingScreenCapture = true
+        }
     }
 
     if (showOverlayPermissionDialog) {
@@ -166,7 +171,9 @@ fun MainScreen() {
                 } else if (dest == "request_screen_capture") {
                     currentScreen = Screen.Main
                     OverlayEventBus.navigateScreen.value = null
-                    pendingScreenCapture = true
+                    if (!pendingScreenCapture) {
+                        pendingScreenCapture = true
+                    }
                 } else {
                     currentScreen =
                             when (dest) {
