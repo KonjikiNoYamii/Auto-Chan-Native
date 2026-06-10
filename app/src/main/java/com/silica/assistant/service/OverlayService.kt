@@ -608,6 +608,7 @@ class OverlayService : Service() {
     // ── Game mode: pure AI only ──
 
     private fun generateContextComment(appName: String, isGame: Boolean) {
+        if (isCommentPending) return
         isCommentPending = true
         showBubble("Mari kita lihat...", persistent = true)
         val startTime = System.currentTimeMillis()
@@ -640,6 +641,7 @@ class OverlayService : Service() {
     }
 
     private fun generateGameComment(appName: String, screenText: String, contextHint: String? = null) {
+        if (isCommentPending) return
         isCommentPending = true
         if (contextHint.isNullOrBlank()) {
             showBubble("Mari kita lihat...", persistent = true)
@@ -721,6 +723,7 @@ class OverlayService : Service() {
     }
 
     private fun handleScreenInfo() {
+        if (isCommentPending) return
         // Prevent screen capture during Game Mode to save resources and avoid interference
         if (GameModeManager.isGameMode) {
             android.util.Log.d("OverlayService", "Screen info skipped: Game Mode active")
@@ -798,6 +801,7 @@ class OverlayService : Service() {
     }
 
     private fun generateAutoScreenComment() {
+        if (isCommentPending) return
         if (!screenOn) return
         val now = System.currentTimeMillis()
         if (now - lastAutoScreenCommentTime < autoScreenCommentInterval) return

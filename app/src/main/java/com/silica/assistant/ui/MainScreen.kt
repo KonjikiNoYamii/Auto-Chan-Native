@@ -62,6 +62,7 @@ import com.silica.assistant.ui.theme.DeepRose
 import com.silica.assistant.ui.theme.Espresso
 import com.silica.assistant.ui.viewmodel.AssistantViewModel
 import java.util.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 
@@ -273,6 +274,7 @@ fun MainScreen() {
     LaunchedEffect(pendingScreenCapture) {
         if (pendingScreenCapture) {
             pendingScreenCapture = false
+            delay(200)
             val mgr = context.getSystemService(android.content.Context.MEDIA_PROJECTION_SERVICE)
                 as android.media.projection.MediaProjectionManager
             screenCaptureLauncher.launch(mgr.createScreenCaptureIntent())
