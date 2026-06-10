@@ -52,7 +52,8 @@ private var initialTab = 0
 @Composable
 fun SshScreen(
     onBack: () -> Unit,
-    defaultTab: Int = 0
+    defaultTab: Int = 0,
+    onOpenFile: (String) -> Unit = {}
 ) {
     initialTab = defaultTab
     val context = LocalContext.current
@@ -78,6 +79,8 @@ fun SshScreen(
     var passwordVisible by remember { mutableStateOf(false) }
     var rememberPassword by remember { mutableStateOf(false) }
     var showUploadPicker by remember { mutableStateOf(false) }
+    var showNewItemDialog by remember { mutableStateOf(false) }
+    var newItemIsFolder by remember { mutableStateOf(false) }
     var pendingDownloadPath by remember { mutableStateOf("") }
     var showSecurityWarning by remember { mutableStateOf(false) }
     var warningAccepted by remember { mutableStateOf(false) }
@@ -319,7 +322,21 @@ fun SshScreen(
                                 terminalInput = ""
                                 commandHistory.add(cmd)
                                 historyIndex = -1
-                                terminalShell?.sendCommand(cmd)
+                                
+                                // Intercept 'code' command
+                                if (cmd.startsWith("code ")) {
+                                    val path = cmd.substringAfter("code ").trim()
+                                    // Robust path resolution
+                                    val fullPath = when {
+                                        path.startsWith("/") -> path
+                                        path.startsWith("./") -> "$currentPath/${path.substring(2)}"
+                                        path == "." -> currentPath
+                                        else -> if (currentPath.endsWith("/")) "$currentPath$path" else "$currentPath/$path"
+                                    }
+                                    onOpenFile(fullPath)
+                                } else {
+                                    terminalShell?.sendCommand(cmd)
+                                }
                             }
                         },
                         onClear = { terminalOutput = "" },
@@ -352,13 +369,60 @@ fun SshScreen(
                             currentPath = dir
                             refreshFiles(dir, { files = it }, { filesLoading = it })
                         },
+                        onOpenFile = onOpenFile,
                         onUpload = { showUploadPicker = true },
+                        onNewFile = { 
+                            newItemIsFolder = false
+                            showNewItemDialog = true 
+                        },
+                        onNewFolder = {
+                            newItemIsFolder = true
+                            showNewItemDialog = true
+                        },
                         onDownload = { file ->
                             pendingDownloadPath = file.path
                             downloadLauncher.launch(file.name)
                         },
                         onRefresh = {
                             refreshFiles(currentPath, { files = it }, { filesLoading = it })
+                        }
+                    )
+                }
+
+                if (showNewItemDialog) {
+                    var name by remember { mutableStateOf("") }
+                    AlertDialog(
+                        onDismissRequest = { showNewItemDialog = false },
+                        title = { Text(if (newItemIsFolder) "Folder Baru" else "File Baru") },
+                        text = {
+                            OutlinedTextField(
+                                value = name,
+                                onValueChange = { name = it },
+                                label = { Text("Nama") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                if (name.isNotBlank()) {
+                                    val path = if (currentPath.endsWith("/")) "$currentPath$name" else "$currentPath/$name"
+                                    Thread {
+                                        val res = if (newItemIsFolder) SshManager.createNewFolder(path) else SshManager.createNewFile(path)
+                                        handler.post {
+                                            res.onSuccess {
+                                                showNewItemDialog = false
+                                                refreshFiles(currentPath, { files = it }, { filesLoading = it })
+                                            }.onFailure { e ->
+                                                Toast.makeText(context, "Gagal: ${e.message}", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    }.start()
+                                }
+                            }) { Text("Buat") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showNewItemDialog = false }) { Text("Batal") }
                         }
                     )
                 }
@@ -376,9 +440,27 @@ fun SshScreen(
                                 SshManager.openShell().getOrNull()
                             }
                             terminalShell = shell
-                            shell?.onOutput = { data ->
-                                handler.post { terminalOutput += data }
+                            val listener: (String) -> Unit = { data ->
+                                handler.post {
+                                    terminalOutput += data
+                                    
+                                    // Automatic Path Sync Logic
+                                    // Look for patterns like user@host:path$
+                                    val lastLines = terminalOutput.lines().takeLast(5)
+                                    for (line in lastLines.reversed()) {
+                                        val match = Regex("@[^:]+:([^$]+)\\$").find(line)
+                                        if (match != null) {
+                                            val detectedPath = match.groupValues[1]
+                                            if (detectedPath.isNotBlank() && detectedPath != "~") {
+                                                currentPath = detectedPath
+                                            } else if (detectedPath == "~") {
+                                                currentPath = SshManager.homePath
+                                            }
+                                        }
+                                    }
+                                }
                             }
+                            shell?.addOutputListener(listener)
                             shell?.onSudoPrompt = {
                                 handler.post { showSudoDialog = true }
                             }
@@ -388,9 +470,27 @@ fun SshScreen(
                         } else {
                             val shell = SshManager.getShell()
                             terminalShell = shell
-                            shell?.onOutput = { data ->
-                                handler.post { terminalOutput += data }
+                            val listener: (String) -> Unit = { data ->
+                                handler.post {
+                                    terminalOutput += data
+                                    
+                                    // Automatic Path Sync Logic
+                                    // Look for patterns like user@host:path$
+                                    val lastLines = terminalOutput.lines().takeLast(5)
+                                    for (line in lastLines.reversed()) {
+                                        val match = Regex("@[^:]+:([^$]+)\\$").find(line)
+                                        if (match != null) {
+                                            val detectedPath = match.groupValues[1]
+                                            if (detectedPath.isNotBlank() && detectedPath != "~") {
+                                                currentPath = detectedPath
+                                            } else if (detectedPath == "~") {
+                                                currentPath = SshManager.homePath
+                                            }
+                                        }
+                                    }
+                                }
                             }
+                            shell?.addOutputListener(listener)
                             shell?.onSudoPrompt = {
                                 handler.post { showSudoDialog = true }
                             }
@@ -687,19 +787,56 @@ private fun TerminalTab(
     val annotated = remember(output) {
         if (output.isEmpty()) return@remember null
         buildAnnotatedString {
-            val lines = output.split("\n")
-            for ((i, line) in lines.withIndex()) {
-                if (i > 0) append("\n")
-                when {
-                    line.startsWith("Error:") || line.startsWith("❌") ->
-                        withStyle(SpanStyle(color = errorColor)) { append(line) }
-                    line.contains(" $ ") || line.contains("$ ") -> {
-                        val idx = line.indexOf("$ ")
-                        withStyle(SpanStyle(color = promptColor)) { append(line.substring(0, idx + 1)) }
-                        withStyle(SpanStyle(color = cmdColor)) { append(line.substring(idx + 1)) }
+            var currentPos = 0
+            // Broadest possible regex to catch CSI ([), OSC (]), and other control sequences
+            val ansiRegex = Regex("\\u001B\\[[?;\\d]*[A-Za-z]|\\u001B\\][0-9];.*?(\\u0007|\\u001B\\\\)|\\u001B.")
+            val matches = ansiRegex.findAll(output).toList()
+            
+            var currentColor = outputColor
+            
+            for (match in matches) {
+                // Style text before the escape code
+                val textBefore = output.substring(currentPos, match.range.first)
+                if (textBefore.isNotEmpty()) {
+                    withStyle(SpanStyle(color = currentColor)) {
+                        append(textBefore)
                     }
-                    else ->
-                        withStyle(SpanStyle(color = outputColor)) { append(line) }
+                }
+                
+                val ansiCode = match.value
+                // Process only color sequences
+                if (ansiCode.startsWith("\u001B[") && ansiCode.endsWith("m")) {
+                    val content = ansiCode.substring(2, ansiCode.length - 1)
+                    if (content.isEmpty() || content == "0" || content == "00") {
+                        currentColor = outputColor
+                    } else {
+                        val codes = content.split(";")
+                        for (rawCode in codes) {
+                            val code = rawCode.trim().removePrefix("0").ifEmpty { "0" }
+                            when (code) {
+                                "0" -> currentColor = outputColor
+                                "31" -> currentColor = errorColor
+                                "32" -> currentColor = cmdColor
+                                "33" -> currentColor = promptColor
+                                "34" -> currentColor = Color(0xFF569CD6) // Blue
+                                "35" -> currentColor = Color(0xFFC586C0) // Magenta
+                                "36" -> currentColor = Color(0xFF4EC9B0) // Cyan
+                                "91" -> currentColor = Color(0xFFFF5555) // Bright Red
+                                "92" -> currentColor = Color(0xFF55FF55) // Bright Green
+                                "93" -> currentColor = Color(0xFFFFFF55) // Bright Yellow
+                                "94" -> currentColor = Color(0xFF5555FF) // Bright Blue
+                            }
+                        }
+                    }
+                }
+                // Anything else starting with ESC (\u001B) is effectively hidden here
+                currentPos = match.range.last + 1
+            }
+            
+            // Remaining text
+            if (currentPos < output.length) {
+                withStyle(SpanStyle(color = currentColor)) {
+                    append(output.substring(currentPos))
                 }
             }
         }
@@ -802,10 +939,18 @@ private fun FilesTab(
     files: List<SshFile>,
     loading: Boolean,
     onNavigate: (String) -> Unit,
+    onOpenFile: (String) -> Unit,
     onUpload: () -> Unit,
+    onNewFile: () -> Unit,
+    onNewFolder: () -> Unit,
     onDownload: (SshFile) -> Unit,
     onRefresh: () -> Unit
 ) {
+    val context = LocalContext.current
+    val downloadDir = remember {
+        File(context.getExternalFilesDir(null), "SilicaScripts").apply { if (!exists()) mkdirs() }
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -818,11 +963,17 @@ private fun FilesTab(
                 fontSize = 13.sp,
                 modifier = Modifier.weight(1f)
             )
-            IconButton(onClick = onRefresh) {
-                Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+            IconButton(onClick = onNewFolder) {
+                Icon(Icons.Filled.CreateNewFolder, contentDescription = "New Folder", modifier = Modifier.size(20.dp))
+            }
+            IconButton(onClick = onNewFile) {
+                Icon(Icons.Filled.NoteAdd, contentDescription = "New File", modifier = Modifier.size(20.dp))
             }
             IconButton(onClick = onUpload) {
-                Icon(Icons.Filled.UploadFile, contentDescription = "Upload")
+                Icon(Icons.Filled.UploadFile, contentDescription = "Upload", modifier = Modifier.size(20.dp))
+            }
+            IconButton(onClick = onRefresh) {
+                Icon(Icons.Filled.Refresh, contentDescription = "Refresh", modifier = Modifier.size(20.dp))
             }
         }
 
@@ -855,18 +1006,39 @@ private fun FilesTab(
                     }
                 }
                 items(files) { file ->
+                    val isDownloaded = File(downloadDir, file.name).exists()
+                    
                     FileRow(
                         icon = if (file.isDirectory) Icons.Filled.Folder else Icons.AutoMirrored.Filled.InsertDriveFile,
                         name = file.name,
                         isDir = file.isDirectory,
                         size = file.size,
+                        isDownloaded = isDownloaded,
                         onClick = {
                             if (file.isDirectory) {
                                 onNavigate(file.path)
+                            } else {
+                                onOpenFile(file.path)
                             }
                         },
                         onDownload = if (!file.isDirectory) {
-                            { onDownload(file) }
+                            {
+                                val localFile = File(downloadDir, file.name)
+                                Thread {
+                                    SshManager.downloadFile(file.path, localFile.absolutePath)
+                                        .onSuccess {
+                                            (context as? android.app.Activity)?.runOnUiThread {
+                                                Toast.makeText(context, "Saved to SilicaScripts", Toast.LENGTH_SHORT).show()
+                                                onRefresh()
+                                            }
+                                        }
+                                        .onFailure { e ->
+                                            (context as? android.app.Activity)?.runOnUiThread {
+                                                Toast.makeText(context, "Gagal: ${e.message}", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                }.start()
+                            }
                         } else null
                     )
                 }
@@ -932,6 +1104,7 @@ private fun FileRow(
     name: String,
     isDir: Boolean,
     size: Long,
+    isDownloaded: Boolean = false,
     onClick: () -> Unit,
     onDownload: (() -> Unit)? = null
 ) {
@@ -955,11 +1128,17 @@ private fun FileRow(
                 icon,
                 contentDescription = null,
                 modifier = Modifier.size(24.dp),
-                tint = if (isDir) DeepRose else MaterialTheme.colorScheme.onSurfaceVariant
+                tint = if (isDir) DeepRose else if (isDownloaded) Color(0xFF00FF88) else MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(name, fontSize = 14.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(name, fontSize = 14.sp)
+                    if (isDownloaded) {
+                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Color(0xFF00FF88), modifier = Modifier.size(12.dp))
+                    }
+                }
                 if (!isDir) {
                     Text(
                         formatSize(size),
@@ -968,7 +1147,7 @@ private fun FileRow(
                     )
                 }
             }
-            if (onDownload != null) {
+            if (onDownload != null && !isDownloaded) {
                 IconButton(onClick = onDownload) {
                     Icon(Icons.Filled.Download, contentDescription = "Download", modifier = Modifier.size(20.dp))
                 }

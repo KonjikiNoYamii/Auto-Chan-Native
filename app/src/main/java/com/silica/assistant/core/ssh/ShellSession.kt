@@ -11,7 +11,16 @@ class ShellSession(
 
     private val readerThread: Thread
     private var running = true
-    var onOutput: ((String) -> Unit)? = null
+    private val outputListeners = mutableListOf<(String) -> Unit>()
+    
+    fun addOutputListener(listener: (String) -> Unit) {
+        outputListeners.add(listener)
+    }
+
+    fun removeOutputListener(listener: (String) -> Unit) {
+        outputListeners.remove(listener)
+    }
+
     var onSudoPrompt: (() -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
@@ -21,7 +30,7 @@ class ShellSession(
     private val writeExecutor = Executors.newSingleThreadExecutor()
 
     init {
-        channel.setPtyType("xterm")
+        channel.setPtyType("xterm-256color")
         channel.setPty(true)
         channel.connect()
 
@@ -35,9 +44,9 @@ class ShellSession(
                     val len = inp.read(buf)
                     if (len <= 0) break
                     val raw = String(buf, 0, len, Charsets.UTF_8)
-                    val cleaned = stripAnsi(raw)
+                    val cleaned = normalizeOutput(raw)
                     outputBuf.append(cleaned)
-                    onOutput?.invoke(cleaned)
+                    outputListeners.forEach { it.invoke(cleaned) }
 
                     if (cleaned.contains("[sudo]", ignoreCase = true) ||
                         cleaned.contains("password for", ignoreCase = true) ||
@@ -88,9 +97,23 @@ class ShellSession(
         try { readerThread.join(2000) } catch (_: Exception) {}
     }
 
-    private fun stripAnsi(text: String): String {
-        return text.replace(Regex("\u001B\\[[;\\d]*[A-Za-z]"), "")
-            .replace("\u0007", "")
+    private fun normalizeOutput(text: String): String {
+        // 1. Aggressively remove OSC sequences (title setting)
+        // \u001B]... until \u0007 (BEL) or \u001B\\ (ST)
+        var filtered = text.replace(Regex("\\u001B\\][0-9];.*?(\\u0007|\\u001B\\\\)"), "")
+        
+        // 2. Remove remaining BEL and other stray control characters
+        // We keep \n (10), \r (13), and \t (9)
+        // We also KEEP \u001B (27) for the UI parser to handle CSI colors
+        val sb = StringBuilder()
+        for (char in filtered) {
+            val code = char.code
+            if (code == 27 || code == 10 || code == 13 || code == 9 || code >= 32) {
+                sb.append(char)
+            }
+        }
+        
+        return sb.toString()
             .replace("\r\n", "\n")
             .replace("\r", "\n")
     }

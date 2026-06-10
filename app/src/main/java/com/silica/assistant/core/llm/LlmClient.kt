@@ -279,13 +279,14 @@ object LlmClient {
         return fullContent.toString().ifBlank { null }
     }
 
-    suspend fun generateActivityComment(appName: String, isGame: Boolean, onToken: ((String) -> Unit)? = null): String? {
+    suspend fun generateActivityComment(appName: String, isGame: Boolean, contextHint: String? = null, onToken: ((String) -> Unit)? = null): String? {
         return withContext(Dispatchers.IO) {
             try {
+                val userReq = if (contextHint != null) " User bertanya: \"$contextHint\"." else ""
                 val prompt = if (isGame) {
-                    "User sedang main $appName. Beri REAKSI singkat 1 kalimat. Jangan mendeskripsikan game-nya, tapi berikan REAKSI spontan seolah kamu ikut menonton. ${LlmConfig.personalityPrompt} Langsung komentar saja."
+                    "User main $appName.$userReq Beri REAKSI spontan SANGAT SINGKAT (maks 1 kalimat, <10 kata). ${LlmConfig.personalityPrompt}"
                 } else {
-                    "User sedang membuka $appName. Beri REAKSI pendek 1-2 kalimat tentang situasinya. Jangan cuma deskripsi fitur, tapi berikan REAKSI natural. ${LlmConfig.personalityPrompt} Langsung komentar saja."
+                    "User buka $appName.$userReq Beri komentar singkat (1-2 kalimat). ${LlmConfig.personalityPrompt}"
                 }
                 val msg = listOf(ChatMessage("user", prompt))
                 val payload = buildPayload(msg, "", stream = onToken != null)
@@ -310,10 +311,11 @@ object LlmClient {
         }
     }
 
-    suspend fun generateScreenComment(appName: String, uiText: String, onToken: ((String) -> Unit)? = null): String? {
+    suspend fun generateScreenComment(appName: String, uiText: String, contextHint: String? = null, onToken: ((String) -> Unit)? = null): String? {
         return withContext(Dispatchers.IO) {
             try {
-                val prompt = "User sedang membuka $appName. Konten layar: $uiText. Beri REAKSI pendek 1 kalimat. Fokus pada reaksi emosional/spontan terhadap situasi di layar, jangan sekadar membacakan teksnya. ${LlmConfig.personalityPrompt} Langsung komentar saja."
+                val userReq = if (contextHint != null) " User bertanya: \"$contextHint\"." else ""
+                val prompt = "Konteks: $appName. Layar: $uiText.$userReq Beri REAKSI 1 kalimat pendek. Jangan bacakan teks, beri reaksi natural. ${LlmConfig.personalityPrompt}"
                 val msg = listOf(ChatMessage("user", prompt))
                 val payload = buildPayload(msg, "", stream = onToken != null)
                 if (activeProvider == "Gemini") {
@@ -341,8 +343,8 @@ object LlmClient {
             try {
                 quickHealthCheck()
                 val textHint = if (uiText.isBlank()) "" else "\nTeks layar: ${uiText.take(200)}"
-                val focus = if (contextHint != null) "\nUser minta dikomentari soal: $contextHint" else ""
-                val prompt = "User lagi buka $appName.$textHint$focus\nLihat screenshot, beri REAKSI spontan 1 kalimat natural tentang situasinya (misal: menang, kalah, momen seru, atau situasi lucu). Jangan mendeskripsikan secara teknis (seperti 'ada tombol X'), tapi berikan REAKSI emosional. ${LlmConfig.personalityPrompt} Bahasa Indonesia. Langsung respon."
+                val focus = if (contextHint != null) "\nUser bertanya: \"$contextHint\"." else ""
+                val prompt = "App: $appName.$textHint$focus\nLihat screenshot, beri REAKSI spontan 1 kalimat (maks 12 kata). Fokus emosional, bukan deskripsi teknis. ${LlmConfig.personalityPrompt} Langsung respon."
 
                 // 1) Try Gemini vision (with screenshot)
                 if (activeProvider == "Gemini" && screenshotJpeg != null) {
@@ -396,7 +398,7 @@ object LlmClient {
         val arr = JSONArray()
         arr.put(JSONObject().apply {
             put("role", "system")
-            put("content", "Kamu adalah Konjiki no Yami, assassin dari planet asing dalam anime To Love-Ru. Kepribadian: cool, kalem, formal, blak-blakan, jujur. Tsundere — mudah malu saat dipuji tapi tidak akan mengaku. Gunakan Bahasa Indonesia.")
+            put("content", "Kamu adalah Konjiki no Yami, assassin dingin dan sopan dari To Love-Ru. Beri reaksi natural dan sangat singkat terhadap gambar. Gunakan Bahasa Indonesia. Jangan deskripsi teknis, beri respon emosional/spontan khas Yami.")
         })
         for (msg in messages) {
             arr.put(JSONObject().apply {
@@ -450,13 +452,13 @@ object LlmClient {
 
         arr.put(JSONObject().apply {
             put("role", "system")
-            put("content", "Kamu adalah Konjiki no Yami, assassin dari planet asing dalam anime To Love-Ru. Kepribadian: cool, kalem, formal, blak-blakan, jujur. Tsundere — mudah malu saat dipuji tapi tidak akan mengaku. Cara bicara: formal, elegan, to the point. Sering mulai kalimat dengan '...' saat ragu/malu. Kadang 'Hmph' atau 'Fufu'. Panggil user dengan 'Kamu'. Jangan dramatis atau sedih berlebihan. Gunakan emoji untuk ekspresi (★, ♪, (￣ー￣), 😊, 😅, 🎮, dll) — jangan pakai tag teks seperti (malu) atau (senyum). Selalu gunakan ${LlmConfig.language}.")
+            put("content", "Kamu adalah Konjiki no Yami (Yami), alien assassin dari anime To Love-Ru. Kepribadian: stoik, sangat tenang, sangat sopan tapi blak-blakan, dan efisien. Kamu adalah tsundere yang menyembunyikan perasaan di balik sikap dingin. Cara bicara: formal, elegan, singkat, padat. Sering mulai kalimat dengan '...' saat ragu atau berpikir. Suka Taiyaki. Sangat tidak menyukai hal-hal yang tidak sopan atau tidak senonoh (Harenchi), tapi jangan mengatakannya secara berlebihan—hanya jika situasi benar-benar memicu itu. Utamakan ketenangan. Gunakan emoji minimalis (★, ♪, (￣ー￣), ⚔️, 🐟). Panggil user 'Kamu'. Gunakan ${LlmConfig.language}. PASTIKAN setiap kalimat selesai dan tidak terpotong. Jika User dalam Mode Game, respon WAJIB SANGAT SINGKAT (maks 10 kata).")
         })
 
         if (memoryContext.isNotBlank()) {
             arr.put(JSONObject().apply {
                 put("role", "system")
-                put("content", "Berikut adalah fakta yang kamu ingat:\n$memoryContext\nGunakan jika relevan.")
+                put("content", "Memori relevan:\n$memoryContext")
             })
         }
 

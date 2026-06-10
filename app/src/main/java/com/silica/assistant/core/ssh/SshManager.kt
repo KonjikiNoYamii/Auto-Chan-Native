@@ -246,6 +246,46 @@ object SshManager {
         }
     }
 
+    fun readFileContent(remotePath: String): Result<String> = runCatching {
+        val s = session ?: throw Exception("Not connected")
+        val channel = s.openChannel("sftp") as ChannelSftp
+        try {
+            channel.connect()
+            val output = ByteArrayOutputStream()
+            channel.get(remotePath, output)
+            output.toString("UTF-8")
+        } finally {
+            try { channel.disconnect() } catch (_: Exception) {}
+        }
+    }
+
+    fun saveFileContent(remotePath: String, content: String): Result<Unit> = runCatching {
+        val s = session ?: throw Exception("Not connected")
+        val channel = s.openChannel("sftp") as ChannelSftp
+        try {
+            channel.connect()
+            val input = content.byteInputStream(Charsets.UTF_8)
+            channel.put(input, remotePath)
+        } finally {
+            try { channel.disconnect() } catch (_: Exception) {}
+        }
+    }
+
+    fun createNewFile(remotePath: String): Result<Unit> = runCatching {
+        saveFileContent(remotePath, "")
+    }
+
+    fun createNewFolder(remotePath: String): Result<Unit> = runCatching {
+        val s = session ?: throw Exception("Not connected")
+        val channel = s.openChannel("sftp") as ChannelSftp
+        try {
+            channel.connect()
+            channel.mkdir(remotePath)
+        } finally {
+            try { channel.disconnect() } catch (_: Exception) {}
+        }
+    }
+
     fun downloadFile(remotePath: String, localPath: String): Result<Unit> = runCatching {
         val s = session ?: throw Exception("Not connected")
         val channel = s.openChannel("sftp") as ChannelSftp

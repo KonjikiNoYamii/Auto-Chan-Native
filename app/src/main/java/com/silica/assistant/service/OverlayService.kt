@@ -90,6 +90,7 @@ class OverlayService : Service() {
     private val activityScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private lateinit var activityDetector: ActivityDetector
     private var lastDetectedApp: String? = null
+    private var lastDetectedEvent: String? = null
     private var lastCommentTime = 0L
     private var nextCommentDelay = Random.nextLong(20_000, 60_000)
     private var lastAutoScreenCommentTime = 0L
@@ -123,6 +124,22 @@ class OverlayService : Service() {
                     if (::controller.isInitialized && overlayView.windowToken != null) {
                         controller.update()
 
+                        // Real-time size update
+                        val metrics_sz = resources.displayMetrics
+                        val targetSizeDp = if (GameModeManager.isGameMode) 
+                            com.silica.assistant.core.config.AssistantConfig.overlaySizeGameMode 
+                        else 
+                            com.silica.assistant.core.config.AssistantConfig.overlaySizeDefault
+                        val targetPx = (targetSizeDp * metrics_sz.density).toInt()
+                        
+                        if (waifuWidth != targetPx) {
+                            waifuWidth = targetPx
+                            waifuHeight = targetPx
+                            waifuImage.layoutParams.width = waifuWidth
+                            waifuImage.layoutParams.height = waifuHeight
+                            windowManager.updateViewLayout(overlayView, params)
+                        }
+
                         // game mode transparency: opaque on touch, fade after 10s idle
                     if (GameModeManager.isGameMode) {
                         val idleFromTouch = System.currentTimeMillis() - lastGameTouchTime
@@ -130,12 +147,21 @@ class OverlayService : Service() {
                         if (waifuImage.alpha != targetAlpha) waifuImage.alpha = targetAlpha
                     }
 
-                    val gameReq = OverlayEventBus.gameModeRequest
+                        val gameReq = OverlayEventBus.gameModeRequest
                         if (gameReq != null) {
                             OverlayEventBus.gameModeRequest = null
+                            
+                            val metrics = resources.displayMetrics
                             if (gameReq) {
-                                val den = if (waifuWidth > 0) waifuWidth / 120f else 2f
+                                val sizeDp = com.silica.assistant.core.config.AssistantConfig.overlaySizeGameMode
+                                waifuWidth = (sizeDp * metrics.density).toInt()
+                                waifuHeight = (sizeDp * metrics.density).toInt()
+                                waifuImage.layoutParams.width = waifuWidth
+                                waifuImage.layoutParams.height = waifuHeight
+                                
+                                val den = waifuWidth / (120f * metrics.density) * metrics.density
                                 GameModeManager.enterGameMode(this@OverlayService, params.x, params.y, displayWidth, displayHeight, den)
+                                
                                 val half = (60 * den).toInt()
                                 params.gravity = Gravity.TOP or Gravity.START
                                 params.x = displayWidth / 2 - half
@@ -144,6 +170,12 @@ class OverlayService : Service() {
                                 isQuoteScheduled = false
                                 windowManager.updateViewLayout(overlayView, params)
                             } else {
+                                val sizeDp = com.silica.assistant.core.config.AssistantConfig.overlaySizeDefault
+                                waifuWidth = (sizeDp * metrics.density).toInt()
+                                waifuHeight = (sizeDp * metrics.density).toInt()
+                                waifuImage.layoutParams.width = waifuWidth
+                                waifuImage.layoutParams.height = waifuHeight
+                                
                                 val (restoreX, restoreY) = GameModeManager.exitGameMode()
                                 params.x = restoreX
                                 params.y = restoreY
@@ -189,12 +221,22 @@ class OverlayService : Service() {
         windowManager.defaultDisplay.getMetrics(metrics)
         displayWidth = metrics.widthPixels
         displayHeight = metrics.heightPixels
-        waifuWidth = (120 * metrics.density).toInt()
-        waifuHeight = (120 * metrics.density).toInt()
+        
+        val sizeDp = if (GameModeManager.isGameMode) 
+            com.silica.assistant.core.config.AssistantConfig.overlaySizeGameMode 
+        else 
+            com.silica.assistant.core.config.AssistantConfig.overlaySizeDefault
+            
+        waifuWidth = (sizeDp * metrics.density).toInt()
+        waifuHeight = (sizeDp * metrics.density).toInt()
 
         overlayView = LayoutInflater.from(this).inflate(R.layout.overlay_view, null)
 
         waifuImage = overlayView.findViewById(R.id.waifuImage)
+        
+        // Apply initial size
+        waifuImage.layoutParams.width = waifuWidth
+        waifuImage.layoutParams.height = waifuHeight
         bubbleText = overlayView.findViewById(R.id.bubbleText)
 
         controller = WaifuExpressionController(waifuImage, this)
@@ -215,9 +257,16 @@ class OverlayService : Service() {
             if (pkg != null) {
                 android.util.Log.d("GameModeDebug", "Initial check: $pkg")
                 if (GameModeManager.isGame(this@OverlayService, pkg)) {
-                    val den = if (waifuWidth > 0) waifuWidth / 120f else 2f
+                    val metrics = resources.displayMetrics
+                    val sizeDp = com.silica.assistant.core.config.AssistantConfig.overlaySizeGameMode
+                    waifuWidth = (sizeDp * metrics.density).toInt()
+                    waifuHeight = (sizeDp * metrics.density).toInt()
+                    
+                    val den = waifuWidth / (120f * metrics.density) * metrics.density
                     GameModeManager.enterGameMode(this@OverlayService, params.x, params.y, displayWidth, displayHeight, den, auto = true)
                     handler.post {
+                        waifuImage.layoutParams.width = waifuWidth
+                        waifuImage.layoutParams.height = waifuHeight
                         params.gravity = Gravity.TOP or Gravity.START
                         params.x = displayWidth / 2 - (60 * den).toInt()
                         params.y = 0
@@ -320,10 +369,11 @@ class OverlayService : Service() {
                     return@label
                 }
                 handler.post {
-                    if (contextHint.isNullOrBlank()) {
+                    val normalized = normalizeContextHint(contextHint)
+                    if (normalized.isNullOrBlank()) {
                         showBubble("Hmm, biarkan aku lihat...")
                     } else {
-                        showBubble("$contextHint? Biarkan aku lihat...")
+                        showBubble("$normalized? Biarkan aku lihat...")
                     }
                 }
                 generateGameComment(appName, screenText, contextHint)
@@ -368,6 +418,26 @@ class OverlayService : Service() {
         if (!screenOn) return false
         val idleTime = System.currentTimeMillis() - lastTouchTime
         return idleTime > 30_000
+    }
+
+    private fun normalizeContextHint(hint: String?): String? {
+        if (hint.isNullOrBlank()) return hint
+        var result = hint.lowercase()
+
+        // Replace full words
+        result = result.replace(Regex("\\bsaya\\b"), "kamu")
+        result = result.replace(Regex("\\baku\\b"), "kamu")
+
+        // Replace suffixes
+        if (result.endsWith("ku")) {
+            result = result.substring(0, result.length - 2) + "mu"
+        }
+
+        // Replace common patterns
+        result = result.replace("diriku", "dirimu")
+        result = result.replace("milikku", "milikmu")
+
+        return result.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
     }
 
     private fun scheduleRandomQuote() {
@@ -555,11 +625,28 @@ class OverlayService : Service() {
                         if (isGameOrModeApp && !GameModeManager.isGameMode) {
                             nonGameCount = 0
                             android.util.Log.d("GameModeDebug", "Entering Game Mode for $pkg")
-                            val den = if (waifuWidth > 0) waifuWidth / 120f else 2f
+
+                            val metrics = resources.displayMetrics
+                            val sizeDp = com.silica.assistant.core.config.AssistantConfig.overlaySizeGameMode
+                            waifuWidth = (sizeDp * metrics.density).toInt()
+                            waifuHeight = (sizeDp * metrics.density).toInt()
+                            val den = waifuWidth / (120f * metrics.density) * metrics.density
+
                             GameModeManager.enterGameMode(this, params.x, params.y, displayWidth, displayHeight, den, auto = true)
                             lastCommentTime = System.currentTimeMillis()
+                            // Request screen capture permission if not yet granted
+                            if (!ScreenCaptureManager.isReady()) {
+                                handler.postDelayed({
+                                    showBubble("Aku butuh izin buat liat layar kamu biar bisa komentar lebih seru~")
+                                }, 1000)
+                                handler.postDelayed({
+                                    OverlayEventBus.navigateScreen.value = "request_screen_capture"
+                                }, 3500)
+                            }
                             generateContextComment(appName, true)
                             handler.post {
+                                waifuImage.layoutParams.width = waifuWidth
+                                waifuImage.layoutParams.height = waifuHeight
                                 params.gravity = Gravity.TOP or Gravity.START
                                 params.x = displayWidth / 2 - (60 * den).toInt()
                                 params.y = 0
@@ -580,9 +667,20 @@ class OverlayService : Service() {
                                 nonGameCount = 0
                                 android.util.Log.d("GameModeDebug", "Exiting Game Mode")
                                 GameModeManager.exitGameMode()
-                                handler.post { showBubble("Mode game dinonaktifkan") }
+
+                                val metrics = resources.displayMetrics
+                                val sizeDp = com.silica.assistant.core.config.AssistantConfig.overlaySizeDefault
+                                waifuWidth = (sizeDp * metrics.density).toInt()
+                                waifuHeight = (sizeDp * metrics.density).toInt()
+
+                                handler.post { 
+                                    waifuImage.layoutParams.width = waifuWidth
+                                    waifuImage.layoutParams.height = waifuHeight
+                                    showBubble("Mode game dinonaktifkan") 
+                                }
                             }
-                        } else if (isGameOrModeApp && GameModeManager.isGameMode) {
+                        }
+ else if (isGameOrModeApp && GameModeManager.isGameMode) {
                             nonGameCount = 0
                         }
                     }
@@ -593,20 +691,48 @@ class OverlayService : Service() {
                 if (screenOn && GameModeManager.isGameMode) {
                     val elapsed = System.currentTimeMillis() - lastCommentTime
                     val rawScreenText = acc?.getScreenText() ?: ""
-
-                    // Record accessibility level for this game
-                    GameModeManager.recordAccessibilitySample(
-                        GameModeManager.currentAppPackage ?: "",
-                        rawScreenText.isNotBlank()
+                    
+                    // Event Detection (Proactive)
+                    val eventKeywords = mapOf(
+                        "Victory" to listOf("Victory", "Menang", "Win", "Victory!"),
+                        "Defeat" to listOf("Defeat", "Kalah", "Lose", "Defeat!"),
+                        "Level Up" to listOf("Level Up", "Level Berhasil"),
+                        "MVP" to listOf("MVP"),
+                        "Epic" to listOf("Savage", "Maniac", "Legendary", "Mega Kill")
                     )
-
-                    if (elapsed > nextCommentDelay) {
+                    
+                    var detectedEvent: String? = null
+                    for ((event, keys) in eventKeywords) {
+                        if (keys.any { rawScreenText.contains(it, ignoreCase = true) }) {
+                            detectedEvent = event
+                            break
+                        }
+                    }
+                    
+                    if (detectedEvent != null && detectedEvent != lastDetectedEvent) {
+                        lastDetectedEvent = detectedEvent
+                        lastCommentTime = System.currentTimeMillis()
+                        android.util.Log.d("GameModeDebug", "Triggering: Event AI ($detectedEvent)")
+                        val appName = GameModeManager.currentAppName ?: "Game"
+                        generateGameComment(appName, rawScreenText, contextHint = "Kejadian menarik: $detectedEvent")
+                    } else if (elapsed > nextCommentDelay) {
                         lastCommentTime = System.currentTimeMillis()
                         nextCommentDelay = Random.nextLong(180_000, 300_000)
                         android.util.Log.d("GameModeDebug", "Triggering: periodic AI")
                         val appName = GameModeManager.currentAppName ?: "Game"
                         generateGameComment(appName, rawScreenText)
                     }
+                    
+                    // Reset detected event if text cleared
+                    if (detectedEvent == null && lastDetectedEvent != null) {
+                        lastDetectedEvent = null
+                    }
+
+                    // Record accessibility level for this game
+                    GameModeManager.recordAccessibilitySample(
+                        GameModeManager.currentAppPackage ?: "",
+                        rawScreenText.isNotBlank()
+                    )
                 }
             } catch (e: Exception) {
                 android.util.Log.e("GameModeDebug", "Error in loop: ${e.message}")
@@ -630,7 +756,7 @@ class OverlayService : Service() {
                     setBubbleText(tokenBuf.toString())
                 })
                 if (comment != null) {
-                    showBubble(comment)
+                    finalizeBubble(comment)
                     CommentDebugger.record(CommentDebugEntry(
                         appName = appName, contextHint = if (isGame) "Auto-Game" else "Auto-App",
                         promptSent = "app_name: $appName", response = comment,
@@ -653,10 +779,11 @@ class OverlayService : Service() {
     private fun generateGameComment(appName: String, screenText: String, contextHint: String? = null) {
         if (isCommentPending) return
         isCommentPending = true
-        if (contextHint.isNullOrBlank()) {
+        val normalized = normalizeContextHint(contextHint)
+        if (normalized.isNullOrBlank()) {
             showBubble("Mari kita lihat...", persistent = true)
         } else {
-            showBubble("$contextHint? Sebentar...", persistent = true)
+            showBubble("$normalized? Sebentar...", persistent = true)
         }
         val startTime = System.currentTimeMillis()
         activityScope.launch {
@@ -676,7 +803,7 @@ class OverlayService : Service() {
                     } else null
                 }
                 if (visionResult != null) {
-                    showBubble(visionResult)
+                    finalizeBubble(visionResult)
                     CommentDebugger.record(CommentDebugEntry(
                         appName = appName, contextHint = contextHint,
                         promptSent = contextHint ?: "(periodik)", response = visionResult,
@@ -689,12 +816,12 @@ class OverlayService : Service() {
                 if (screenText.length > 10) {
                     val startT2 = System.currentTimeMillis()
                     val tokenBuf2 = StringBuilder()
-                    val screenComment = LlmClient.generateScreenComment(appName, screenText, onToken = { t ->
+                    val screenComment = LlmClient.generateScreenComment(appName, screenText, contextHint, onToken = { t ->
                         tokenBuf2.append(t)
                         setBubbleText(tokenBuf2.toString())
                     })
                     if (screenComment != null) {
-                        showBubble(screenComment)
+                        finalizeBubble(screenComment)
                         CommentDebugger.record(CommentDebugEntry(
                             appName = appName, contextHint = contextHint,
                             promptSent = "screen_text: ${screenText.take(100)}", response = screenComment,
@@ -707,12 +834,12 @@ class OverlayService : Service() {
                 // Tier 3: App-name LLM fallback (pure AI)
                 val startT3 = System.currentTimeMillis()
                 val tokenBuf3 = StringBuilder()
-                val appComment = LlmClient.generateActivityComment(appName, true, onToken = { t ->
+                val appComment = LlmClient.generateActivityComment(appName, true, contextHint, onToken = { t ->
                     tokenBuf3.append(t)
                     setBubbleText(tokenBuf3.toString())
                 })
                 if (appComment != null) {
-                    showBubble(appComment)
+                    finalizeBubble(appComment)
                     CommentDebugger.record(CommentDebugEntry(
                         appName = appName, contextHint = contextHint,
                         promptSent = "app_name: $appName", response = appComment,
@@ -781,7 +908,7 @@ class OverlayService : Service() {
                         setBubbleText(tokenBuf.toString())
                     })
                     if (comment != null) {
-                        showBubble(comment)
+                        finalizeBubble(comment)
                         CommentDebugger.record(CommentDebugEntry(
                             appName = appName, contextHint = "Manual Scan",
                             promptSent = "screen_info request", response = comment,
@@ -839,7 +966,7 @@ class OverlayService : Service() {
                     setBubbleText(tokenBuf.toString())
                 })
                 if (comment != null) {
-                    showBubble(comment)
+                    finalizeBubble(comment)
                     CommentDebugger.record(CommentDebugEntry(
                         appName = appName, contextHint = "Auto Screen",
                         promptSent = "screen_text: ${uiText.take(100)}", response = comment,
@@ -898,6 +1025,39 @@ class OverlayService : Service() {
         }
     }
 
+    fun finalizeBubble(text: String) {
+        handler.post {
+            if (!::bubbleText.isInitialized) return@post
+            bubbleTypingRunnable?.let { handler.removeCallbacks(it) }
+            bubbleDotsRunnable?.let { handler.removeCallbacks(it) }
+            bubbleHideRunnable?.let { handler.removeCallbacks(it) }
+            randomQuoteHandler.removeCallbacksAndMessages(null)
+            bubbleText.visibility = View.VISIBLE
+            bubbleText.alpha = 1f
+            bubbleText.scaleX = 1f
+            bubbleText.scaleY = 1f
+            bubbleText.text = text
+            val duration = if (GameModeManager.isGameMode) {
+                (1500L + text.length * 20L).coerceAtMost(4000L)
+            } else {
+                (2000L + text.length * 30L).coerceAtMost(8000L)
+            }
+            bubbleHideRunnable = Runnable {
+                bubbleText.animate()
+                    .alpha(0f)
+                    .scaleX(0.8f)
+                    .scaleY(0.8f)
+                    .setDuration(200)
+                    .withEndAction {
+                        bubbleText.visibility = View.GONE
+                        scheduleRandomQuote()
+                    }
+                    .start()
+            }
+            handler.postDelayed(bubbleHideRunnable!!, duration)
+        }
+    }
+
     fun showBubble(text: String, persistent: Boolean = false) {
 
         handler.post {
@@ -934,7 +1094,8 @@ class OverlayService : Service() {
             val density = resources.displayMetrics.density
             val onRightSide = params.x > displayWidth / 2
             val availableRight = (displayWidth - params.x - (8 * density).toInt()).coerceAtLeast((120 * density).toInt())
-            val maxW = availableRight.coerceAtMost((240 * density).toInt())
+            val baseMaxW = if (GameModeManager.isGameMode) 180 else 240
+            val maxW = availableRight.coerceAtMost((baseMaxW * density).toInt())
             bubbleText.maxWidth = maxW
             bubbleText.gravity = if (onRightSide) Gravity.END else Gravity.START
 
@@ -947,7 +1108,10 @@ class OverlayService : Service() {
                     if (charIndex <= text.length) {
                         bubbleText.text = text.substring(0, charIndex)
                         charIndex++
-                        val delay = if (charIndex < text.length && text[charIndex-1] in listOf('.', '!', '?', ',')) 200L else 30L
+                        val typingDelay = if (GameModeManager.isGameMode) 15L else 30L
+                        val delay = if (charIndex < text.length && text[charIndex-1] in listOf('.', '!', '?', ',')) {
+                            if (GameModeManager.isGameMode) 100L else 200L
+                        } else typingDelay
                         handler.postDelayed(this, delay)
                     } else {
                         if (persistent && text.endsWith("...")) {
@@ -962,7 +1126,11 @@ class OverlayService : Service() {
                             }
                             handler.postDelayed(bubbleDotsRunnable!!, 500)
                         } else {
-                            val duration = (2000L + text.length * 30L).coerceAtMost(8000L)
+                            val duration = if (GameModeManager.isGameMode) {
+                                (1500L + text.length * 20L).coerceAtMost(4000L)
+                            } else {
+                                (2000L + text.length * 30L).coerceAtMost(8000L)
+                            }
                             bubbleHideRunnable = Runnable {
                                 bubbleText.animate()
                                     .alpha(0f)

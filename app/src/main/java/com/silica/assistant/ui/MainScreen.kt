@@ -58,6 +58,7 @@ import com.silica.assistant.ui.chat.ChatScreen
 import com.silica.assistant.ui.debug.DebugScreen
 import com.silica.assistant.ui.ssh.LaptopInfoScreen
 import com.silica.assistant.ui.ssh.SshScreen
+import com.silica.assistant.ui.ssh.SshEditorScreen
 import com.silica.assistant.ui.theme.DeepRose
 import com.silica.assistant.ui.theme.Espresso
 import com.silica.assistant.ui.viewmodel.AssistantViewModel
@@ -68,6 +69,7 @@ import kotlinx.coroutines.flow.collect
 private sealed class Screen {
     data object Main : Screen()
     data class Ssh(val tab: Int = 0) : Screen()
+    data class Editor(val filePath: String) : Screen()
     data object Info : Screen()
     data object Guide : Screen()
     data object Customize : Screen()
@@ -373,7 +375,14 @@ fun MainScreen() {
         is Screen.Ssh -> {
             SshScreen(
                     onBack = { currentScreen = Screen.Main },
-                    defaultTab = (currentScreen as Screen.Ssh).tab
+                    defaultTab = (currentScreen as Screen.Ssh).tab,
+                    onOpenFile = { path -> currentScreen = Screen.Editor(path) }
+            )
+        }
+        is Screen.Editor -> {
+            SshEditorScreen(
+                filePath = (currentScreen as Screen.Editor).filePath,
+                onBack = { currentScreen = Screen.Ssh(tab = 1) }
             )
         }
         is Screen.Info -> {

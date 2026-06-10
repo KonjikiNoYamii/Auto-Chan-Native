@@ -19,4 +19,8 @@ object AssistantConfig {
 
     // SSH: apakah user sudah pernah konfirmasi warning keamanan
     var sshWarningAcknowledged = false
+
+    // Ukuran overlay (dalam dp)
+    var overlaySizeDefault = 120
+    var overlaySizeGameMode = 80
 }

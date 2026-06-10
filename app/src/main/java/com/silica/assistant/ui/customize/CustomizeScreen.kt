@@ -198,6 +198,56 @@ fun CustomizeScreen(onBack: () -> Unit) {
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
+                "Ukuran Overlay",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "Sesuaikan ukuran tampilan waifu di layar.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    var defaultSize by remember { mutableFloatStateOf(com.silica.assistant.core.config.AssistantConfig.overlaySizeDefault.toFloat()) }
+                    Text("Ukuran Default: ${defaultSize.toInt()}dp", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                    Slider(
+                        value = defaultSize,
+                        onValueChange = { 
+                            defaultSize = it
+                            com.silica.assistant.core.config.AssistantConfig.overlaySizeDefault = it.toInt()
+                        },
+                        valueRange = 60f..200f,
+                        steps = 14
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    var gameSize by remember { mutableFloatStateOf(com.silica.assistant.core.config.AssistantConfig.overlaySizeGameMode.toFloat()) }
+                    Text("Ukuran Game Mode: ${gameSize.toInt()}dp", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                    Slider(
+                        value = gameSize,
+                        onValueChange = { 
+                            gameSize = it
+                            com.silica.assistant.core.config.AssistantConfig.overlaySizeGameMode = it.toInt()
+                        },
+                        valueRange = 40f..150f,
+                        steps = 11
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
                 "Ganti Tampilan",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
