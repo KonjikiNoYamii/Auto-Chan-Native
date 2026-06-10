@@ -107,22 +107,29 @@ fun MainScreen() {
     val screenCaptureLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        try {
-            ScreenCaptureManager.init(context)
-            ScreenCaptureManager.resultCode = result.resultCode
-            ScreenCaptureManager.resultData = result.data
-            ScreenCaptureManager.setupProjection(context)
-            if (ScreenCaptureManager.isReady()) {
-                Toast.makeText(context, "Screen capture siap", Toast.LENGTH_SHORT).show()
-            } else {
+        ScreenCaptureManager.init(context)
+        ScreenCaptureManager.resultCode = result.resultCode
+        ScreenCaptureManager.resultData = result.data
+
+        when {
+            result.resultCode != android.app.Activity.RESULT_OK -> {
                 screenCaptureLaunched = false
-                val err = ScreenCaptureManager.lastError ?: "unknown"
-                Toast.makeText(context, "Screen capture gagal ($err)", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Izin screen capture diperlukan untuk overlay", Toast.LENGTH_LONG).show()
             }
-        } catch (e: Exception) {
-            android.util.Log.e("MainScreen", "screen capture callback error", e)
-            screenCaptureLaunched = false
-            Toast.makeText(context, "Gagal: ${e.message}", Toast.LENGTH_LONG).show()
+            result.data == null -> {
+                screenCaptureLaunched = false
+                Toast.makeText(context, "Gagal mendapatkan izin screen capture", Toast.LENGTH_LONG).show()
+            }
+            else -> {
+                // Izin diberikan. Coba inisialisasi langsung.
+                // Kalau gagal (butuh foreground service), overlay akan init via tryRestore().
+                try {
+                    ScreenCaptureManager.setupProjection(context)
+                } catch (_: Exception) { }
+                if (ScreenCaptureManager.isReady()) {
+                    Toast.makeText(context, "Screen capture siap", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 

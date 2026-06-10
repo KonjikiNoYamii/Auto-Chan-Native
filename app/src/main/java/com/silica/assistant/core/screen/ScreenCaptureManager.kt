@@ -24,7 +24,6 @@ object ScreenCaptureManager {
 
     var resultCode: Int = Activity.RESULT_CANCELED
     var resultData: Intent? = null
-    var lastError: String? = null
 
     private var displayWidth = 0
     private var displayHeight = 0
@@ -42,7 +41,6 @@ object ScreenCaptureManager {
     }
 
     fun setupProjection(context: Context): Boolean {
-        lastError = null
         try {
             val mgr = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             android.util.Log.d("ScreenCapture", "setupProjection: rc=$resultCode rd=$resultData w=${displayWidth}x${displayHeight}")
@@ -54,11 +52,9 @@ object ScreenCaptureManager {
                 return ready
             }
             android.util.Log.w("ScreenCapture", "setupProjection skipped: rc=$resultCode rd=${resultData != null} w=$displayWidth h=$displayHeight")
-            lastError = "skipped rc=$resultCode rd=${resultData != null}"
             return false
         } catch (e: Exception) {
             android.util.Log.e("ScreenCapture", "setupProjection failed", e)
-            lastError = "setup: ${e.message}"
             mediaProjection = null
             return false
         }
@@ -93,7 +89,7 @@ object ScreenCaptureManager {
 
             imageReader?.close()
             imageReader = ImageReader.newInstance(
-                displayWidth.coerceAtLeast(1), displayHeight.coerceAtLeast(1),
+                displayWidth, displayHeight,
                 android.graphics.PixelFormat.RGBA_8888, 2
             )
 
@@ -106,7 +102,6 @@ object ScreenCaptureManager {
             )
         } catch (e: Exception) {
             android.util.Log.e("ScreenCapture", "startCapture failed", e)
-            lastError = e.message
             imageReader?.close()
             imageReader = null
         }
