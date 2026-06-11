@@ -28,12 +28,9 @@
 -keep class kotlinx.serialization.json.** { *; }
 -keep @kotlinx.serialization.Serializable class * { *; }
 
-# Remove logging in release
--assumenosideeffects class android.util.Log {
-    public static *** d(...);
-    public static *** v(...);
-    public static *** i(...);
-}
+# SLF4J (Ktor/OkHttp dependencies)
+-dontwarn org.slf4j.**
+-keep class org.slf4j.** { *; }
 
 # General optimization
 -optimizationpasses 5
