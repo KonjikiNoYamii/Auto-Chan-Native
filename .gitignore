@@ -20,3 +20,4 @@ keystore.properties
 # Ignore environment file
 .env
 .aider*
+google-services.json
