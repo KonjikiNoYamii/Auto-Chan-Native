@@ -31,6 +31,26 @@ class MoodManager(
                 userProfileDao.updateProfile(UserProfileEntity())
             }
             achievementManager.initAchievements()
+            resetDailyQuests()
+        }
+    }
+
+    private suspend fun resetDailyQuests() {
+        val today = getTodayDate()
+        val allCompleted = questDao.getCompletedQuests().first()
+        
+        allCompleted.forEach { quest ->
+            val completionDate = quest.completedAt?.let { 
+                SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it)) 
+            }
+            
+            // Jika tugas selesai bukan hari ini (kemarin atau sebelumnya), reset jadi aktif
+            if (completionDate != null && completionDate != today) {
+                questDao.updateQuest(quest.copy(
+                    isCompleted = false,
+                    completedAt = null
+                ))
+            }
         }
     }
 
