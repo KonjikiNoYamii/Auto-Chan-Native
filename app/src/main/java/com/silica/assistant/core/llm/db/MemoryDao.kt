@@ -4,6 +4,7 @@ import androidx.room.*
 import com.silica.assistant.core.llm.model.ChatMessageEntity
 import com.silica.assistant.core.llm.model.UserFactEntity
 import com.silica.assistant.core.llm.model.UserProfileEntity
+import com.silica.assistant.core.llm.model.QuestEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -40,5 +41,26 @@ interface UserProfileDao {
 
     @Query("UPDATE user_profile SET affinityPoints = affinityPoints + :points WHERE id = 0")
     suspend fun incrementAffinity(points: Int)
+}
+
+@Dao
+interface QuestDao {
+    @Insert
+    suspend fun insertQuest(quest: QuestEntity)
+
+    @Update
+    suspend fun updateQuest(quest: QuestEntity)
+
+    @Query("SELECT * FROM quests WHERE isCompleted = 0 ORDER BY createdAt DESC")
+    fun getActiveQuests(): Flow<List<QuestEntity>>
+
+    @Query("SELECT * FROM quests WHERE title LIKE '%' || :query || '%' AND isCompleted = 0 LIMIT 1")
+    suspend fun findActiveQuestByTitle(query: String): QuestEntity?
+
+    @Query("SELECT COUNT(*) FROM quests WHERE isCompleted = 1 AND completedAt >= :startTime")
+    suspend fun getCompletedCountSince(startTime: Long): Int
+
+    @Delete
+    suspend fun deleteQuest(quest: QuestEntity)
 }
 

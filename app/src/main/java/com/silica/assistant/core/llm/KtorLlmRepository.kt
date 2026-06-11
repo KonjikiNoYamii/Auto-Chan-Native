@@ -276,12 +276,20 @@ class KtorLlmRepository(
     }
 
     private fun buildChatRequest(messages: List<ChatMessage>, memoryContext: String, stream: Boolean): ChatRequest {
-        val moodPrompt = runBlocking { moodManager.getMoodPromptSnippet() }
+        val moodSnippet = runBlocking { moodManager.getMoodPromptSnippet() }
+        val dynamicName = runBlocking { moodManager.getDynamicName() }
         val customPersonality = runBlocking { userFactDao.getFact("custom_personality")?.value ?: DEFAULT_PERSONALITY }
         
         val systemMsg = ChatMessage(
             role = "system",
-            content = "$SYSTEM_RULES\n$customPersonality\n$moodPrompt\nPASTIKAN setiap kalimat selesai dan tidak terpotong. Jika User dalam Mode Game, respon WAJIB SANGAT SINGKAT (maks 10 kata)."
+            content = """
+                $SYSTEM_RULES
+                $customPersonality
+                $moodSnippet
+                User saat ini adalah: $dynamicName
+                PASTIKAN setiap kalimat selesai dan tidak terpotong. 
+                Jika User dalam Mode Game, respon WAJIB SANGAT SINGKAT (maks 10 kata).
+            """.trimIndent()
         )
         val fullMessages = mutableListOf(systemMsg)
         if (memoryContext.isNotBlank()) {
