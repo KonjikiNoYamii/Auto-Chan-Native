@@ -130,14 +130,20 @@ private fun CommandsTab() {
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-                SectionLabel("Media & Suara")
+                SectionLabel("Media & Hiburan")
+                CommandItem("putar lagu [judul/artis]", "Cari & putar lagu otomatis (Spotify/YouTube)")
+                CommandItem("putar genre [genre]", "Putar musik berdasarkan genre (Pop, Rock, dll)")
                 CommandItem("play musik / pause musik / nyalain musik", "Play/Pause musik")
                 CommandItem("next song / lagu berikutnya / skip", "Lagu berikutnya")
                 CommandItem("previous song / lagu sebelumnya", "Lagu sebelumnya")
-                CommandItem("volume naik / besarkan suara", "Volume naik")
-                CommandItem("volume turun / kecilkan suara", "Volume turun")
-                CommandItem("mute / matikan suara", "Mute volume")
-                CommandItem("volume maksimal / full volume", "Volume maksimal")
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                SectionLabel("Hubungan & Obrolan")
+                CommandItem("terima kasih / makasih / thank you", "Naikkan poin afinitas (Yami jadi lebih ramah)")
+                CommandItem("bodoh / jelek / benci", "Turunkan poin afinitas (Yami jadi lebih dingin)")
+                CommandItem("chat / chat ai / tanya", "Buka chat AI (ngobrol dengan Yami)")
+                CommandItem("apa kabar / hari ini gimana", "Obrolan santai berbasis memori")
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
@@ -257,8 +263,18 @@ private fun OverlayTab() {
                 )
                 OverlayStep(
                     icon = Icons.Filled.AutoAwesome,
-                    title = "Auto Comment",
-                    desc = "Waifu komen otomatis tiap ganti app (via AI). Di game tiap 20-90 detik."
+                    title = "Komentar Spontan AI",
+                    desc = "Silica komen otomatis tiap 15 menit (berbasis AI). Dia tau app apa yang lagi kamu buka!"
+                )
+                OverlayStep(
+                    icon = Icons.Filled.Favorite,
+                    title = "Sistem Afinitas (Mood)",
+                    desc = "Yami punya perasaan! Bicara sopan \u2192 Ramah (Tuan). Bicara kasar \u2192 Dingin (Ketus)."
+                )
+                OverlayStep(
+                    icon = Icons.Filled.Psychology,
+                    title = "Memori Jangka Panjang",
+                    desc = "Silica gak akan lupa! Semua riwayat chat tersimpan di database lokal HP kamu."
                 )
                 OverlayStep(
                     icon = Icons.Filled.Star,
