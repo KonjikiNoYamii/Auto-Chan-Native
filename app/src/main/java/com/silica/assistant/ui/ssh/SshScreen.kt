@@ -325,15 +325,19 @@ fun SshScreen(
                                 
                                 // Intercept 'code' command
                                 if (cmd.startsWith("code ")) {
-                                    val path = cmd.substringAfter("code ").trim()
-                                    // Robust path resolution
-                                    val fullPath = when {
-                                        path.startsWith("/") -> path
-                                        path.startsWith("./") -> "$currentPath/${path.substring(2)}"
-                                        path == "." -> currentPath
-                                        else -> if (currentPath.endsWith("/")) "$currentPath$path" else "$currentPath/$path"
-                                    }
-                                    onOpenFile(fullPath)
+                                    val fileName = cmd.substringAfter("code ").trim()
+                                    
+                                    // Robust path resolution by asking shell for current directory
+                                    Thread {
+                                        val res = SshManager.executeCommand("pwd")
+                                        res.onSuccess { pwd ->
+                                            val currentDir = pwd.trim()
+                                            val fullPath = if (fileName.startsWith("/")) fileName else "$currentDir/$fileName"
+                                            handler.post { onOpenFile(fullPath) }
+                                        }.onFailure {
+                                            handler.post { Toast.makeText(context, "Gagal sinkron path", Toast.LENGTH_SHORT).show() }
+                                        }
+                                    }.start()
                                 } else {
                                     terminalShell?.sendCommand(cmd)
                                 }
@@ -450,11 +454,17 @@ fun SshScreen(
                                     for (line in lastLines.reversed()) {
                                         val match = Regex("@[^:]+:([^$]+)\\$").find(line)
                                         if (match != null) {
-                                            val detectedPath = match.groupValues[1]
-                                            if (detectedPath.isNotBlank() && detectedPath != "~") {
-                                                currentPath = detectedPath
+                                            var detectedPath = match.groupValues[1]
+                                            
+                                            // Fix: Expand ~/ to homePath
+                                            if (detectedPath.startsWith("~/")) {
+                                                detectedPath = SshManager.homePath + detectedPath.substring(1)
                                             } else if (detectedPath == "~") {
-                                                currentPath = SshManager.homePath
+                                                detectedPath = SshManager.homePath
+                                            }
+                                            
+                                            if (detectedPath.isNotBlank()) {
+                                                currentPath = detectedPath
                                             }
                                         }
                                     }
@@ -480,11 +490,17 @@ fun SshScreen(
                                     for (line in lastLines.reversed()) {
                                         val match = Regex("@[^:]+:([^$]+)\\$").find(line)
                                         if (match != null) {
-                                            val detectedPath = match.groupValues[1]
-                                            if (detectedPath.isNotBlank() && detectedPath != "~") {
-                                                currentPath = detectedPath
+                                            var detectedPath = match.groupValues[1]
+                                            
+                                            // Fix: Expand ~/ to homePath
+                                            if (detectedPath.startsWith("~/")) {
+                                                detectedPath = SshManager.homePath + detectedPath.substring(1)
                                             } else if (detectedPath == "~") {
-                                                currentPath = SshManager.homePath
+                                                detectedPath = SshManager.homePath
+                                            }
+                                            
+                                            if (detectedPath.isNotBlank()) {
+                                                currentPath = detectedPath
                                             }
                                         }
                                     }
