@@ -13,3 +13,6 @@
 
 # Keep all app classes (prevents R8 from stripping/obfuscating)
 -keep class com.silica.assistant.** { *; }
+
+# SLF4J (Ktor/OkHttp dependencies)
+-dontwarn org.slf4j.**
