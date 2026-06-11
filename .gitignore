@@ -21,3 +21,5 @@ keystore.properties
 .env
 .aider*
 google-services.json
+linkrepo
+session_terakhir_opencode
