@@ -25,9 +25,14 @@
 
     <application
         android:name=".SilicaApplication"
-        android:label="Silica"
+        android:label="Silica Assistant"
+        android:description="@string/app_description"
         android:icon="@drawable/favicon"
-        android:roundIcon="@drawable/favicon">
+        android:roundIcon="@drawable/favicon"
+        android:allowBackup="true"
+        android:fullBackupContent="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        tools:targetApi="31">
 
         <activity
             android:name=".MainActivity"

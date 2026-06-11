@@ -3,6 +3,20 @@
 Android voice-controlled assistant with a floating overlay character ("waifu").  
 Control your phone and laptop hands-free via voice commands in Indonesian/English.
 
+## 🛡️ Play Protect & Keamanan
+Aplikasi ini diinstal secara manual (APK) dan menggunakan izin sensitif (Accessibility, Screen Capture) untuk bekerja sebagai asisten. Hal ini terkadang membuat Google Play Protect memberikan peringatan.
+
+**Langkah jika muncul peringatan "Blocked by Play Protect":**
+1. Klik **"More Details"** (Detail Selengkapnya).
+2. Pilih **"Install Anyway"** (Tetap Instal).
+3. Aplikasi ini aman dan hanya berkomunikasi dengan server AI (OpenRouter/Gemini) dan laptop Anda sendiri.
+
+## 🔄 Cara Update
+Aplikasi memiliki fitur pengecekan update otomatis. Jika muncul notifikasi update:
+1. Klik tombol **Update** di aplikasi.
+2. Tunggu proses download selesai.
+3. Instal APK terbaru yang sudah diunduh.
+
 ## Features
 
 ### 🎤 Voice Commands
