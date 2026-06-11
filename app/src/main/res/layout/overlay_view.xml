@@ -34,4 +34,43 @@
         android:maxWidth="240dp"
         android:elevation="4dp" />
 
+    <!-- Confirmation Buttons -->
+    <LinearLayout
+        android:id="@+id/confirmLayout"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/confirmYes"
+            android:layout_width="44dp"
+            android:layout_height="36dp"
+            android:background="@drawable/confirm_yes"
+            android:gravity="center"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:clickable="true"
+            android:focusable="true"
+            android:lineSpacingExtra="0dp" />
+
+        <TextView
+            android:id="@+id/confirmNo"
+            android:layout_width="44dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/confirm_no"
+            android:gravity="center"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:clickable="true"
+            android:focusable="true"
+            android:lineSpacingExtra="0dp" />
+    </LinearLayout>
+
 </LinearLayout>

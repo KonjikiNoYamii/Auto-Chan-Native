@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.os.Build
 import android.media.MediaPlayer
 import android.util.DisplayMetrics
@@ -59,6 +60,9 @@ class OverlayService : Service() {
 
     private lateinit var waifuImage: ImageView
     private lateinit var bubbleText: TextView
+    private lateinit var confirmLayout: View
+    private lateinit var confirmYes: TextView
+    private lateinit var confirmNo: TextView
 
     private lateinit var controller: WaifuExpressionController
 
@@ -247,6 +251,15 @@ class OverlayService : Service() {
         bubbleText = overlayView.findViewById(R.id.bubbleText)
 
         controller = WaifuExpressionController(waifuImage, this)
+
+        confirmLayout = overlayView.findViewById(R.id.confirmLayout)
+        confirmYes = overlayView.findViewById(R.id.confirmYes)
+        confirmNo = overlayView.findViewById(R.id.confirmNo)
+
+        confirmYes.text = "✓"
+        confirmNo.text = "✗"
+        confirmYes.setOnClickListener { handleConfirmation("ya") }
+        confirmNo.setOnClickListener { handleConfirmation("tidak") }
 
         handler.post(expressionUpdater)
 
@@ -508,16 +521,32 @@ class OverlayService : Service() {
                     touchX = event.rawX
                     touchY = event.rawY
 
-                    // long press → voice start
-                    longPressHandler.postDelayed(
-                            {
-                                longPressTriggered = true
-                                startVoiceWithPermissionCheck()
-                            },
-                            600
-                    )
+                    // Don't consume touch on confirmation buttons — let them handle clicks
+                    var isButtonTouch = false
+                    if (::confirmLayout.isInitialized && confirmLayout.visibility == View.VISIBLE) {
+                        val btnHit = Rect()
+                        confirmYes.getHitRect(btnHit)
+                        if (btnHit.contains(event.x.toInt(), event.y.toInt())) isButtonTouch = true
+                        if (!isButtonTouch) {
+                            confirmNo.getHitRect(btnHit)
+                            if (btnHit.contains(event.x.toInt(), event.y.toInt())) isButtonTouch = true
+                        }
+                    }
 
-                    true
+                    if (isButtonTouch) {
+                        longPressHandler.removeCallbacksAndMessages(null)
+                        false
+                    } else {
+                        // long press → voice start
+                        longPressHandler.postDelayed(
+                                {
+                                    longPressTriggered = true
+                                    startVoiceWithPermissionCheck()
+                                },
+                                600
+                        )
+                        true
+                    }
                 }
                 MotionEvent.ACTION_MOVE -> {
 
@@ -1022,6 +1051,7 @@ class OverlayService : Service() {
                 showBubble(plan)
                 delay(2000)
                 showBubble("Setuju dengan rencana di atas?")
+                showConfirmationButtons()
                 isAwaitingConfirmation = true
             } finally {
                 isCommentPending = false
@@ -1075,6 +1105,7 @@ class OverlayService : Service() {
         val lower = response.lowercase().trim()
         val affirmations = listOf("ya", "setuju", "y", "oke", "ok", "lanjut", "jalankan", "betul", "benar", "yes", "siap", "iya", "iyo", "yoi", "baek", "iyaa", "y", "silahkan")
         val rejections = listOf("tidak", "nggak", "batal", "gak jadi", "stop", "kaga", "no", "cancel", "jangan", "enggak", "tidak jadi", "ndak", "kagak", "ngga")
+        hideConfirmationButtons()
         if (lower in affirmations) {
             isAwaitingConfirmation = false
             showBubble("Baik, aku jalankan~")
@@ -1090,6 +1121,20 @@ class OverlayService : Service() {
             isAwaitingConfirmation = false
             showBubble("Baik, aku sesuaikan~")
             handleAiTask("$original. Tambahan: $response")
+        }
+    }
+
+    private fun showConfirmationButtons() {
+        handler.post {
+            if (!::confirmLayout.isInitialized) return@post
+            confirmLayout.visibility = View.VISIBLE
+        }
+    }
+
+    private fun hideConfirmationButtons() {
+        handler.post {
+            if (!::confirmLayout.isInitialized) return@post
+            confirmLayout.visibility = View.GONE
         }
     }
 
@@ -1159,6 +1204,7 @@ class OverlayService : Service() {
     fun finalizeBubble(text: String) {
         handler.post {
             if (!::bubbleText.isInitialized) return@post
+            hideConfirmationButtons()
             bubbleTypingRunnable?.let { handler.removeCallbacks(it) }
             bubbleDotsRunnable?.let { handler.removeCallbacks(it) }
             bubbleHideRunnable?.let { handler.removeCallbacks(it) }
@@ -1194,6 +1240,8 @@ class OverlayService : Service() {
         handler.post {
 
             if (!::bubbleText.isInitialized) return@post
+
+            hideConfirmationButtons()
 
             bubbleTypingRunnable?.let { handler.removeCallbacks(it) }
             bubbleHideRunnable?.let { handler.removeCallbacks(it) }
