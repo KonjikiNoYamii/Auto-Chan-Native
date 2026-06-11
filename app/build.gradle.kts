@@ -1,8 +1,9 @@
 import java.util.Properties
 
 plugins {
-    id("com.android.application")
-    kotlin("android")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 val keystoreFile = rootProject.file("keystore.properties")
@@ -80,39 +81,32 @@ android {
 }
 
 dependencies {
-    implementation("com.jcraft:jsch:0.1.55")
+    implementation(libs.jsch)
+    implementation(libs.ucrop)
+    
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.ui)
+    implementation(libs.androidx.ui.graphics)
+    implementation(libs.androidx.material3)
+    implementation(libs.androidx.foundation)
+    implementation(libs.androidx.compose.material.icons.extended)
 
-    implementation("com.github.yalantis:ucrop:2.2.8")
+    // Networking & Serialization
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.ktor.client.contentnegotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
+    implementation(libs.kotlinx.serialization.json)
 
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.2")
+    // Dependency Injection
+    implementation(libs.koin.android)
+    implementation(libs.koin.androidx.compose)
 
-    implementation(
-        "androidx.core:core-ktx:1.12.0"
-    )
-
-    implementation(
-        "androidx.activity:activity-compose:1.8.2"
-    )
-
-    implementation(
-        platform(
-            "androidx.compose:compose-bom:2024.02.00"
-        )
-    )
-
-    implementation(
-        "androidx.compose.ui:ui"
-    )
-
-    implementation(
-        "androidx.compose.material3:material3"
-    )
-
-    implementation(
-        "androidx.compose.foundation:foundation"
-    )
-
-    implementation(
-        "androidx.compose.material:material-icons-extended"
-    )
+    // Coroutines
+    implementation(libs.kotlinx.coroutines.android)
 }

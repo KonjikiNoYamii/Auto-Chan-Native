@@ -24,6 +24,7 @@
     </queries>
 
     <application
+        android:name=".SilicaApplication"
         android:label="Silica"
         android:icon="@drawable/favicon"
         android:roundIcon="@drawable/favicon">
