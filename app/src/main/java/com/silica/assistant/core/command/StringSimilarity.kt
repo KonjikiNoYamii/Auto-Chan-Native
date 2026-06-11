@@ -23,7 +23,7 @@ object StringSimilarity {
         return cost[aLen][bLen]
     }
 
-    fun isSimilar(input: String, target: String, threshold: Float = 0.4f): Boolean {
+    fun isSimilar(input: String, target: String, threshold: Float = 0.35f): Boolean {
         if (input == target) return true
         val maxLen = maxOf(input.length, target.length)
         if (maxLen == 0) return true
@@ -32,7 +32,7 @@ object StringSimilarity {
         return ratio <= threshold
     }
 
-    fun bestMatch(input: String, candidates: List<String>, threshold: Float = 0.4f): String? {
+    fun bestMatch(input: String, candidates: List<String>, threshold: Float = 0.35f): String? {
         var best: String? = null
         var bestRatio = Float.MAX_VALUE
         for (candidate in candidates) {

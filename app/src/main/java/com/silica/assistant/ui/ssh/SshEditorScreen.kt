@@ -9,6 +9,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.*
@@ -49,6 +50,9 @@ fun SshEditorScreen(
     var isSaving by remember { mutableStateOf(false) }
     var terminalOutput by remember { mutableStateOf(SshManager.getShell()?.getFullOutput() ?: "") }
     var showTerminal by remember { mutableStateOf(false) }
+    var terminalInput by remember { mutableStateOf("") }
+    var commandHistory = remember { mutableListOf<String>() }
+    var historyIndex by remember { mutableStateOf(-1) }
     var proposedAction by remember { mutableStateOf<Pair<String, String>?>(null) }
     val fileName = filePath.substringAfterLast("/")
 
@@ -223,6 +227,50 @@ fun SshEditorScreen(
                         fontSize = 11.sp,
                         modifier = Modifier.verticalScroll(scrollState)
                     )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = terminalInput,
+                        onValueChange = { terminalInput = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Ketik perintah...", fontSize = 12.sp) },
+                        singleLine = true,
+                        textStyle = TextStyle(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                            color = Color(0xFF00FF88)
+                        ),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = DeepRose,
+                            unfocusedBorderColor = Color(0xFF333333),
+                            cursorColor = Color(0xFF00FF88)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    FilledIconButton(
+                        onClick = {
+                            val cmd = terminalInput.trim()
+                            if (cmd.isNotEmpty()) {
+                                terminalInput = ""
+                                commandHistory.add(cmd)
+                                historyIndex = -1
+                                terminalOutput += "\n$ $cmd\n"
+                                SshManager.getShell()?.sendCommand(cmd)
+                            }
+                        },
+                        modifier = Modifier.size(42.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = DeepRose)
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Run",
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }

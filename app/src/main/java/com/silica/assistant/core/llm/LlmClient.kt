@@ -546,40 +546,36 @@ ${LlmConfig.personalityPrompt}
             try {
                 quickHealthCheck()
                 val prompt = """
-Kamu adalah Yami, asisten AI.
-User menyetujui rencana dan sekarang perintah harus DIJALANKAN.
-Perintah: "$userCommand"
+Kamu adalah asisten AI yang menghasilkan output ACTION terstruktur.
+Perintah user: "$userCommand"
+User sudah menyetujui rencana. LANGSUNG EKSEKUSI.
 
-Tugasmu:
-1. Jika perlu membuat kode/program, tulis kode LENGKAP dalam blok ``` dengan bahasa yang jelas
-2. Jika perlu perintah shell, sebutkan perintah shell yang tepat
-3. Jawab dengan format terstruktur
+Output HANYA format ACTION berikut, TANPA teks lain:
 
-Format jawaban:
-ACTION: [create_file | run_command | show_code | selesai]
-FILE: [path file jika perlu]
-CODE:
-```[language]
-[kode lengkap]
-```
-COMMAND: [perintah shell jika perlu]
-RESULT: [pesan yang akan ditampilkan ke user setelah selesai]
+ACTION: create_folder
+FILE: kalkulator
 
-Contoh untuk "buatkan program kalkulator python":
 ACTION: create_file
-FILE: /tmp/kalkulator.py
+FILE: kalkulator/main.py
 CODE:
 ```python
-print("Kalkulator Sederhana")
-a = float(input("Angka 1: "))
-b = float(input("Angka 2: "))
-print(f"Hasil: {a + b}")
+print("hello")
 ```
-COMMAND: python3 /tmp/kalkulator.py
-RESULT: Program kalkulator sudah dibuat dan dijalankan! Berikut outputnya:
 
-PENTING: Jawab dengan format di ATAS. JANGAN minta konfirmasi lagi.
-${LlmConfig.personalityPrompt}
+ACTION: run_command
+COMMAND: cd SilicaProjects/kalkulator && python3 main.py
+
+ACTION: selesai
+RESULT: Selesai! Program berhasil dibuat.
+
+ATURAN:
+- Semua path RELATIVE terhadap SilicaProjects/
+- Untuk folder: ACTION: create_folder
+- Untuk file: ACTION: create_file + FILE: path + CODE di blok ```
+- Untuk perintah shell: ACTION: run_command + COMMAND: ...
+- ACTION: selesai + RESULT: pesan akhir
+- JANGAN output apapun di luar format ACTION di atas
+- JANGAN minta konfirmasi
                 """.trimIndent()
                 val msg = listOf(ChatMessage("user", prompt))
                 val payload = buildPayload(msg, "", stream = false)

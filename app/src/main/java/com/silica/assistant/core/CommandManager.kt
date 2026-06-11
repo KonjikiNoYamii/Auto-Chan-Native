@@ -170,6 +170,17 @@ object CommandManager {
             }
             return
         }
+
+        // SSH guard: when terminal visible, block non-AI/SSH commands
+        if (OverlayEventBus.isSshActive && result.command !in listOf(
+                "ai_task", "ai_task_typing",
+                "ssh_status", "ssh_connect", "ssh_disconnect",
+                "laptop_info", "chat"
+            )) {
+            OverlayEventBus.send("Sedang di terminal, command diabaikan")
+            return
+        }
+
         when (result.command) {
             "open_spotify" -> {
                 IntentController.openSpotify(context)
@@ -324,11 +335,13 @@ object CommandManager {
             }
             "ai_task" -> {
                 val contextHint = extractContext(effectiveInput, "ai_task")
-                OverlayEventBus.aiTaskCallback?.invoke(contextHint.ifBlank { effectiveInput })
+                OverlayEventBus.aiTerminalPrompt = contextHint.ifBlank { effectiveInput }
+                OverlayEventBus.send("Sedang merencanakan...")
+                OverlayEventBus.navigateScreen.value = "ssh"
             }
             "ai_task_typing" -> {
-                OverlayEventBus.navigateScreen.value = "ai_task_input"
-                OverlayEventBus.onBubble?.invoke("📝 Silakan ketik perintah~")
+                OverlayEventBus.aiTerminalPrompt = ""
+                OverlayEventBus.navigateScreen.value = "ssh"
             }
             "open_debug" -> {
                 OverlayEventBus.navigateScreen.value = "debug"

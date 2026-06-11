@@ -88,6 +88,11 @@ class ShellSession(
         }
     }
 
+    fun injectOutput(text: String) {
+        outputBuf.append(text)
+        outputListeners.forEach { it.invoke(text) }
+    }
+
     fun getFullOutput(): String = outputBuf.toString()
 
     override fun close() {

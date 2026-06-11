@@ -9,6 +9,9 @@ object OverlayEventBus {
     val navigateScreen = mutableStateOf<String?>(null)
     var gameModeRequest: Boolean? = null
 
+    var aiTerminalPrompt: String? = null
+    var isSshActive = false
+
     var accessibilityService: SilicaAccessibilityService? = null
     var screenCaptureCallback: (() -> Unit)? = null
     var gameCommentCallback: ((String) -> Unit)? = null

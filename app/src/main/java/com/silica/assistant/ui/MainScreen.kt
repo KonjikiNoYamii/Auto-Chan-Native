@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshots.SnapshotMutationPolicy
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -85,7 +86,7 @@ fun MainScreen() {
     val context = LocalContext.current
     val viewModel: AssistantViewModel = viewModel()
     val uiState = viewModel.uiState
-    var currentScreen by remember { mutableStateOf<Screen>(Screen.Main) }
+    var currentScreen by remember { mutableStateOf<Screen>(Screen.Main, referentialEqualityPolicy()) }
 
     var updateInfo by remember { mutableStateOf<UpdateChecker.UpdateInfo?>(null) }
     var isDownloading by remember { mutableStateOf(false) }
@@ -294,20 +295,22 @@ fun MainScreen() {
         }
     }
 
-    when (currentScreen) {
-        is Screen.Main -> {
-            Box(
-                    modifier =
-                            Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
-            ) {
-                Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                    HeaderSection(greeting = greeting)
+    Box(modifier = Modifier.fillMaxSize()) {
+        when (currentScreen) {
+            is Screen.Main, is Screen.AiTaskInput -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                ) {
+                    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                        HeaderSection(greeting = greeting)
 
-                    Column(
+                        Column(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        QuickActionChips(
+                        ) {
+                            QuickActionChips(
                                 onChipClick = { label ->
                                     when (label) {
                                         "Terminal" -> currentScreen = Screen.Ssh(tab = 0)
@@ -316,11 +319,11 @@ fun MainScreen() {
                                         "Info" -> {
                                             if (!SshManager.isConnected()) {
                                                 Toast.makeText(
-                                                                context,
-                                                                "SSH not connected",
-                                                                Toast.LENGTH_SHORT
-                                                        )
-                                                        .show()
+                                                        context,
+                                                        "SSH not connected",
+                                                        Toast.LENGTH_SHORT
+                                                    )
+                                                    .show()
                                                 return@QuickActionChips
                                             }
                                             currentScreen = Screen.Info
@@ -331,15 +334,15 @@ fun MainScreen() {
                                         "Debug" -> currentScreen = Screen.Debug
                                     }
                                 }
-                        )
+                            )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
 
-                        StatusBar()
+                            StatusBar()
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
 
-                        CommandInputSection(
+                            CommandInputSection(
                                 commandText = uiState.commandText,
                                 onCommandChange = { viewModel.updateCommandText(it) },
                                 onExecute = {
@@ -347,34 +350,31 @@ fun MainScreen() {
                                         WaifuStateManager.currentState = WaifuState.TALK
                                         CommandManager.execute(context, uiState.commandText)
                                         handler.postDelayed(
-                                                {
-                                                    WaifuStateManager.currentState =
-                                                            WaifuState.RELAX
-                                                },
-                                                3000
+                                            { WaifuStateManager.currentState = WaifuState.RELAX },
+                                            3000
                                         )
                                         viewModel.clearCommand()
                                     }
                                 }
-                        )
+                            )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
 
-                        CommandHistorySection()
+                            CommandHistorySection()
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
 
-                        DebugOutputSection()
+                            DebugOutputSection()
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
 
-                        OverlayControlSection()
+                            OverlayControlSection()
 
-                        Spacer(modifier = Modifier.height(48.dp))
+                            Spacer(modifier = Modifier.height(48.dp))
+                        }
                     }
                 }
             }
-        }
         is Screen.Ssh -> {
             SshScreen(
                     onBack = { currentScreen = Screen.Main },
@@ -411,18 +411,20 @@ fun MainScreen() {
         is Screen.Debug -> {
             DebugScreen(onBack = { currentScreen = Screen.Main })
         }
-        is Screen.AiTaskInput -> {
-            AiTaskInputScreen(
-                onBack = { currentScreen = Screen.Main },
-                onSubmit = { text ->
-                    if (text.isNotBlank()) {
-                        WaifuStateManager.currentState = WaifuState.TALK
-                        CommandManager.execute(context, text)
-                        currentScreen = Screen.Main
-                    }
+    }
+
+    if (currentScreen is Screen.AiTaskInput) {
+        AiTaskInputScreen(
+            onBack = { currentScreen = Screen.Main },
+            onSubmit = { text ->
+                if (text.isNotBlank()) {
+                    WaifuStateManager.currentState = WaifuState.TALK
+                    CommandManager.execute(context, text)
+                    currentScreen = Screen.Main
                 }
-            )
-        }
+            }
+        )
+    }
     }
 
     val currentVersionName = remember {

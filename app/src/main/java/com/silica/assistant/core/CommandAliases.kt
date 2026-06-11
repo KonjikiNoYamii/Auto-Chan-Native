@@ -82,7 +82,6 @@ object CommandAliases {
         "volume_up" to listOf(
             "naikkan volume",
             "volume naik",
-            "besarkan suara",
             "suara lebih keras"
         ),
 
@@ -271,6 +270,7 @@ object CommandAliases {
             "kerjakan",
             "lakukan",
             "eksekusi",
+            "buat",
             "buatkan program",
             "buatkan script",
             "buatkan kode",

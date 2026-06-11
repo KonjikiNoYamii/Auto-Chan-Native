@@ -22,6 +22,7 @@ object VoiceManager {
 
     private var isListening = false
     private var isDestroyed = false
+    private var stoppedByResult = false
 
     var onResult: ((String) -> Unit)? = null
     var onStateChange: ((Boolean) -> Unit)? = null
@@ -113,7 +114,10 @@ object VoiceManager {
 
                         isListening = false
                         onStateChange?.invoke(false)
-                        onErrorCallback?.invoke(error)
+                        if (!stoppedByResult) {
+                            onErrorCallback?.invoke(error)
+                        }
+                        stoppedByResult = false
                         lastRealSpeechTime = System.currentTimeMillis()
 
                         restartRecognizer()
@@ -149,6 +153,7 @@ object VoiceManager {
                                         ?.firstOrNull()
 
                         if (text != null) {
+                            stoppedByResult = true
                             onResult?.invoke(text)
                         }
 
@@ -173,6 +178,7 @@ object VoiceManager {
     // =========================
     fun start() {
         if (isListening) return
+        stoppedByResult = false
         if (speechRecognizer == null) {
             createRecognizer()
             handler.postDelayed({

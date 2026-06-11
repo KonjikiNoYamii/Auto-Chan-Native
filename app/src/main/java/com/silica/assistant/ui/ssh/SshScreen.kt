@@ -37,13 +37,20 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.silica.assistant.core.AiExecutionEngine
 import com.silica.assistant.core.config.AssistantConfig
+import com.silica.assistant.core.llm.LlmClient
+import com.silica.assistant.core.overlay.OverlayEventBus
 import com.silica.assistant.core.ssh.ShellSession
 import com.silica.assistant.core.ssh.SshConnection
 import com.silica.assistant.core.ssh.SshFile
 import com.silica.assistant.core.ssh.SshManager
 import com.silica.assistant.ui.theme.DeepRose
 import com.silica.assistant.ui.theme.Espresso
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
 
 private var initialTab = 0
@@ -86,6 +93,18 @@ fun SshScreen(
     var warningAccepted by remember { mutableStateOf(false) }
     var pendingConnection by remember { mutableStateOf<SshConnection?>(null) }
     val isActive = remember { mutableStateOf(true) }
+
+    DisposableEffect(Unit) {
+        OverlayEventBus.isSshActive = true
+        onDispose { OverlayEventBus.isSshActive = false }
+    }
+
+    var showConfirmSheet by remember { mutableStateOf(false) }
+    var pendingPlan by remember { mutableStateOf("") }
+    var pendingPrompt2 by remember { mutableStateOf("") }
+    var pendingConfirm by remember { mutableStateOf<((Boolean) -> Unit)?>(null) }
+    val shellScope = rememberCoroutineScope()
+    var aiTaskPending by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         if (!connected && SshManager.hasSavedConnection(context)) {
@@ -169,6 +188,105 @@ fun SshScreen(
                             }
                         }
                 }.start()
+            }
+        }
+    }
+
+    fun executeAiTaskInTerminal(prompt: String) {
+        val shell = SshManager.getShell()
+        if (shell == null) {
+            handler.post { terminalOutput += "\n├─ AI Task: $prompt\n└─ Error: Not connected\n" }
+            return
+        }
+
+        shellScope.launch {
+            try {
+                handler.post {
+                    terminalOutput += "\n├─ AI Task: $prompt\n"
+                    terminalOutput += "├─ Merencanakan...\n"
+                }
+                OverlayEventBus.send("Sedang merencanakan...")
+
+                val plan = withContext(Dispatchers.IO) {
+                    LlmClient.generateTaskPlan(prompt)
+                }
+                if (!plan.isNullOrBlank()) {
+                    handler.post {
+                        terminalOutput += "├─ Rencana:\n"
+                        plan.lines().forEach { terminalOutput += "│  $it\n" }
+                    }
+                }
+
+                handler.post {
+                    pendingPlan = plan ?: prompt
+                    pendingPrompt2 = prompt
+                    showConfirmSheet = true
+                }
+                OverlayEventBus.send("Menunggu konfirmasi...")
+
+                val confirmed = suspendCancellableCoroutine<Boolean> { cont ->
+                    pendingConfirm = { result ->
+                        if (cont.isActive) {
+                            cont.resumeWith(Result.success(result))
+                        }
+                        pendingConfirm = null
+                    }
+                }
+                if (!confirmed) {
+                    handler.post { terminalOutput += "└─ Dibatalkan\n" }
+                    OverlayEventBus.send("Dibatalkan")
+                    return@launch
+                }
+
+                handler.post { terminalOutput += "├─ Mengeksekusi...\n" }
+                OverlayEventBus.send("Sedang menjalankan...")
+
+                val response = withContext(Dispatchers.IO) {
+                    LlmClient.executeAiTask(prompt)
+                }
+
+                if (response != null) {
+                    val parseResult = AiExecutionEngine.parseActions(response)
+                    if (parseResult != null && parseResult.actions.isNotEmpty()) {
+                        for ((index, action) in parseResult.actions.withIndex()) {
+                            when (action) {
+                                is AiExecutionEngine.Action.CreateFolder -> {
+                                    handler.post { terminalOutput += "├─ [${index + 1}/${parseResult.actions.size}] mkdir -p '${action.path}'\n" }
+                                    withContext(Dispatchers.IO) { SshManager.executeCommand("mkdir -p '${action.path}'") }
+                                }
+                                is AiExecutionEngine.Action.CreateFile -> {
+                                    handler.post { terminalOutput += "├─ [${index + 1}/${parseResult.actions.size}] write: ${action.path}\n" }
+                                    withContext(Dispatchers.IO) {
+                                        val dir = action.path.substringBeforeLast("/")
+                                        SshManager.executeCommand("mkdir -p '$dir'").getOrThrow()
+                                        SshManager.saveFileContent(action.path, action.code).getOrThrow()
+                                    }
+                                }
+                                is AiExecutionEngine.Action.RunCommand -> {
+                                    handler.post { terminalOutput += "├─ [${index + 1}/${parseResult.actions.size}] ${action.command}\n" }
+                                    shell.sendCommand(action.command)
+                                }
+                            }
+                        }
+                        handler.post { terminalOutput += "└─ Selesai\n" }
+                        OverlayEventBus.send("Selesai")
+                    } else {
+                        handler.post {
+                            terminalOutput += "│  ${response.take(200)}\n"
+                            terminalOutput += "└─ Selesai\n"
+                        }
+                        OverlayEventBus.send("Selesai")
+                    }
+                } else {
+                    handler.post { terminalOutput += "└─ Gagal: AI tidak merespon\n" }
+                    OverlayEventBus.send("Gagal: AI tidak merespon")
+                }
+            } catch (e: Exception) {
+                handler.post {
+                    terminalOutput += "│  Error: ${e.message}\n"
+                    terminalOutput += "└─ Gagal\n"
+                }
+                OverlayEventBus.send("Gagal: ${e.message}")
             }
         }
     }
@@ -521,6 +639,20 @@ fun SshScreen(
         }
     }
 
+    LaunchedEffect(OverlayEventBus.aiTerminalPrompt) {
+        val prompt = OverlayEventBus.aiTerminalPrompt
+        if (prompt != null && prompt.isNotEmpty()) {
+            OverlayEventBus.aiTerminalPrompt = null
+            aiTaskPending = prompt
+        }
+    }
+
+    LaunchedEffect(aiTaskPending) {
+        val prompt = aiTaskPending ?: return@LaunchedEffect
+        executeAiTaskInTerminal(prompt)
+        aiTaskPending = null
+    }
+
     if (showSudoDialog) {
         SudoPasswordDialog(onDismiss = { showSudoDialog = false }) { pwd ->
             terminalShell?.sendPassword(pwd)
@@ -594,6 +726,50 @@ fun SshScreen(
                 }) { Text("Batal") }
             }
         )
+    }
+
+    if (showConfirmSheet) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                showConfirmSheet = false
+                pendingConfirm?.invoke(false)
+            }
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)
+            ) {
+                Text(
+                    "Rencana Eksekusi",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    pendingPlan,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = FontFamily.Monospace
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    OutlinedButton(onClick = {
+                        showConfirmSheet = false
+                        pendingConfirm?.invoke(false)
+                    }) { Text("Batal") }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Button(
+                        onClick = {
+                            showConfirmSheet = false
+                            pendingConfirm?.invoke(true)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = DeepRose)
+                    ) { Text("Setuju") }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
     }
 }
 

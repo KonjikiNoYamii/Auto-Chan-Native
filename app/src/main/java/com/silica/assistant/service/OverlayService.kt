@@ -9,10 +9,9 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.PixelFormat
 import android.graphics.Rect
-import android.animation.ObjectAnimator
 import android.os.Build
 import android.media.MediaPlayer
-import android.view.animation.DecelerateInterpolator
+
 import android.util.DisplayMetrics
 import android.os.Handler
 import android.os.IBinder
@@ -29,7 +28,6 @@ import com.silica.assistant.R
 import com.silica.assistant.core.ActivityDetector
 import com.silica.assistant.core.CommandManager
 import com.silica.assistant.core.CustomAssetManager
-import com.silica.assistant.core.AiExecutionEngine
 import com.silica.assistant.core.debug.CommentDebugEntry
 import com.silica.assistant.core.debug.CommentDebugger
 import com.silica.assistant.core.debug.DebugTier
@@ -108,15 +106,7 @@ class OverlayService : Service() {
     private var nonGameCount = 0
     private var isCommentPending = false
 
-    // ── Result Panel (slide-up from bottom) ──
-    private var resultPanel: View? = null
-    private var resultPanelParams: WindowManager.LayoutParams? = null
-    private var resultPanelHideRunnable: Runnable? = null
 
-    // ── AI Task Execution ──
-    private var isAwaitingConfirmation = false
-    private var pendingAiTask: String? = null
-    private var pendingAiPlan: String? = null
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -265,8 +255,9 @@ class OverlayService : Service() {
 
         confirmYes.text = "✓"
         confirmNo.text = "✗"
-        confirmYes.setOnClickListener { handleConfirmation("ya") }
-        confirmNo.setOnClickListener { handleConfirmation("tidak") }
+        confirmYes.visibility = View.GONE
+        confirmNo.visibility = View.GONE
+        confirmLayout.visibility = View.GONE
 
         handler.post(expressionUpdater)
 
@@ -305,17 +296,13 @@ class OverlayService : Service() {
 
         VoiceManager.onResult = { text ->
             VoiceManager.stop()
-            if (isAwaitingConfirmation) {
-                handleConfirmation(text)
-            } else {
-                showBubble("🎤 $text")
-                handler.postDelayed({
-                    if (bubbleText.text == "🎤 $text") {
-                        showBubble("...")
-                    }
-                }, 800)
-                CommandManager.execute(this, text)
-            }
+            showBubble("🎤 $text")
+            handler.postDelayed({
+                if (bubbleText.text == "🎤 $text") {
+                    showBubble("...")
+                }
+            }, 800)
+            CommandManager.execute(this, text)
         }
 
         VoiceManager.onStateChange = { listening ->
@@ -411,10 +398,6 @@ class OverlayService : Service() {
             } else {
                 generateContextComment(appName, false)
             }
-        }
-
-        OverlayEventBus.aiTaskCallback = { input ->
-            handleAiTask(input)
         }
 
         // Auto-redirect ke Settings kalau izin belum dikasih
@@ -1038,197 +1021,6 @@ class OverlayService : Service() {
     }
 
     // =========================
-    // AI TASK EXECUTION
-    // =========================
-    private fun handleAiTask(userInput: String) {
-        if (isCommentPending) return
-        isCommentPending = true
-        pendingAiTask = userInput
-        showBubble("Baik, aku pikirkan...", persistent = true)
-        activityScope.launch {
-            try {
-                val plan = withContext(Dispatchers.IO) {
-                    LlmClient.generateTaskPlan(userInput)
-                }
-                if (plan == null || plan.isBlank()) {
-                    showBubble("Maaf, aku belum bisa merencanakan itu~")
-                    return@launch
-                }
-                pendingAiPlan = plan
-                showBubble(plan)
-                delay(2000)
-                showBubble("Setuju dengan rencana di atas?")
-                showConfirmationButtons()
-                isAwaitingConfirmation = true
-            } finally {
-                isCommentPending = false
-            }
-        }
-    }
-
-    private fun executeAiTask() {
-        val userInput = pendingAiTask ?: run {
-            showBubble("Tidak ada task yang tertunda~")
-            return
-        }
-        if (isCommentPending) return
-        isCommentPending = true
-        showBubble("Baik, aku jalankan...", persistent = true)
-        activityScope.launch {
-            try {
-                val response = withContext(Dispatchers.IO) {
-                    LlmClient.executeAiTask(userInput)
-                } ?: run {
-                    // Fallback: try SSH with extracted code
-                    val plan = pendingAiPlan ?: ""
-                    val codeBlocks = AiExecutionEngine.extractCodeBlocks(plan)
-                    if (codeBlocks.isNotEmpty() && SshManager.isConnected()) {
-                        val results = mutableListOf<String>()
-                        for (block in codeBlocks) {
-                            val result = AiExecutionEngine.executeViaSsh(block.code, block.language)
-                            result.onSuccess { r -> results.add("✅ $r") }
-                                .onFailure { e -> results.add("❌ ${e.message}") }
-                        }
-                        if (results.isNotEmpty()) {
-                            showResultPanel(results.joinToString("\n"))
-                            return@launch
-                        }
-                    }
-                    showResultPanel("Selesai~ Kode sudah siap.")
-                    return@launch
-                }
-                // Parse the AI execution response
-                val resultText = extractExecutionResult(response)
-                showResultPanel(resultText)
-            } finally {
-                isCommentPending = false
-                pendingAiTask = null
-                pendingAiPlan = null
-            }
-        }
-    }
-
-    private fun handleConfirmation(response: String) {
-        val lower = response.lowercase().trim()
-        val affirmations = listOf("ya", "setuju", "y", "oke", "ok", "lanjut", "jalankan", "betul", "benar", "yes", "siap", "iya", "iyo", "yoi", "baek", "iyaa", "y", "silahkan")
-        val rejections = listOf("tidak", "nggak", "batal", "gak jadi", "stop", "kaga", "no", "cancel", "jangan", "enggak", "tidak jadi", "ndak", "kagak", "ngga")
-        hideConfirmationButtons()
-        if (lower in affirmations) {
-            isAwaitingConfirmation = false
-            showBubble("Baik, aku jalankan~")
-            executeAiTask()
-        } else if (lower in rejections) {
-            isAwaitingConfirmation = false
-            pendingAiTask = null
-            pendingAiPlan = null
-            showBubble("Baik, dibatalkan~")
-        } else {
-            // Treat as correction → re-plan with additional context
-            val original = pendingAiTask ?: ""
-            isAwaitingConfirmation = false
-            showBubble("Baik, aku sesuaikan~")
-            handleAiTask("$original. Tambahan: $response")
-        }
-    }
-
-    private fun showConfirmationButtons() {
-        handler.post {
-            if (!::confirmLayout.isInitialized) return@post
-            confirmLayout.visibility = View.VISIBLE
-        }
-    }
-
-    private fun hideConfirmationButtons() {
-        handler.post {
-            if (!::confirmLayout.isInitialized) return@post
-            confirmLayout.visibility = View.GONE
-        }
-    }
-
-    private fun showResultPanel(text: String) {
-        hideResultPanel()
-        try {
-            val panel = LayoutInflater.from(this).inflate(R.layout.result_panel, null)
-            panel.findViewById<TextView>(R.id.resultText).text = text
-            val overlayType =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                else
-                    WindowManager.LayoutParams.TYPE_PHONE
-            resultPanelParams = WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                overlayType,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                    WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                PixelFormat.TRANSLUCENT
-            ).apply {
-                gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            }
-            windowManager.addView(panel, resultPanelParams)
-            resultPanel = panel
-            // Slide up from below screen
-            handler.post {
-                val h = panel.height.coerceAtLeast(1)
-                panel.translationY = h.toFloat()
-                panel.animate()
-                    .translationY(0f)
-                    .setDuration(350)
-                    .setInterpolator(DecelerateInterpolator())
-                    .start()
-            }
-            // Auto-hide after 6s
-            resultPanelHideRunnable = Runnable { hideResultPanel() }
-            handler.postDelayed(resultPanelHideRunnable!!, 6000)
-            // Tap to dismiss
-            panel.setOnClickListener { hideResultPanel() }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private fun hideResultPanel() {
-        try {
-            resultPanelHideRunnable?.let { handler.removeCallbacks(it) }
-            resultPanel?.let { p ->
-                if (p.windowToken != null) {
-                    p.animate().cancel()
-                    windowManager.removeView(p)
-                }
-            }
-        } catch (_: Exception) {}
-        resultPanel = null
-        resultPanelParams = null
-        resultPanelHideRunnable = null
-    }
-
-    private fun extractExecutionResult(response: String): String {
-        // Try to find RESULT: tag in the AI response
-        val resultRegex = Regex("RESULT:\\s*(.+?)(?:\n|$)", RegexOption.DOT_MATCHES_ALL)
-        val match = resultRegex.find(response)
-        if (match != null) {
-            val result = match.groupValues[1].trim()
-            return result
-
-        }
-        // Check for code blocks + execution
-        val codeBlocks = AiExecutionEngine.extractCodeBlocks(response)
-        if (codeBlocks.isNotEmpty() && SshManager.isConnected()) {
-            val results = mutableListOf<String>()
-            for (block in codeBlocks) {
-                val result = AiExecutionEngine.executeViaSsh(block.code, block.language)
-                result.onSuccess { r -> results.add("✅ $r") }
-                    .onFailure { e -> results.add("❌ ${e.message}") }
-            }
-            if (results.isNotEmpty()) return results.joinToString("\n")
-        }
-        // Just return the first meaningful line
-        return response.lines().firstOrNull { it.length > 20 } ?: "Selesai~"
-    }
-
-    // =========================
     // BUBBLE UI
     // =========================
     private fun playPopSound() {
@@ -1270,7 +1062,7 @@ class OverlayService : Service() {
     fun finalizeBubble(text: String) {
         handler.post {
             if (!::bubbleText.isInitialized) return@post
-            hideConfirmationButtons()
+            if (::confirmLayout.isInitialized) confirmLayout.visibility = View.GONE
             bubbleTypingRunnable?.let { handler.removeCallbacks(it) }
             bubbleDotsRunnable?.let { handler.removeCallbacks(it) }
             bubbleHideRunnable?.let { handler.removeCallbacks(it) }
@@ -1306,8 +1098,7 @@ class OverlayService : Service() {
         handler.post {
 
             if (!::bubbleText.isInitialized) return@post
-
-            hideConfirmationButtons()
+            if (::confirmLayout.isInitialized) confirmLayout.visibility = View.GONE
 
             bubbleTypingRunnable?.let { handler.removeCallbacks(it) }
             bubbleHideRunnable?.let { handler.removeCallbacks(it) }
@@ -1416,8 +1207,6 @@ class OverlayService : Service() {
         VoiceManager.destroy()
 
         OverlayEventBus.screenCaptureCallback = null
-
-        hideResultPanel()
 
         activityScope.cancel()
 
