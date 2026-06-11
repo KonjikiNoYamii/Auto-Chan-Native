@@ -44,23 +44,20 @@ interface UserProfileDao {
 }
 
 @Dao
-interface QuestDao {
-    @Insert
-    suspend fun insertQuest(quest: QuestEntity)
+interface AchievementDao {
+    @Query("SELECT * FROM achievements ORDER BY category, tier ASC")
+    fun getAllAchievements(): kotlinx.coroutines.flow.Flow<List<AchievementEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAchievements(achievements: List<AchievementEntity>)
 
     @Update
-    suspend fun updateQuest(quest: QuestEntity)
+    suspend fun updateAchievement(achievement: AchievementEntity)
 
-    @Query("SELECT * FROM quests WHERE isCompleted = 0 ORDER BY createdAt DESC")
-    fun getActiveQuests(): Flow<List<QuestEntity>>
+    @Query("SELECT * FROM achievements WHERE id = :id LIMIT 1")
+    suspend fun getAchievementById(id: String): AchievementEntity?
 
-    @Query("SELECT * FROM quests WHERE title LIKE '%' || :query || '%' AND isCompleted = 0 LIMIT 1")
-    suspend fun findActiveQuestByTitle(query: String): QuestEntity?
-
-    @Query("SELECT COUNT(*) FROM quests WHERE isCompleted = 1 AND completedAt >= :startTime")
-    suspend fun getCompletedCountSince(startTime: Long): Int
-
-    @Delete
-    suspend fun deleteQuest(quest: QuestEntity)
+    @Query("SELECT COUNT(*) FROM achievements")
+    suspend fun getCount(): Int
 }
 
