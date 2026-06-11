@@ -20,6 +20,7 @@ class AssistantViewModel : ViewModel(), KoinComponent {
     private val userProfileDao: UserProfileDao by inject()
     private val moodManager: MoodManager by inject()
     private val questDao: QuestDao by inject()
+    private val achievementDao: com.silica.assistant.core.llm.db.AchievementDao by inject()
 
     var uiState by mutableStateOf(AssistantUiState())
         private set
@@ -30,10 +31,28 @@ class AssistantViewModel : ViewModel(), KoinComponent {
     var activeQuests by mutableStateOf<List<QuestEntity>>(emptyList())
         private set
 
+    var completedQuests by mutableStateOf<List<QuestEntity>>(emptyList())
+        private set
+
+    var achievements by mutableStateOf<List<com.silica.assistant.core.llm.model.AchievementEntity>>(emptyList())
+        private set
+
     init {
         loadProfile()
         loadInventory()
-        observeQuests()
+        observeData()
+    }
+
+    private fun observeData() {
+        viewModelScope.launch {
+            questDao.getActiveQuests().collect { activeQuests = it }
+        }
+        viewModelScope.launch {
+            questDao.getCompletedQuests().collect { completedQuests = it }
+        }
+        viewModelScope.launch {
+            achievementDao.getAllAchievements().collect { achievements = it }
+        }
     }
 
     fun loadProfile() {
@@ -46,14 +65,6 @@ class AssistantViewModel : ViewModel(), KoinComponent {
     fun loadInventory() {
         viewModelScope.launch {
             inventory = moodManager.getInventory()
-        }
-    }
-
-    private fun observeQuests() {
-        viewModelScope.launch {
-            questDao.getActiveQuests().collect { quests ->
-                activeQuests = quests
-            }
         }
     }
 

@@ -69,6 +69,7 @@ import com.silica.assistant.ui.theme.Espresso
 import com.silica.assistant.ui.viewmodel.AssistantViewModel
 import com.silica.assistant.ui.affinity.AffinityScreen
 import com.silica.assistant.ui.profile.ProfileScreen
+import com.silica.assistant.ui.profile.QuestHistoryScreen
 import com.silica.assistant.ui.utils.bounceClick
 import com.silica.assistant.ui.utils.rememberHapticFeedback
 import com.silica.assistant.ui.utils.HapticHelper
@@ -91,6 +92,8 @@ private sealed class Screen {
     data object AiTaskInput : Screen()
     data object Affinity : Screen()
     data object Profile : Screen()
+    data object QuestHistory : Screen()
+    data object AchievementGallery : Screen()
     data object Auth : Screen()
 }
 
@@ -440,7 +443,22 @@ fun MainScreen() {
         }
         is Screen.Profile -> {
             SwipeToDismissContainer(onDismiss = { currentScreen = Screen.Main }) {
-                ProfileScreen(viewModel = viewModel, onBack = { currentScreen = Screen.Main })
+                ProfileScreen(
+                    viewModel = viewModel, 
+                    onBack = { currentScreen = Screen.Main },
+                    onQuestHistory = { currentScreen = Screen.QuestHistory },
+                    onAchievementGallery = { currentScreen = Screen.AchievementGallery }
+                )
+            }
+        }
+        is Screen.QuestHistory -> {
+            SwipeToDismissContainer(onDismiss = { currentScreen = Screen.Profile }) {
+                QuestHistoryScreen(viewModel = viewModel, onBack = { currentScreen = Screen.Profile })
+            }
+        }
+        is Screen.AchievementGallery -> {
+            SwipeToDismissContainer(onDismiss = { currentScreen = Screen.Profile }) {
+                com.silica.assistant.ui.profile.AchievementGalleryScreen(viewModel = viewModel, onBack = { currentScreen = Screen.Profile })
             }
         }
         is Screen.OverlayTutorial -> {
