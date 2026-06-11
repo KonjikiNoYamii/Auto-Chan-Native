@@ -20,7 +20,8 @@ import kotlin.math.pow
 class MoodManager(
     private val userProfileDao: UserProfileDao,
     private val questDao: QuestDao,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val achievementManager: AchievementManager
 ) {
     private val scope = CoroutineScope(Dispatchers.IO)
 
@@ -29,6 +30,7 @@ class MoodManager(
             if (userProfileDao.getProfile() == null) {
                 userProfileDao.updateProfile(UserProfileEntity())
             }
+            achievementManager.initAchievements()
         }
     }
 
@@ -178,6 +180,11 @@ class MoodManager(
             stamina = (profile.stamina + 0.1f).coerceIn(0.0f, 1.0f)
         ))
         triggerAutoSync()
+        
+        val newProfile = getProfile()
+        val allCompleted = questDao.getCompletedQuests().first()
+        val hardCount = allCompleted.count { it.difficulty == "HARD" }
+        achievementManager.checkAchievements(newProfile, allCompleted.size, hardCount)
 
         val levelMsg = if (leveledUp) "\n🎊 **LEVEL UP!** Kamu sekarang Level $currentLevel! 🎊" else ""
         val streakMsg = when {
