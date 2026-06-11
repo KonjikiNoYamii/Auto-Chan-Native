@@ -54,8 +54,12 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.random.Random
 
+import com.silica.assistant.core.llm.MoodManager
+import org.koin.android.ext.android.inject
+
 class OverlayService : Service() {
 
+    private val moodManager: MoodManager by inject()
     private lateinit var windowManager: WindowManager
     private lateinit var overlayView: View
     private lateinit var params: WindowManager.LayoutParams
@@ -490,14 +494,27 @@ class OverlayService : Service() {
     private fun showRandomQuote() {
         if (!::bubbleText.isInitialized || overlayView.windowToken == null) return
 
-        val (text, emotion) = YamiQuotes.random()
+        activityScope.launch {
+            // Priority 1: Proactive Reminders (Quests/Relationship)
+            val reminder = moodManager.getProactiveReminder()
+            if (reminder != null) {
+                withContext(Dispatchers.Main) {
+                    WaifuStateManager.currentState = WaifuState.TALK
+                    showBubble(reminder)
+                }
+                return@launch
+            }
 
-        WaifuStateManager.currentState = when (emotion) {
-            "happy", "blush" -> WaifuState.TALK
-            else -> WaifuState.RELAX
+            // Priority 2: Standard Random Quotes
+            val (text, emotion) = YamiQuotes.random()
+            withContext(Dispatchers.Main) {
+                WaifuStateManager.currentState = when (emotion) {
+                    "happy", "blush" -> WaifuState.TALK
+                    else -> WaifuState.RELAX
+                }
+                showBubble(text)
+            }
         }
-
-        showBubble(text)
 
         // sometimes also push a notification
         if (screenOn && kotlin.random.Random.nextInt(3) == 0) {
