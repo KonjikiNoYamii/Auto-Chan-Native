@@ -652,6 +652,11 @@ class OverlayService : Service() {
                     GameModeManager.currentAppPackage = pkg
                     GameModeManager.currentAppName = appName
 
+                    // Trigger Spontaneous AI Comment (Non-Hardcoded)
+                    if (!GameModeManager.isGameMode) {
+                        activityDetector.checkAndTriggerSpontaneousComment(appName)
+                    }
+
                     if (!GameModeManager.manualMode) {
                         val isGameModeApp = pkg == GameModeManager.gameModeAppPackage
                         val isGameOrModeApp = isGameModeApp || isGame

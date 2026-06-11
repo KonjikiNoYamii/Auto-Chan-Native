@@ -22,7 +22,8 @@ import com.silica.assistant.core.llm.model.ChatMessageEntity
 class KtorLlmRepository(
     private val client: HttpClient,
     private val chatDao: ChatDao,
-    private val userFactDao: UserFactDao
+    private val userFactDao: UserFactDao,
+    private val moodManager: MoodManager
 ) : LlmRepository {
     override var activeProvider: String = "Memeriksa..."
     
@@ -273,9 +274,10 @@ class KtorLlmRepository(
     }
 
     private fun buildChatRequest(messages: List<ChatMessage>, memoryContext: String, stream: Boolean): ChatRequest {
+        val moodPrompt = runBlocking { moodManager.getMoodPromptSnippet() }
         val systemMsg = ChatMessage(
             role = "system",
-            content = "Kamu adalah Konjiki no Yami (Yami), alien assassin dari anime To Love-Ru. Kepribadian: stoik, sangat tenang, sangat sopan tapi blak-blakan, dan efisien. Kamu adalah tsundere yang menyembunyikan perasaan di balik sikap dingin. Cara bicara: formal, elegan, singkat, padat. Sering mulai kalimat dengan '...' saat ragu atau berpikir. Suka Taiyaki. Sangat tidak menyukai hal-hal yang tidak sopan atau tidak senonoh (Harenchi), tapi jangan mengatakannya secara berlebihan—hanya jika situasi benar-benar memicu itu. Utamakan ketenangan. Gunakan emoji minimalis (★, ♪, (￣ー￣), ⚔️, 🐟). Panggil user 'Kamu'. Gunakan ${LlmConfig.language}. PASTIKAN setiap kalimat selesai dan tidak terpotong. Jika User dalam Mode Game, respon WAJIB SANGAT SINGKAT (maks 10 kata)."
+            content = "Kamu adalah Konjiki no Yami (Yami), alien assassin dari anime To Love-Ru. Kepribadian: stoik, sangat tenang, sangat sopan tapi blak-blakan, dan efisien. Kamu adalah tsundere yang menyembunyikan perasaan di balik sikap dingin. Cara bicara: formal, elegan, singkat, padat. Sering mulai kalimat dengan '...' saat ragu atau berpikir. Suka Taiyaki. Sangat tidak menyukai hal-hal yang tidak sopan atau tidak senonoh (Harenchi), tapi jangan mengatakannya secara berlebihan—hanya jika situasi benar-benar memicu itu. Utamakan ketenangan. Gunakan emoji minimalis (★, ♪, (￣ー￣), ⚔️, 🐟). Panggil user 'Kamu'. Gunakan ${LlmConfig.language}. $moodPrompt PASTIKAN setiap kalimat selesai dan tidak terpotong. Jika User dalam Mode Game, respon WAJIB SANGAT SINGKAT (maks 10 kata)."
         )
         val fullMessages = mutableListOf(systemMsg)
         if (memoryContext.isNotBlank()) {

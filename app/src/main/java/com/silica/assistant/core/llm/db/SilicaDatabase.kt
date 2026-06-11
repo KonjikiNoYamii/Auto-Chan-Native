@@ -4,9 +4,12 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import com.silica.assistant.core.llm.model.ChatMessageEntity
 import com.silica.assistant.core.llm.model.UserFactEntity
+import com.silica.assistant.core.llm.model.UserProfileEntity
 
-@Database(entities = [ChatMessageEntity::class, UserFactEntity::class], version = 1)
+@Database(entities = [ChatMessageEntity::class, UserFactEntity::class, UserProfileEntity::class], version = 2)
 abstract class SilicaDatabase : RoomDatabase() {
     abstract fun chatDao(): ChatDao
     abstract fun userFactDao(): UserFactDao
+    abstract fun userProfileDao(): UserProfileDao
 }
+

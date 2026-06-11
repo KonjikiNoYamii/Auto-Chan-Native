@@ -6,6 +6,7 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import kotlinx.coroutines.launch
 
 class ActivityDetector(private val context: Context) {
 
@@ -102,4 +103,22 @@ class ActivityDetector(private val context: Context) {
             false
         }
     }
+
+    private var lastSpontaneousCommentTime = 0L
+    private val SPONTANEOUS_INTERVAL = 15 * 60 * 1000 // 15 minutes
+    private val activityScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
+
+    fun checkAndTriggerSpontaneousComment(appName: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastSpontaneousCommentTime > SPONTANEOUS_INTERVAL) {
+            lastSpontaneousCommentTime = now
+            activityScope.launch {
+                val comment = com.silica.assistant.core.llm.LlmClient.generateActivityComment(appName, false)
+                if (comment != null) {
+                    com.silica.assistant.core.overlay.OverlayEventBus.onBubble?.invoke(comment)
+                }
+            }
+        }
+    }
 }
+

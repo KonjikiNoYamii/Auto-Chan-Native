@@ -12,6 +12,7 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.dsl.module
 import com.silica.assistant.core.llm.LlmRepository
 import com.silica.assistant.core.llm.KtorLlmRepository
+import com.silica.assistant.core.llm.MoodManager
 
 val appModule = module {
     single {
@@ -19,11 +20,14 @@ val appModule = module {
             androidContext(),
             SilicaDatabase::class.java,
             "silica_database"
-        ).build()
+        ).fallbackToDestructiveMigration().build()
     }
     
     single { get<SilicaDatabase>().chatDao() }
     single { get<SilicaDatabase>().userFactDao() }
+    single { get<SilicaDatabase>().userProfileDao() }
+
+    single { MoodManager(get()) }
 
     single {
         HttpClient(OkHttp) {
@@ -42,5 +46,6 @@ val appModule = module {
         }
     }
     
-    single<LlmRepository> { KtorLlmRepository(get(), get(), get()) }
+    single<LlmRepository> { KtorLlmRepository(get(), get(), get(), get()) }
 }
+

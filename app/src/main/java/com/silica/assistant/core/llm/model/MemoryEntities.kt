@@ -20,3 +20,13 @@ data class UserFactEntity(
     val value: String,
     val updatedAt: Long = System.currentTimeMillis()
 )
+
+@Entity(tableName = "user_profile")
+data class UserProfileEntity(
+    @PrimaryKey val id: Int = 0,
+    val affinityPoints: Int = 0,
+    val lastInteractionTime: Long = System.currentTimeMillis(),
+    val preferredMusicGenre: String? = null,
+    val moodState: String = "NEUTRAL"
+)
+

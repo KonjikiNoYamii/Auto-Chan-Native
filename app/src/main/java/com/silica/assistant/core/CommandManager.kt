@@ -22,7 +22,12 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 
-object CommandManager {
+import com.silica.assistant.core.llm.MoodManager
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
+
+object CommandManager : KoinComponent {
+    private val moodManager: MoodManager by inject()
 
     @OptIn(DelicateCoroutinesApi::class)
     private fun keywordVariants(keyword: String): List<String> {
@@ -41,6 +46,27 @@ object CommandManager {
     }
 
     fun execute(context: Context, rawInput: String) {
+        val lowerInput = rawInput.lowercase().trim()
+
+        // Affinity Logic
+        if (lowerInput.contains("terima kasih") || lowerInput.contains("makasih") || lowerInput.contains("thank")) {
+            moodManager.addAffinity(5)
+        } else if (lowerInput.contains("bodoh") || lowerInput.contains("jelek") || lowerInput.contains("benci")) {
+            moodManager.addAffinity(-10)
+        }
+
+        // Music/Genre Search Logic
+        if (lowerInput.contains("putar lagu") || lowerInput.contains("play music") || lowerInput.contains("putar genre")) {
+            val query = lowerInput.replace("putar lagu", "")
+                                  .replace("play music", "")
+                                  .replace("putar genre", "")
+                                  .trim()
+            if (query.isNotEmpty()) {
+                MediaController.playFromSearch(context, query)
+                return
+            }
+        }
+
         // direct command keys (from button clicks) bypass wake word filter
         val commandKeys = CommandAliases.aliases.keys
         

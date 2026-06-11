@@ -3,6 +3,7 @@ package com.silica.assistant.core.llm.db
 import androidx.room.*
 import com.silica.assistant.core.llm.model.ChatMessageEntity
 import com.silica.assistant.core.llm.model.UserFactEntity
+import com.silica.assistant.core.llm.model.UserProfileEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -28,3 +29,16 @@ interface UserFactDao {
     @Query("SELECT * FROM user_facts WHERE `key` = :key LIMIT 1")
     suspend fun getFact(key: String): UserFactEntity?
 }
+
+@Dao
+interface UserProfileDao {
+    @Query("SELECT * FROM user_profile WHERE id = 0 LIMIT 1")
+    suspend fun getProfile(): UserProfileEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun updateProfile(profile: UserProfileEntity)
+
+    @Query("UPDATE user_profile SET affinityPoints = affinityPoints + :points WHERE id = 0")
+    suspend fun incrementAffinity(points: Int)
+}
+
