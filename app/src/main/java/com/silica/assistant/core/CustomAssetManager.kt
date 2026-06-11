@@ -23,6 +23,7 @@ object CustomAssetManager {
         WAIFU_HAPPY("waifu_happy", "mybinikmangap"),
         WAIFU_LISTENING("waifu_listening", "mybinikmendengarkan"),
         WAIFU_GAME("waifu_game", "icongamemode"),
+        CHAT_ICON("chat_icon", "iconchat"),
         POP_SOUND("pop_sound", "pop")
     }
 

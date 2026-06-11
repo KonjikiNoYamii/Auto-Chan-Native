@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.painterResource
 import com.silica.assistant.R
 import com.silica.assistant.core.CustomAssetManager
+import com.silica.assistant.core.config.AssistantConfig
 import com.silica.assistant.core.llm.ChatMessage
 import com.silica.assistant.core.llm.EmotionMapper
 import com.silica.assistant.core.llm.LlmClient
@@ -49,6 +50,9 @@ fun ChatScreen(
     var showMemories by remember { mutableStateOf(false) }
     var showModelInfo by remember { mutableStateOf(false) }
 
+    val assistantName = AssistantConfig.assistantName.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+    val chatIcon = remember(context) { CustomAssetManager.loadImageBitmap(context, CustomAssetManager.AssetType.CHAT_ICON) }
+
     val messages = viewModel.messages
     val isLoading = viewModel.isLoading
     val error = viewModel.error
@@ -68,13 +72,21 @@ fun ChatScreen(
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Image(
-                            painter = painterResource(R.drawable.iconchat),
-                            contentDescription = "Yami",
-                            modifier = Modifier.size(28.dp).clip(CircleShape)
-                        )
+                        if (chatIcon != null) {
+                            Image(
+                                painter = BitmapPainter(chatIcon),
+                                contentDescription = assistantName,
+                                modifier = Modifier.size(28.dp).clip(CircleShape)
+                            )
+                        } else {
+                            Image(
+                                painter = painterResource(R.drawable.iconchat),
+                                contentDescription = assistantName,
+                                modifier = Modifier.size(28.dp).clip(CircleShape)
+                            )
+                        }
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Yami", fontSize = 18.sp)
+                        Text(assistantName, fontSize = 18.sp)
                     }
                 },
                 navigationIcon = {
@@ -126,7 +138,7 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(messages) { msg ->
-                        ChatBubble(message = msg)
+                        ChatBubble(message = msg, assistantName = assistantName)
                     }
 
                     if (isLoading) {
@@ -431,7 +443,7 @@ private fun MemoriesDialog(
 }
 
 @Composable
-private fun ChatBubble(message: ChatMessage) {
+private fun ChatBubble(message: ChatMessage, assistantName: String) {
     val context = LocalContext.current
     val isUser = message.role == "user"
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
@@ -449,7 +461,7 @@ private fun ChatBubble(message: ChatMessage) {
         if (!isUser && emotion != null) {
             Image(
                 painter = painterResource(EmotionMapper.getDrawable(emotion)),
-                contentDescription = emotion,
+                contentDescription = assistantName,
                 modifier = Modifier
                     .size(32.dp)
                     .clip(CircleShape)
