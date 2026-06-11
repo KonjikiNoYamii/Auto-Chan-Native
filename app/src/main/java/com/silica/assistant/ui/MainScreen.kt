@@ -60,6 +60,7 @@ import com.silica.assistant.ui.ssh.LaptopInfoScreen
 import com.silica.assistant.ui.ssh.SshScreen
 import com.silica.assistant.ui.ssh.SshEditorScreen
 import com.silica.assistant.ui.theme.DeepRose
+import com.silica.assistant.ui.AiTaskInputScreen
 import com.silica.assistant.ui.theme.Espresso
 import com.silica.assistant.ui.viewmodel.AssistantViewModel
 import java.util.*
@@ -76,6 +77,7 @@ private sealed class Screen {
     data object OverlayTutorial : Screen()
     data object Chat : Screen()
     data object Debug : Screen()
+    data object AiTaskInput : Screen()
 }
 
 @Composable
@@ -243,6 +245,7 @@ fun MainScreen() {
                                 "ssh" -> Screen.Ssh(tab = 0)
                                 "chat" -> Screen.Chat
                                 "debug" -> Screen.Debug
+                                "ai_task_input" -> Screen.AiTaskInput
                                 else -> Screen.Main
                             }
                     OverlayEventBus.navigateScreen.value = null
@@ -407,6 +410,18 @@ fun MainScreen() {
         }
         is Screen.Debug -> {
             DebugScreen(onBack = { currentScreen = Screen.Main })
+        }
+        is Screen.AiTaskInput -> {
+            AiTaskInputScreen(
+                onBack = { currentScreen = Screen.Main },
+                onSubmit = { text ->
+                    if (text.isNotBlank()) {
+                        WaifuStateManager.currentState = WaifuState.TALK
+                        CommandManager.execute(context, text)
+                        currentScreen = Screen.Main
+                    }
+                }
+            )
         }
     }
 

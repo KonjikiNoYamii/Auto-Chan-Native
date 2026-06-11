@@ -326,6 +326,10 @@ object CommandManager {
                 val contextHint = extractContext(effectiveInput, "ai_task")
                 OverlayEventBus.aiTaskCallback?.invoke(contextHint.ifBlank { effectiveInput })
             }
+            "ai_task_typing" -> {
+                OverlayEventBus.navigateScreen.value = "ai_task_input"
+                OverlayEventBus.onBubble?.invoke("📝 Silakan ketik perintah~")
+            }
             "open_debug" -> {
                 OverlayEventBus.navigateScreen.value = "debug"
                 OverlayEventBus.onBubble?.invoke("📊 Membuka debug AI...")

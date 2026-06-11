@@ -278,6 +278,20 @@ object CommandAliases {
             "buatkan file",
             "tuliskan program",
             "tuliskan script"
+        ),
+
+        "ai_task_typing" to listOf(
+            "ketik",
+            "tulis",
+            "mode teks",
+            "mode ketik",
+            "mode tulis",
+            "ketik perintah",
+            "tulis perintah",
+            "masukkan teks",
+            "teks mode",
+            "input teks",
+            "input perintah"
         )
     )
 }
