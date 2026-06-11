@@ -6,8 +6,10 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import com.silica.assistant.core.llm.db.UserProfileDao
 import com.silica.assistant.core.llm.db.QuestDao
+import com.silica.assistant.core.llm.db.UserFactDao
 import com.silica.assistant.core.llm.model.UserProfileEntity
 import com.silica.assistant.core.llm.model.QuestEntity
+import com.silica.assistant.core.llm.model.UserFactEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.tasks.await
@@ -17,6 +19,7 @@ import kotlinx.coroutines.withTimeout
 class AuthRepository(
     private val userProfileDao: UserProfileDao,
     private val questDao: QuestDao,
+    private val userFactDao: UserFactDao,
     private val context: Context
 ) {
     private val TAG = "AuthRepository"
@@ -77,15 +80,17 @@ class AuthRepository(
             Log.d(TAG, "Memulai sync push untuk UID: $userId")
             val profile = userProfileDao.getProfile() ?: return@withContext Result.failure(Exception("No local profile"))
             val quests = questDao.getActiveQuests().first()
+            val facts = userFactDao.getAllFacts().first()
 
             val userRef = database.getReference("users").child(userId)
             
-            withTimeout(15000) {
+            withTimeout(20000) {
                 userRef.child("profile").setValue(profile).await()
                 userRef.child("quests").setValue(quests).await()
+                userRef.child("facts").setValue(facts).await()
             }
 
-            Result.success(SyncResponse(true, "Progress & Quest berhasil diunggah!"))
+            Result.success(SyncResponse(true, "Progress, Quest & Memori berhasil diunggah!"))
         } catch (e: Exception) {
             Log.e(TAG, "Sync push gagal", e)
             Result.failure(e)
@@ -109,8 +114,14 @@ class AuthRepository(
             }
             val remoteQuests = questsSnapshot.children.mapNotNull { it.getValue(QuestEntity::class.java) }
 
+            val factsSnapshot = withTimeout(15000) {
+                userRef.child("facts").get().await()
+            }
+            val remoteFacts = factsSnapshot.children.mapNotNull { it.getValue(UserFactEntity::class.java) }
+
             userProfileDao.updateProfile(remoteProfile)
             remoteQuests.forEach { questDao.insertQuest(it) }
+            remoteFacts.forEach { userFactDao.insertFact(it) }
 
             Result.success(remoteProfile)
         } catch (e: Exception) {

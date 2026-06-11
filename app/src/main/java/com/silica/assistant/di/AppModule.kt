@@ -29,8 +29,8 @@ val appModule = module {
     single { get<SilicaDatabase>().userProfileDao() }
     single { get<SilicaDatabase>().questDao() }
 
-    single { MoodManager(get(), get()) }
-    single { AuthRepository(get(), get(), androidContext()) }
+    single { MoodManager(get(), get(), get()) }
+    single { AuthRepository(get(), get(), get(), androidContext()) }
 
     single {
         HttpClient(OkHttp) {
@@ -49,5 +49,5 @@ val appModule = module {
         }
     }
     
-    single<LlmRepository> { KtorLlmRepository(get(), get(), get(), get()) }
+    single<LlmRepository> { KtorLlmRepository(get(), get(), get()) }
 }
