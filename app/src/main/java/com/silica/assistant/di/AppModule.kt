@@ -28,8 +28,10 @@ val appModule = module {
     single { get<SilicaDatabase>().userFactDao() }
     single { get<SilicaDatabase>().userProfileDao() }
     single { get<SilicaDatabase>().questDao() }
+    single { get<SilicaDatabase>().achievementDao() }
 
-    single { MoodManager(get(), get(), get()) }
+    single { com.silica.assistant.core.llm.AchievementManager(get()) }
+    single { MoodManager(get(), get(), get(), get()) }
     single { AuthRepository(get(), get(), get(), androidContext()) }
 
     single {
