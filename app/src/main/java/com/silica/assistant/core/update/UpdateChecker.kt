@@ -71,7 +71,7 @@ object UpdateChecker {
             val url = downloadUrl ?: return@withContext null
             Log.d(TAG, "Update found: $tag")
             UpdateInfo(
-                latestVersionCode = versionCode,
+                latestVersionCode = latestVersionCode ?: 0,
                 latestVersionName = tag,
                 downloadUrl = url
             )
