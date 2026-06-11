@@ -64,6 +64,7 @@ import com.silica.assistant.ui.theme.DeepRose
 import com.silica.assistant.ui.AiTaskInputScreen
 import com.silica.assistant.ui.theme.Espresso
 import com.silica.assistant.ui.viewmodel.AssistantViewModel
+import com.silica.assistant.ui.affinity.AffinityScreen
 import java.util.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
@@ -79,6 +80,7 @@ private sealed class Screen {
     data object Chat : Screen()
     data object Debug : Screen()
     data object AiTaskInput : Screen()
+    data object Affinity : Screen()
 }
 
 @Composable
@@ -329,6 +331,7 @@ fun MainScreen() {
                                             currentScreen = Screen.Info
                                         }
                                         "Chat" -> currentScreen = Screen.Chat
+                                        "Affinity" -> currentScreen = Screen.Affinity
                                         "Guide" -> currentScreen = Screen.Guide
                                         "Customize" -> currentScreen = Screen.Customize
                                         "Debug" -> currentScreen = Screen.Debug
@@ -396,6 +399,9 @@ fun MainScreen() {
         }
         is Screen.Customize -> {
             CustomizeScreen(onBack = { currentScreen = Screen.Main })
+        }
+        is Screen.Affinity -> {
+            AffinityScreen(viewModel = viewModel, onBack = { currentScreen = Screen.Main })
         }
         is Screen.OverlayTutorial -> {
             OverlayTutorialScreen(
@@ -558,7 +564,9 @@ private fun QuickActionChips(onChipClick: (String) -> Unit = {}) {
                     ChipData("File", Icons.Filled.Folder, DeepRose),
                     ChipData("SSH", Icons.Filled.Lan, DeepRose),
                     ChipData("Chat", Icons.Filled.QuestionAnswer, DeepRose),
+                    ChipData("Affinity", Icons.Filled.Favorite, DeepRose),
                     ChipData("Info", Icons.Filled.Info, DeepRose),
+
                     ChipData("Guide", Icons.AutoMirrored.Filled.MenuBook, DeepRose),
             ChipData("Customize", Icons.Filled.Palette, DeepRose),
             ChipData("Debug", Icons.Filled.BugReport, DeepRose),
