@@ -15,7 +15,15 @@ import kotlinx.serialization.json.*
 import org.json.JSONObject
 import kotlin.coroutines.coroutineContext
 
-class KtorLlmRepository(private val client: HttpClient) : LlmRepository {
+import com.silica.assistant.core.llm.db.ChatDao
+import com.silica.assistant.core.llm.db.UserFactDao
+import com.silica.assistant.core.llm.model.ChatMessageEntity
+
+class KtorLlmRepository(
+    private val client: HttpClient,
+    private val chatDao: ChatDao,
+    private val userFactDao: UserFactDao
+) : LlmRepository {
     override var activeProvider: String = "Memeriksa..."
     
     private var healthCheckFailCount = 0
@@ -25,6 +33,7 @@ class KtorLlmRepository(private val client: HttpClient) : LlmRepository {
 
     companion object {
         private const val CONFIDENCE_THRESHOLD = 2
+        private const val MAX_HISTORY_CONTEXT = 10
     }
 
     override suspend fun startPeriodicHealthCheck() {
@@ -62,7 +71,7 @@ class KtorLlmRepository(private val client: HttpClient) : LlmRepository {
     }
 
     private suspend fun quickHealthCheck() {
-        if (activeProvider == "Memeriksa...") {
+        if (activeProvider == "Memeriksa..." || activeProvider == "Gemini") {
             activeProvider = if (checkGeminiServer()) "Gemini" else "OpenRouter"
         }
     }
@@ -70,10 +79,21 @@ class KtorLlmRepository(private val client: HttpClient) : LlmRepository {
     override suspend fun chat(messages: List<ChatMessage>, memoryContext: String): Result<ChatMessage> {
         return try {
             quickHealthCheck()
+            
+            // 1. Save user messages to DB
+            messages.filter { it.role == "user" }.forEach { 
+                chatDao.insertMessage(ChatMessageEntity(role = it.role, content = it.content))
+            }
+
+            // 2. Build context from DB
+            val history = chatDao.getRecentMessages(MAX_HISTORY_CONTEXT).reversed().map { 
+                ChatMessage(role = it.role, content = it.content)
+            }
+
             val endpoint = if (activeProvider == "Gemini") LlmConfig.geminiEndpoint else LlmConfig.endpoint
             val useAuth = activeProvider != "Gemini"
             
-            val payload = buildChatRequest(messages, memoryContext, stream = false)
+            val payload = buildChatRequest(history, memoryContext, stream = false)
             val response: HttpResponse = client.post(endpoint) {
                 contentType(ContentType.Application.Json)
                 if (useAuth) {
@@ -88,7 +108,12 @@ class KtorLlmRepository(private val client: HttpClient) : LlmRepository {
             if (response.status.value in 200..299) {
                 val chatResponse = response.body<ChatResponse>()
                 val content = chatResponse.choices.firstOrNull()?.message?.content ?: ""
-                Result.success(ChatMessage(role = "assistant", content = safeContent(content)))
+                val safeContent = safeContent(content)
+                
+                // 3. Save AI response to DB
+                chatDao.insertMessage(ChatMessageEntity(role = "assistant", content = safeContent))
+                
+                Result.success(ChatMessage(role = "assistant", content = safeContent))
             } else {
                 val errBody = response.bodyAsText()
                 Result.failure(Exception("HTTP ${response.status}: ${errBody.take(200)}"))
@@ -100,10 +125,21 @@ class KtorLlmRepository(private val client: HttpClient) : LlmRepository {
 
     override fun chatStream(messages: List<ChatMessage>, memoryContext: String): Flow<String> = flow {
         quickHealthCheck()
+
+        // Save user messages
+        messages.filter { it.role == "user" }.forEach { 
+            chatDao.insertMessage(ChatMessageEntity(role = it.role, content = it.content))
+        }
+
+        val history = chatDao.getRecentMessages(MAX_HISTORY_CONTEXT).reversed().map { 
+            ChatMessage(role = it.role, content = it.content)
+        }
+
         val endpoint = if (activeProvider == "Gemini") LlmConfig.geminiEndpoint else LlmConfig.endpoint
         val useAuth = activeProvider != "Gemini"
-        val payload = buildChatRequest(messages, memoryContext, stream = true)
+        val payload = buildChatRequest(history, memoryContext, stream = true)
 
+        val fullResponse = StringBuilder()
         client.preparePost(endpoint) {
             contentType(ContentType.Application.Json)
             if (useAuth) {
@@ -130,10 +166,18 @@ class KtorLlmRepository(private val client: HttpClient) : LlmRepository {
                             ?.jsonObject?.get("delta")
                             ?.jsonObject?.get("content")
                             ?.jsonPrimitive?.content ?: ""
-                        if (content.isNotEmpty()) emit(content)
+                        if (content.isNotEmpty()) {
+                            fullResponse.append(content)
+                            emit(content)
+                        }
                     } catch (_: Exception) {}
                 }
             }
+        }
+        
+        // Save assistant response
+        if (fullResponse.isNotEmpty()) {
+            chatDao.insertMessage(ChatMessageEntity(role = "assistant", content = fullResponse.toString()))
         }
     }
 

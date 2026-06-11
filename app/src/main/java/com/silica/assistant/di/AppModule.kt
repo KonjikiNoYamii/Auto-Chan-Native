@@ -42,5 +42,5 @@ val appModule = module {
         }
     }
     
-    single<LlmRepository> { KtorLlmRepository(get()) }
+    single<LlmRepository> { KtorLlmRepository(get(), get(), get()) }
 }
