@@ -30,7 +30,16 @@ Aplikasi memiliki fitur pengecekan update otomatis. Jika muncul notifikasi updat
 | Search | `search anime`, `cari resep`, `google ...` | Google search |
 | Knowledge | `tier list genshin`, `rekomendasi karakter ml` | Game tier lists (Genshin, ML, Valorant) |
 | SSH | `ssh_status`, `ssh_connect`, `laptop_info` | Laptop remote control |
+| Quest | `tambah tugas ...`, `selesaikan ...` | Quest & productivity tracking |
+| Profile | `buka profil`, `afinitas` | User profile & relationship stats |
 | Overlay | `start overlay`, `stop overlay` | Toggle waifu overlay |
+
+### 🏆 Achievement System (100 Achievements)
+Silica sekarang memiliki sistem pencapaian yang luas untuk menemani perjalanan Anda:
+- **10 Kategori Utama**: Pekerja Keras, Pejuang Tangguh, Harmoni, Disiplin, Legenda, Dermawan, Kolektor, Interaktif, Teman Setia, dan Puncak Mood.
+- **10 Tingkatan (Tiers)**: Setiap kategori memiliki 10 level progres (Perunggu, Perak, Emas, hingga Platinum).
+- **Achievement Gallery**: Layar khusus untuk melihat semua koleksi badge dan progres Anda.
+- **Real-time Notification**: Silica akan memberikan selamat langsung jika Anda membuka achievement baru!
 
 ### 👻 Overlay Waifu
 - Floating character with 3 expressions: IDLE, HAPPY, LISTENING
