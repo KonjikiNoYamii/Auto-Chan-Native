@@ -9,8 +9,10 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.PixelFormat
 import android.graphics.Rect
+import android.animation.ObjectAnimator
 import android.os.Build
 import android.media.MediaPlayer
+import android.view.animation.DecelerateInterpolator
 import android.util.DisplayMetrics
 import android.os.Handler
 import android.os.IBinder
@@ -105,6 +107,11 @@ class OverlayService : Service() {
     private var detecting = false
     private var nonGameCount = 0
     private var isCommentPending = false
+
+    // ── Result Panel (slide-up from bottom) ──
+    private var resultPanel: View? = null
+    private var resultPanelParams: WindowManager.LayoutParams? = null
+    private var resultPanelHideRunnable: Runnable? = null
 
     // ── AI Task Execution ──
     private var isAwaitingConfirmation = false
@@ -1083,16 +1090,16 @@ class OverlayService : Service() {
                                 .onFailure { e -> results.add("❌ ${e.message}") }
                         }
                         if (results.isNotEmpty()) {
-                            showBubble(results.joinToString("\n"))
+                            showResultPanel(results.joinToString("\n"))
                             return@launch
                         }
                     }
-                    showBubble("Selesai~ Kode sudah siap. Cek di atas ya~")
+                    showResultPanel("Selesai~ Kode sudah siap.")
                     return@launch
                 }
                 // Parse the AI execution response
                 val resultText = extractExecutionResult(response)
-                showBubble(resultText)
+                showResultPanel(resultText)
             } finally {
                 isCommentPending = false
                 pendingAiTask = null
@@ -1136,6 +1143,65 @@ class OverlayService : Service() {
             if (!::confirmLayout.isInitialized) return@post
             confirmLayout.visibility = View.GONE
         }
+    }
+
+    private fun showResultPanel(text: String) {
+        hideResultPanel()
+        try {
+            val panel = LayoutInflater.from(this).inflate(R.layout.result_panel, null)
+            panel.findViewById<TextView>(R.id.resultText).text = text
+            val overlayType =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                else
+                    WindowManager.LayoutParams.TYPE_PHONE
+            resultPanelParams = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                overlayType,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                    WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            }
+            windowManager.addView(panel, resultPanelParams)
+            resultPanel = panel
+            // Slide up from below screen
+            handler.post {
+                val h = panel.height.coerceAtLeast(1)
+                panel.translationY = h.toFloat()
+                panel.animate()
+                    .translationY(0f)
+                    .setDuration(350)
+                    .setInterpolator(DecelerateInterpolator())
+                    .start()
+            }
+            // Auto-hide after 6s
+            resultPanelHideRunnable = Runnable { hideResultPanel() }
+            handler.postDelayed(resultPanelHideRunnable!!, 6000)
+            // Tap to dismiss
+            panel.setOnClickListener { hideResultPanel() }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun hideResultPanel() {
+        try {
+            resultPanelHideRunnable?.let { handler.removeCallbacks(it) }
+            resultPanel?.let { p ->
+                if (p.windowToken != null) {
+                    p.animate().cancel()
+                    windowManager.removeView(p)
+                }
+            }
+        } catch (_: Exception) {}
+        resultPanel = null
+        resultPanelParams = null
+        resultPanelHideRunnable = null
     }
 
     private fun extractExecutionResult(response: String): String {
@@ -1350,6 +1416,8 @@ class OverlayService : Service() {
         VoiceManager.destroy()
 
         OverlayEventBus.screenCaptureCallback = null
+
+        hideResultPanel()
 
         activityScope.cancel()
 

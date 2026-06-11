@@ -111,14 +111,6 @@ object CommandManager {
         }
 
         if (result == null) {
-            // AI task detection for non-matched commands
-            val taskIndicators = listOf("buat", "bikin", "tulis", "kerjakan", "buatin", "bikinin", "tuliskan", "lakukan", "eksekusi", "buatkan")
-            val firstWord = normalized.split(" ").firstOrNull() ?: ""
-            if (firstWord in taskIndicators || taskIndicators.any { normalized.startsWith("$it ") }) {
-                OverlayEventBus.aiTaskCallback?.invoke(effectiveInput)
-                return
-            }
-
             // Check if user is calling her name
             val assistantName = AssistantConfig.assistantName.lowercase()
             if (normalized == assistantName || normalized.startsWith("$assistantName ")) {
