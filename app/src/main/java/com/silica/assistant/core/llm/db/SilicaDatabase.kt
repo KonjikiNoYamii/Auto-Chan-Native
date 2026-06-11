@@ -6,6 +6,7 @@ import com.silica.assistant.core.llm.model.ChatMessageEntity
 import com.silica.assistant.core.llm.model.UserFactEntity
 import com.silica.assistant.core.llm.model.UserProfileEntity
 import com.silica.assistant.core.llm.model.QuestEntity
+import com.silica.assistant.core.llm.model.AchievementEntity
 
 @Database(entities = [ChatMessageEntity::class, UserFactEntity::class, UserProfileEntity::class, QuestEntity::class, AchievementEntity::class], version = 9, exportSchema = false)
 abstract class SilicaDatabase : RoomDatabase() {
