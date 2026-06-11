@@ -48,11 +48,54 @@ object CommandManager : KoinComponent {
     fun execute(context: Context, rawInput: String) {
         val lowerInput = rawInput.lowercase().trim()
 
-        // Affinity Logic
+        // Affinity Logic (Dynamic XP)
         if (lowerInput.contains("terima kasih") || lowerInput.contains("makasih") || lowerInput.contains("thank")) {
-            moodManager.addAffinity(5)
+            moodManager.addXp(50)
+            moodManager.updateMood(0.05f)
         } else if (lowerInput.contains("bodoh") || lowerInput.contains("jelek") || lowerInput.contains("benci")) {
-            moodManager.addAffinity(-10)
+            moodManager.addXp(-100)
+            moodManager.updateMood(-0.1f)
+        }
+
+        // Gifting Logic (with Daily Limits & Recovery)
+        if (lowerInput.startsWith("kasih hadiah ") || lowerInput.startsWith("give gift ")) {
+            val item = lowerInput.removePrefix("kasih hadiah ").removePrefix("give gift ").trim()
+            if (item.isNotEmpty()) {
+                kotlinx.coroutines.GlobalScope.launch {
+                    val (success, response) = moodManager.giveGift(item)
+                    OverlayEventBus.onBubble?.invoke(response)
+                }
+                return
+            }
+        }
+
+        // --- QUEST SYSTEM COMMANDS ---
+        if (lowerInput.startsWith("tambah quest ") || lowerInput.startsWith("add quest ")) {
+            val task = lowerInput.removePrefix("tambah quest ").removePrefix("add quest ").trim()
+            if (task.isNotEmpty()) {
+                val difficulty = when {
+                    task.contains("(hard)") || task.contains("[hard]") -> "HARD"
+                    task.contains("(easy)") || task.contains("[easy]") -> "EASY"
+                    else -> "MEDIUM"
+                }
+                val cleanTask = task.replace(Regex("[\\[\\(](hard|easy|medium)[\\]\\)]"), "").trim()
+                kotlinx.coroutines.GlobalScope.launch {
+                    moodManager.addQuest(cleanTask, difficulty)
+                    OverlayEventBus.onBubble?.invoke("Oke, aku sudah catat tugas: '$cleanTask' [$difficulty]. Semangat kerjanya ya ★")
+                }
+                return
+            }
+        }
+
+        if (lowerInput.startsWith("selesai quest ") || lowerInput.startsWith("done quest ")) {
+            val task = lowerInput.removePrefix("selesai quest ").removePrefix("done quest ").trim()
+            if (task.isNotEmpty()) {
+                kotlinx.coroutines.GlobalScope.launch {
+                    val result = moodManager.completeQuest(task)
+                    OverlayEventBus.onBubble?.invoke(result)
+                }
+                return
+            }
         }
 
         // Music/Genre Search Logic
@@ -352,14 +395,17 @@ object CommandManager : KoinComponent {
                 OverlayEventBus.onBubble?.invoke("✅ Game mode app direset")
             }
             "screen_info" -> {
+                moodManager.consumeStamina(0.1f)
                 OverlayEventBus.onBubble?.invoke("🔍...")
                 OverlayEventBus.screenCaptureCallback?.invoke()
             }
             "game_comment" -> {
+                moodManager.consumeStamina(0.05f)
                 val contextHint = extractContext(effectiveInput, "game_comment")
                 OverlayEventBus.gameCommentCallback?.invoke(contextHint)
             }
             "ai_task" -> {
+                moodManager.consumeStamina(0.2f)
                 val contextHint = extractContext(effectiveInput, "ai_task")
                 OverlayEventBus.aiTerminalPrompt = contextHint.ifBlank { effectiveInput }
                 OverlayEventBus.send("Sedang merencanakan...")
