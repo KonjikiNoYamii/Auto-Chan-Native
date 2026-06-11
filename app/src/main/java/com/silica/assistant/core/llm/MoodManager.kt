@@ -173,6 +173,7 @@ class MoodManager(
             longestStreak = newLongest,
             lastQuestCompletionDate = today,
             inventory = newInventoryString,
+            affinityPoints = profile.affinityPoints + (xpBonus / 10),
             mood = (profile.mood + 0.1f).coerceIn(0.5f, 1.5f),
             stamina = (profile.stamina + 0.1f).coerceIn(0.0f, 1.0f)
         ))
@@ -245,6 +246,7 @@ class MoodManager(
 
         val newProfile = profile.copy(
             xp = profile.xp + (xpBonus * profile.mood).toInt(),
+            affinityPoints = profile.affinityPoints + (xpBonus / 10),
             mood = (profile.mood + moodBonus).coerceIn(0.5f, 1.5f),
             stamina = (profile.stamina + staminaRecovery).coerceIn(0.0f, 1.0f),
             dailyGiftCount = dailyCount + 1,
@@ -261,6 +263,11 @@ class MoodManager(
         
         userProfileDao.updateProfile(newProfile.copy(xp = finalXp, level = finalLevel))
         triggerAutoSync()
+        
+        val finalProfile = getProfile()
+        val allCompleted = questDao.getCompletedQuests().first()
+        achievementManager.checkAchievements(finalProfile, allCompleted.size, allCompleted.count { it.difficulty == "HARD" })
+        
         return Pair(true, response)
     }
 
@@ -392,5 +399,8 @@ class MoodManager(
 
     fun addAffinity(points: Int) {
         addXp(points * 10)
+    }
+}
+points * 10)
     }
 }

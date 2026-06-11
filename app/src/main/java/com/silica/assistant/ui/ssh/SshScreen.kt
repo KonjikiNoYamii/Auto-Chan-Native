@@ -917,7 +917,7 @@ private fun ConnectionForm(
             Checkbox(
                 checked = rememberPassword,
                 onCheckedChange = onRememberPasswordChange,
-                colors = CheckboxDefaults.colors(checkedColor = DeepRose)
+                colors = CheckboxDefaults.colors(checkedColor = Color(0xFF4CAF50))
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(

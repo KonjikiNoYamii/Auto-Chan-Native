@@ -568,7 +568,7 @@ private fun GreetingField(
                 FilledIconButton(
                     onClick = { onSave(text) },
                     modifier = Modifier.size(40.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = DeepRose)
+                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color(0xFF4CAF50))
                 ) {
                     Icon(Icons.Filled.Check, contentDescription = "Simpan", modifier = Modifier.size(18.dp))
                 }

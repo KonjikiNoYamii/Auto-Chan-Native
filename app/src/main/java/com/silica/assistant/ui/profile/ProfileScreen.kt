@@ -31,9 +31,28 @@ import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileScreen(viewModel: AssistantViewModel, onBack: () -> Unit) {
+fun ProfileScreen(
+    viewModel: AssistantViewModel, 
+    onBack: () -> Unit, 
+    onQuestHistory: () -> Unit,
+    onAchievementGallery: () -> Unit
+) {
     val moodManager: MoodManager = koinInject()
-    val profile = viewModel.uiState.userProfile ?: return
+    val uiState = viewModel.uiState
+    val profile = uiState.userProfile
+
+    // Muat ulang profil saat layar dibuka untuk memastikan data ada
+    LaunchedEffect(Unit) {
+        viewModel.loadProfile()
+    }
+
+    if (profile == null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = DeepRose)
+        }
+        return
+    }
+
     val level = profile.level
     val xp = profile.xp
     val nextXp = moodManager.getXpThresholdPublic(level)
@@ -175,20 +194,53 @@ fun ProfileScreen(viewModel: AssistantViewModel, onBack: () -> Unit) {
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Inventory Summary (Optional)
-            SectionHeader("Pencapaian", Icons.Default.MilitaryTech)
+            // Achievement Summary
+            SectionHeader("Pencapaian Terkini", Icons.Default.MilitaryTech)
             Card(
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
             ) {
                 Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    AchievementItem(Icons.Default.TaskAlt, "Quest Master", "Kamu sudah rajin mengerjakan tugas.")
-                    AchievementItem(Icons.Default.Favorite, "Partner Sejati", "Kedekatanmu dengan Silica sangat tinggi.")
+                    val unlocked = viewModel.achievements.filter { it.isUnlocked }.takeLast(2)
+                    if (unlocked.isEmpty()) {
+                        Text(
+                            "Belum ada achievement yang terbuka. Ayo semangat! ♪",
+                            fontSize = 12.sp,
+                            color = Color.Gray,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    } else {
+                        unlocked.forEach { ach ->
+                            AchievementItem(Icons.Default.MilitaryTech, ach.title, ach.description)
+                        }
+                    }
                 }
             }
             
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(16.dp))
+            
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = onQuestHistory,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, DeepRose),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Riwayat Quest", color = DeepRose, fontSize = 12.sp)
+                }
+                
+                Button(
+                    onClick = onAchievementGallery,
+                    colors = ButtonDefaults.buttonColors(containerColor = DeepRose),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Semua Achievement", color = Color.White, fontSize = 12.sp)
+                }
+            }
+            
+            Spacer(Modifier.height(24.dp))
             
             Text(
                 "Profil ini mencerminkan dedikasi dan perjalananmu bersama Silica ♪",
@@ -237,10 +289,10 @@ private fun StatCard(modifier: Modifier, icon: ImageVector, label: String, value
 private fun AchievementItem(icon: ImageVector, title: String, desc: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
-            modifier = Modifier.size(40.dp).background(DeepRose.copy(alpha = 0.1f), CircleShape),
+            modifier = Modifier.size(40.dp).background(Color(0xFF4CAF50).copy(alpha = 0.1f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, null, tint = DeepRose, modifier = Modifier.size(20.dp))
+            Icon(icon, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
         }
         Spacer(Modifier.width(16.dp))
         Column {
