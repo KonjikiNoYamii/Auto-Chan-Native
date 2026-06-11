@@ -64,7 +64,7 @@
         <service
             android:name=".service.OverlayService"
             android:exported="false"
-            android:foregroundServiceType="mediaProjection" />
+            android:foregroundServiceType="microphone|mediaProjection" />
     
         <service
             android:name=".service.VoiceForegroundService"

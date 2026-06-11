@@ -1,12 +1,13 @@
 package com.silica.assistant.service
 
 import android.Manifest
-import android.app.Service
+import android.app.*
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.os.Build
@@ -23,6 +24,7 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.silica.assistant.R
 import com.silica.assistant.core.ActivityDetector
@@ -215,6 +217,18 @@ class OverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or 
+                           ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                startForeground(2, createNotification(), type)
+            } else {
+                startForeground(2, createNotification())
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
 
         try {
             val intent = Intent(this, VoiceForegroundService::class.java)
@@ -1031,10 +1045,14 @@ class OverlayService : Service() {
     private fun playPopSound() {
 
         try {
-            popPlayer?.release()
+            popPlayer?.let {
+                if (it.isPlaying) it.stop()
+                it.release()
+            }
+            popPlayer = null
 
             val customPop = CustomAssetManager.getCustomPath(this, CustomAssetManager.AssetType.POP_SOUND)
-            popPlayer = if (customPop != null) {
+            val newPlayer = if (customPop != null) {
                 MediaPlayer().apply {
                     setDataSource(customPop)
                     prepare()
@@ -1042,9 +1060,13 @@ class OverlayService : Service() {
             } else {
                 MediaPlayer.create(this, R.raw.pop)
             }
-            popPlayer?.setVolume(0.6f, 0.6f)
-            popPlayer?.start()
-            popPlayer?.setOnCompletionListener { it.release() }
+            popPlayer = newPlayer
+            newPlayer.setVolume(0.6f, 0.6f)
+            newPlayer.start()
+            newPlayer.setOnCompletionListener { 
+                it.release() 
+                if (popPlayer == it) popPlayer = null
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -1211,6 +1233,7 @@ class OverlayService : Service() {
 
         VoiceManager.destroy()
 
+        ScreenCaptureManager.release()
         OverlayEventBus.screenCaptureCallback = null
 
         activityScope.cancel()
@@ -1219,6 +1242,24 @@ class OverlayService : Service() {
         popPlayer = null
 
         windowManager.removeView(overlayView)
+    }
+
+    private fun createNotification(): Notification {
+        val channelId = "overlay_channel"
+        val channel = NotificationChannel(
+            channelId,
+            "Silica Overlay",
+            NotificationManager.IMPORTANCE_LOW
+        )
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(channel)
+
+        return NotificationCompat.Builder(this, channelId)
+            .setContentTitle("Silica is Active")
+            .setContentText("Waifu is watching over you~")
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setOngoing(true)
+            .build()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

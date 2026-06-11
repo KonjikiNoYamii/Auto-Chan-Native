@@ -3,6 +3,8 @@ package com.silica.assistant.service
 import android.app.*
 import android.content.Intent
 import android.os.IBinder
+import android.os.Build
+import android.content.pm.ServiceInfo
 import androidx.core.app.NotificationCompat
 import com.silica.assistant.R
 
@@ -12,7 +14,15 @@ class VoiceForegroundService : Service() {
         super.onCreate()
 
         try {
-            startForeground(1, createNotification())
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+                }
+                startForeground(1, createNotification(), type)
+            } else {
+                startForeground(1, createNotification())
+            }
         } catch (_: SecurityException) {
             // Android 13+ requires POST_NOTIFICATIONS; fallback silently
         }
