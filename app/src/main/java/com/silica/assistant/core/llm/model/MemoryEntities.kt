@@ -39,7 +39,9 @@ data class UserProfileEntity(
     val lastQuestCompletionDate: String = "", // Format: YYYY-MM-DD
     val lastInteractionTime: Long = System.currentTimeMillis(),
     val preferredMusicGenre: String? = null,
-    val moodState: String = "NEUTRAL"
+    val moodState: String = "NEUTRAL",
+    val inventory: String = "", // Comma-separated items: "Taiyaki,Cokelat"
+    val customNicknames: String = "" // JSON or Comma-separated: "FRIEND:Dan,LOVER:Sayang"
 )
 
 @Entity(tableName = "quests")

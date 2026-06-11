@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.*
 import org.json.JSONObject
+import org.koin.core.component.inject
+import org.koin.core.component.KoinComponent
 import kotlin.coroutines.coroutineContext
 
 import com.silica.assistant.core.llm.db.ChatDao
@@ -22,9 +24,8 @@ import com.silica.assistant.core.llm.model.ChatMessageEntity
 class KtorLlmRepository(
     private val client: HttpClient,
     private val chatDao: ChatDao,
-    private val userFactDao: UserFactDao,
-    private val moodManager: MoodManager
-) : LlmRepository {
+    private val userFactDao: UserFactDao
+) : LlmRepository, KoinComponent {
     override var activeProvider: String = "Memeriksa..."
     
     private var healthCheckFailCount = 0
@@ -36,7 +37,7 @@ class KtorLlmRepository(
         private const val CONFIDENCE_THRESHOLD = 2
         private const val MAX_HISTORY_CONTEXT = 10
         private const val SYSTEM_RULES = "Tugasmu: Bantu user dengan perintah SSH, Mode Game, dan chat. Gunakan Bahasa Indonesia. Format respon: elegan, singkat, padat. Jika dalam Mode Game, respon WAJIB SANGAT SINGKAT (maks 10 kata)."
-        private const val DEFAULT_PERSONALITY = "Kamu adalah Konjiki no Yami (Yami), alien assassin dari anime To Love-Ru. Kepribadian: stoik, sangat tenang, sangat sopan tapi blak-blakan, dan efisien. Kamu adalah tsundere yang menyembunyikan perasaan di balik sikap dingin. Cara bicara: formal, elegan, singkat, padat. Sering mulai kalimat dengan '...' saat ragu atau berpikir. Suka Taiyaki. Sangat tidak menyukai hal-hal yang tidak sopan atau tidak senonoh (Harenchi), tapi jangan mengatakannya secara berlebihan—hanya jika situasi benar-benar memicu itu. Utamakan ketenangan. Gunakan emoji minimalis (★, ♪, (￣ー￣), ⚔️, 🐟). Panggil user 'Kamu'."
+        private const val DEFAULT_PERSONALITY = "Kamu adalah Konjiki no Yami (Yami), alien assassin dari anime To Love-Ru. Kepribadian: stoik, sangat tenang, sangat sopan tapi blak-blakan, dan efisien. Kamu adalah tsundere yang menyembunyikan perasaan di balik sikap dingin. Cara bicara: formal, elegan, singkat, padat. Sering mulai kalimat dengan '...' saat ragu atau berpikir. Suka Taiyaki. Sangat tidak menyukai hal-hal yang tidak sopan atau tidak senonoh (Harenchi), tapi jangan mengatakannya secara berlebihan—hanya jika situasi benar-benar memicu itu. Utamakan ketenangan. Gunakan emoji minimalis atau ekspresi teks saja (♪, (￣ー￣), ( 0o0), (︶皿︶)). Panggil user 'Kamu'."
     }
 
     override suspend fun startPeriodicHealthCheck() {
@@ -79,6 +80,8 @@ class KtorLlmRepository(
         }
     }
 
+    private val moodManager: MoodManager by inject()
+
     override suspend fun chat(messages: List<ChatMessage>, memoryContext: String): Result<ChatMessage> {
         return try {
             quickHealthCheck()
@@ -96,7 +99,10 @@ class KtorLlmRepository(
             val endpoint = if (activeProvider == "Gemini") LlmConfig.geminiEndpoint else LlmConfig.endpoint
             val useAuth = activeProvider != "Gemini"
             
-            val payload = buildChatRequest(history, memoryContext, stream = false)
+            val personalityContext = moodManager.getMoodPromptSnippet()
+            val fullMemoryContext = "$personalityContext $memoryContext"
+            
+            val payload = buildChatRequest(history, fullMemoryContext, stream = false)
             val response: HttpResponse = client.post(endpoint) {
                 contentType(ContentType.Application.Json)
                 if (useAuth) {
@@ -125,22 +131,25 @@ class KtorLlmRepository(
             Result.failure(e)
         }
     }
-
     override fun chatStream(messages: List<ChatMessage>, memoryContext: String): Flow<String> = flow {
-        quickHealthCheck()
+    quickHealthCheck()
 
-        // Save user messages
-        messages.filter { it.role == "user" }.forEach { 
-            chatDao.insertMessage(ChatMessageEntity(role = it.role, content = it.content))
-        }
+    // Save user messages
+    messages.filter { it.role == "user" }.forEach { 
+        chatDao.insertMessage(ChatMessageEntity(role = it.role, content = it.content))
+    }
 
-        val history = chatDao.getRecentMessages(MAX_HISTORY_CONTEXT).reversed().map { 
-            ChatMessage(role = it.role, content = it.content)
-        }
+    val history = chatDao.getRecentMessages(MAX_HISTORY_CONTEXT).reversed().map { 
+        ChatMessage(role = it.role, content = it.content)
+    }
 
-        val endpoint = if (activeProvider == "Gemini") LlmConfig.geminiEndpoint else LlmConfig.endpoint
-        val useAuth = activeProvider != "Gemini"
-        val payload = buildChatRequest(history, memoryContext, stream = true)
+    val personalityContext = moodManager.getMoodPromptSnippet()
+    val fullMemoryContext = "$personalityContext $memoryContext"
+
+    val endpoint = if (activeProvider == "Gemini") LlmConfig.geminiEndpoint else LlmConfig.endpoint
+    val useAuth = activeProvider != "Gemini"
+
+    val payload = buildChatRequest(history, fullMemoryContext, stream = true)
 
         val fullResponse = StringBuilder()
         client.preparePost(endpoint) {
@@ -275,10 +284,32 @@ class KtorLlmRepository(
         return chat(listOf(ChatMessage("user", prompt))).getOrNull()?.content
     }
 
-    private fun buildChatRequest(messages: List<ChatMessage>, memoryContext: String, stream: Boolean): ChatRequest {
-        val moodSnippet = runBlocking { moodManager.getMoodPromptSnippet() }
-        val dynamicName = runBlocking { moodManager.getDynamicName() }
-        val customPersonality = runBlocking { userFactDao.getFact("custom_personality")?.value ?: DEFAULT_PERSONALITY }
+    override suspend fun classifyQuestDifficulty(questTitle: String): String? {
+        val prompt = """
+            Klasifikasikan tingkat kesulitan tugas berikut: "$questTitle"
+            Pilih HANYA satu kata: EASY, MEDIUM, atau HARD.
+            Kriteria:
+            - EASY: Tugas ringan, sebentar (misal: minum air, cuci muka, cek hp).
+            - MEDIUM: Tugas rutin, butuh usaha sedang (misal: belajar 1 jam, olahraga, beresin kamar).
+            - HARD: Tugas berat, proyek besar, butuh fokus tinggi (misal: selesaiin laporan, ujian, belajar coding seharian).
+            Keluaran: Hanya kata EASY/MEDIUM/HARD.
+        """.trimIndent()
+        
+        return chat(listOf(ChatMessage("user", prompt))).getOrNull()?.content?.uppercase()?.trim()
+            ?.let { 
+                when {
+                    it.contains("HARD") -> "HARD"
+                    it.contains("MEDIUM") -> "MEDIUM"
+                    it.contains("EASY") -> "EASY"
+                    else -> "MEDIUM"
+                }
+            }
+    }
+
+    private suspend fun buildChatRequest(messages: List<ChatMessage>, memoryContext: String, stream: Boolean): ChatRequest {
+        val moodSnippet = moodManager.getMoodPromptSnippet()
+        val dynamicName = moodManager.getDynamicName()
+        val customPersonality = userFactDao.getFact("custom_personality")?.value ?: DEFAULT_PERSONALITY
         
         val systemMsg = ChatMessage(
             role = "system",

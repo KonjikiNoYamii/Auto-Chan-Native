@@ -1,13 +1,17 @@
 package com.silica.assistant.core.llm
 
+import com.silica.assistant.core.auth.AuthRepository
 import com.silica.assistant.core.llm.db.UserProfileDao
 import com.silica.assistant.core.llm.db.QuestDao
 import com.silica.assistant.core.llm.model.UserProfileEntity
 import com.silica.assistant.core.llm.model.QuestEntity
+import com.silica.assistant.core.llm.LlmConfig
+import com.silica.assistant.core.system.SoundManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.floor
@@ -15,7 +19,8 @@ import kotlin.math.pow
 
 class MoodManager(
     private val userProfileDao: UserProfileDao,
-    private val questDao: QuestDao
+    private val questDao: QuestDao,
+    private val authRepository: AuthRepository
 ) {
     private val scope = CoroutineScope(Dispatchers.IO)
 
@@ -23,6 +28,14 @@ class MoodManager(
         scope.launch {
             if (userProfileDao.getProfile() == null) {
                 userProfileDao.updateProfile(UserProfileEntity())
+            }
+        }
+    }
+
+    private fun triggerAutoSync() {
+        scope.launch {
+            if (authRepository.isLoggedIn()) {
+                authRepository.syncPush()
             }
         }
     }
@@ -41,6 +54,8 @@ class MoodManager(
         return (100 * level.toDouble().pow(1.5)).toInt()
     }
 
+    fun getXpThresholdPublic(level: Int): Int = getXpThreshold(level)
+
     suspend fun getProfile(): UserProfileEntity {
         return userProfileDao.getProfile() ?: UserProfileEntity()
     }
@@ -50,10 +65,16 @@ class MoodManager(
             val profile = getProfile()
             var currentXp = profile.xp + (amount * profile.mood).toInt()
             var currentLevel = profile.level
+            var leveledUp = false
             
             while (currentXp >= getXpThreshold(currentLevel)) {
                 currentXp -= getXpThreshold(currentLevel)
                 currentLevel++
+                leveledUp = true
+            }
+            
+            if (leveledUp) {
+                SoundManager.playSound("level_up")
             }
             
             userProfileDao.updateProfile(profile.copy(
@@ -61,6 +82,7 @@ class MoodManager(
                 level = currentLevel,
                 lastInteractionTime = System.currentTimeMillis()
             ))
+            triggerAutoSync()
         }
     }
 
@@ -69,6 +91,7 @@ class MoodManager(
             val profile = getProfile()
             val newStamina = (profile.stamina - amount).coerceIn(0.0f, 1.0f)
             userProfileDao.updateProfile(profile.copy(stamina = newStamina))
+            triggerAutoSync()
         }
     }
 
@@ -77,6 +100,7 @@ class MoodManager(
             val profile = getProfile()
             val newMood = (profile.mood + delta).coerceIn(0.5f, 1.5f)
             userProfileDao.updateProfile(profile.copy(mood = newMood))
+            triggerAutoSync()
         }
     }
 
@@ -84,6 +108,7 @@ class MoodManager(
 
     suspend fun addQuest(title: String, difficulty: String = "MEDIUM") {
         questDao.insertQuest(QuestEntity(title = title, difficulty = difficulty))
+        triggerAutoSync()
     }
 
     suspend fun completeQuest(title: String): String {
@@ -91,6 +116,7 @@ class MoodManager(
         
         val updatedQuest = quest.copy(isCompleted = true, completedAt = System.currentTimeMillis())
         questDao.updateQuest(updatedQuest)
+        triggerAutoSync()
         
         val profile = getProfile()
         val today = getTodayDate()
@@ -101,11 +127,6 @@ class MoodManager(
             "HARD" -> 600
             "MEDIUM" -> 300
             else -> 150
-        }
-        val staminaBonus = when (updatedQuest.difficulty) {
-            "HARD" -> 0.3f
-            "MEDIUM" -> 0.15f
-            else -> 0.05f
         }
         
         // Item found logic
@@ -125,26 +146,65 @@ class MoodManager(
         
         val newLongest = if (newStreak > profile.longestStreak) newStreak else profile.longestStreak
         
-        // Apply Rewards
-        addXp(xpBonus)
-        updateMood(0.1f)
-        consumeStamina(-staminaBonus) // Restores stamina
+        // Update Inventory
+        val currentInventory = if (profile.inventory.isBlank()) mutableListOf<String>() else profile.inventory.split(",").toMutableList()
+        currentInventory.add(itemFound)
+        val newInventoryString = currentInventory.joinToString(",")
+
+        // Apply Rewards to Profile
+        var currentXp = profile.xp + xpBonus
+        var currentLevel = profile.level
+        var leveledUp = false
+        
+        while (currentXp >= getXpThreshold(currentLevel)) {
+            currentXp -= getXpThreshold(currentLevel)
+            currentLevel++
+            leveledUp = true
+        }
+
+        if (leveledUp) {
+            SoundManager.playLevelUp()
+        }
 
         userProfileDao.updateProfile(profile.copy(
+            xp = currentXp,
+            level = currentLevel,
             currentStreak = newStreak,
             longestStreak = newLongest,
-            lastQuestCompletionDate = today
+            lastQuestCompletionDate = today,
+            inventory = newInventoryString,
+            mood = (profile.mood + 0.1f).coerceIn(0.5f, 1.5f),
+            stamina = (profile.stamina + 0.1f).coerceIn(0.0f, 1.0f)
         ))
+        triggerAutoSync()
 
+        val levelMsg = if (leveledUp) "\n🎊 **LEVEL UP!** Kamu sekarang Level $currentLevel! 🎊" else ""
         val streakMsg = when {
-            newStreak == 7 -> "\nWah, kamu sudah produktif selama seminggu penuh! Aku sangat bangga padamu ★"
+            newStreak == 7 -> "\nWah, kamu sudah produktif selama seminggu penuh! Aku sangat bangga padamu ♪"
             newStreak == 30 -> "\nSatu bulan penuh produktif! Kamu luar biasa, Partner! ♪"
             newStreak > 1 -> "\nStreak produktif kamu: $newStreak hari!"
             else -> ""
         }
 
         return "Kerja bagus! Kamu sudah menyelesaikan '${updatedQuest.title}'.\n" +
-               "Sebagai hadiah atas kerja kerasmu, aku menemukan **$itemFound** untukku! Hehe ★$streakMsg"
+               "Kamu mendapatkan **$xpBonus XP** dan menemukan **$itemFound**! ♪$levelMsg$streakMsg"
+    }
+
+    suspend fun getInventory(): List<String> {
+        val profile = getProfile()
+        if (profile.inventory.isBlank()) return emptyList()
+        return profile.inventory.split(",")
+    }
+
+    suspend fun removeItemFromInventory(item: String) {
+        val profile = getProfile()
+        val items = profile.inventory.split(",").toMutableList()
+        val index = items.indexOf(item)
+        if (index != -1) {
+            items.removeAt(index)
+            userProfileDao.updateProfile(profile.copy(inventory = items.joinToString(",")))
+            triggerAutoSync()
+        }
     }
 
     // --- GIVING GIFT ---
@@ -160,9 +220,9 @@ class MoodManager(
                     listOf("Hmph, sudah cukup. Jangan beri aku lebih banyak lagi hari ini.", "Berhenti memberiku hadiah terus. Kamu boros sekali.", "Cukup. Aku tidak butuh lebih banyak hadiah untuk saat ini.").random()
                 }
                 personality.contains("ceria") || personality.contains("ramah") -> {
-                    listOf("Wah, kamu baik banget! Tapi simpan buat besok ya, aku gak mau kamu boros ♪", "Ehh? Lagi? Makasih ya, tapi kayaknya sudah cukup buat hari ini ★", "Kamu perhatian sekali! Tapi besok-besok lagi ya, aku gak mau kamu kecapean beliin aku barang.").random()
+                    listOf("Wah, kamu baik banget! Tapi simpan buat besok ya, aku gak mau kamu boros ♪", "Ehh? Lagi? Makasih ya, tapi kayaknya sudah cukup buat hari ini ♪", "Kamu perhatian sekali! Tapi besok-besok lagi ya, aku gak mau kamu kecapean beliin aku barang.").random()
                 }
-                else -> "Hmm, hari ini sudah banyak hadiah. Simpan saja untuk besok, aku tidak ingin kamu boros ★"
+                else -> "Hmm, hari ini sudah banyak hadiah. Simpan saja untuk besok, aku tidak ingin kamu boros ♪"
             }
             return Pair(false, refusal)
         }
@@ -177,7 +237,7 @@ class MoodManager(
             xpBonus = 500
             moodBonus = 0.3f
             staminaRecovery = 0.4f
-            response = "Ini... Taiyaki?! ( 0o0)★ Kamu tahu saja kesukaanku! Terima kasih banyak, aku senang sekali!"
+            response = "Ini... Taiyaki?! ( 0o0)♪ Kamu tahu saja kesukaanku! Terima kasih banyak, aku senang sekali!"
         } else if (listOf("makan", "minum", "roti", "kopi", "teh", "susu", "nasi", "cokelat", "permen").any { lowerItem.contains(it) }) {
             staminaRecovery = 0.25f
             response = "$itemName? Kebetulan aku agak lapar. Terima kasih ya ♪"
@@ -200,6 +260,7 @@ class MoodManager(
         }
         
         userProfileDao.updateProfile(newProfile.copy(xp = finalXp, level = finalLevel))
+        triggerAutoSync()
         return Pair(true, response)
     }
 
@@ -207,25 +268,91 @@ class MoodManager(
         val profile = getProfile()
         val level = profile.level
         val fullName = profile.userName
+        
+        // Cek nickname kustom berdasarkan route
+        val customMap = parseCustomNicknames(profile.customNicknames)
+        val routeNickname = customMap[profile.relationshipRoute]
+        if (!routeNickname.isNullOrEmpty()) return routeNickname
+
         return when {
-            level < 10 -> "Kamu"
-            level < 30 -> fullName
+            level < 5 -> "Kamu"
+            level < 15 -> if (fullName == "User") "Kamu" else fullName
+            level < 30 -> profile.userNickname ?: generateNickname(fullName)
             else -> profile.userNickname ?: generateNickname(fullName)
         }
     }
 
+    private fun parseCustomNicknames(raw: String): Map<String, String> {
+        if (raw.isBlank()) return emptyMap()
+        return raw.split(",").associate {
+            val parts = it.split(":")
+            if (parts.size == 2) parts[0] to parts[1] else "" to ""
+        }
+    }
+
     private fun generateNickname(name: String): String {
-        if (name.length <= 3) return name
+        if (name == "User" || name.length <= 3) return name
+        // Ambil potongan nama belakang sebagai panggilan akrab (misal: Zidan -> Dan)
         return name.takeLast(3).replaceFirstChar { it.uppercase() }
     }
 
     suspend fun getAffinityLevel(): String {
         val profile = getProfile()
         return when (profile.level) {
-            in 1..10 -> "STRANGER"
-            in 11..30 -> "ACQUAINTANCE"
-            in 31..60 -> "FRIEND"
+            in 1..5 -> "STRANGER"
+            in 6..15 -> "ACQUAINTANCE"
+            in 16..30 -> "FRIEND"
+            in 31..50 -> "CLOSE_FRIEND"
             else -> if (profile.relationshipRoute == "LOVER") "LOVER" else "SOULMATE"
+        }
+    }
+
+    suspend fun updateCustomNickname(route: String, nickname: String) {
+        val profile = getProfile()
+        val customMap = parseCustomNicknames(profile.customNicknames).toMutableMap()
+        customMap[route] = nickname
+        val newString = customMap.entries.joinToString(",") { "${it.key}:${it.value}" }
+        userProfileDao.updateProfile(profile.copy(customNicknames = newString))
+        triggerAutoSync()
+    }
+
+    suspend fun setRelationshipRoute(route: String) {
+        val profile = getProfile()
+        userProfileDao.updateProfile(profile.copy(relationshipRoute = route))
+        triggerAutoSync()
+    }
+
+    suspend fun updateUserName(newName: String) {
+        val profile = getProfile()
+        val oldName = profile.userName
+        // Jika nama berubah dari "User" ke nama asli, buat nickname otomatis
+        val newNickname = if (oldName == "User" && newName != "User") {
+            generateNickname(newName)
+        } else profile.userNickname
+
+        userProfileDao.updateProfile(profile.copy(userName = newName, userNickname = newNickname))
+        triggerAutoSync()
+    }
+
+    suspend fun getProactiveReminder(): String? {
+        val activeQuests = questDao.getActiveQuests().first()
+        if (activeQuests.isEmpty()) return null
+        
+        val name = getDynamicName()
+        val hardQuests = activeQuests.filter { it.difficulty == "HARD" }
+        
+        return when {
+            hardQuests.isNotEmpty() -> {
+                val task = hardQuests.random().title
+                "Oi $name, tugas berat '$task' belum selesai. Jangan ditunda terus."
+            }
+            activeQuests.size >= 3 -> {
+                "Tugasmu menumpuk nih, $name. Ayo cicil satu-satu."
+            }
+            else -> {
+                val task = activeQuests.random().title
+                "Semangat ya $name buat tugas '$task'-nya ♪"
+            }
         }
     }
 
@@ -234,33 +361,33 @@ class MoodManager(
         val level = profile.level
         val name = getDynamicName()
         val route = profile.relationshipRoute
+        val userName = profile.userName
         
+        val nameMissingNote = if (userName == "User" && level > 5) {
+            " Kamu belum tahu nama asli User. Tanyakan namanya dengan sopan sesuai kepribadianmu."
+        } else ""
+
         val baseSnippet = when {
-            level <= 10 -> "Kamu baru mengenal User. Bicaralah dengan sopan, gunakan panggilan '$name'."
-            level <= 30 -> "Kamu mulai akrab dengan User. Bicaralah dengan santai namun tetap menghormati, gunakan panggilan '$name'."
-            level <= 60 -> "Kamu adalah teman dekat User. Bicaralah dengan sangat akrab, gunakan panggilan akrab '$name' sebagai sahabat."
+            level <= 5 -> "Kamu baru mengenal User. Bicaralah dengan sopan, gunakan panggilan '$name'."
+            level <= 15 -> "Kamu mulai akrab dengan User. Gunakan panggilan '$name'."
+            level <= 30 -> "Kamu adalah teman User. Gunakan panggilan akrab '$name'."
+            level <= 50 -> {
+                if (route == "NONE") {
+                    "Kamu merasa sangat dekat dengan User. Saatnya menanyakan apakah hubungan ini akan berlanjut sebagai 'Sahabat Sejati' atau 'Pasangan (Lover)'. Gunakan panggilan '$name'."
+                } else {
+                    "Kamu berada di jalur $route dengan User. Gunakan panggilan '$name'."
+                }
+            }
             else -> {
                 if (route == "LOVER") {
-                    "Kamu adalah pasangan (Lover) dari User. Bicaralah dengan penuh kasih sayang, tunjukkan sisi manjamu atau perhatian lebih, gunakan panggilan '$name'."
+                    "Kamu adalah pasangan (Lover) dari User. Bicaralah dengan penuh kasih sayang dan manja, gunakan panggilan '$name'."
                 } else {
-                    "Kamu adalah sahabat sejati (Soulmate) User. Bicaralah dengan kepercayaan penuh dan sangat akrab, gunakan panggilan '$name'."
+                    "Kamu adalah sahabat sejati (Soulmate) User. Bicaralah dengan kepercayaan penuh, gunakan panggilan '$name'."
                 }
             }
         }
         
-        val staminaSnippet = when {
-            profile.stamina < 0.2f -> " Kamu merasa sangat lelah saat ini."
-            profile.stamina < 0.5f -> " Kamu merasa sedikit kurang berstamina."
-            else -> ""
-        }
-        
-        val moodSnippet = when {
-            profile.mood < 0.7f -> " Mood kamu sedang agak rendah/sedih."
-            profile.mood > 1.3f -> " Mood kamu sedang sangat senang!"
-            else -> ""
-        }
-        
-        return "$baseSnippet$staminaSnippet$moodSnippet"
+        return "$baseSnippet$nameMissingNote"
     }
 
     fun addAffinity(points: Int) {
