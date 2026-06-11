@@ -36,8 +36,26 @@ object UpdateChecker {
 
             val tag = release.optString("tag_name", "") ?: return@withContext null
 
-            val versionCode = tag.removePrefix("v").toIntOrNull() ?: return@withContext null
-            if (versionCode <= currentVersionCode) return@withContext null
+            // Try to parse version from tag (e.g., "v1.2.3" or "v15")
+            val latestVersionStr = tag.removePrefix("v")
+            
+            // If it's a simple integer (legacy support)
+            val latestVersionCode = latestVersionStr.toIntOrNull()
+            
+            val isNewer = if (latestVersionCode != null) {
+                latestVersionCode > currentVersionCode
+            } else {
+                // If it contains dots, it might be a version name (e.g. 1.2)
+                // For simplicity, we compare strings if not integers, 
+                // but better to compare against versionName from context if available.
+                // However, since we only have currentVersionCode here, 
+                // let's assume the user uses integer tags for auto-update logic.
+                false
+            }
+
+            if (!isNewer && latestVersionCode != null) return@withContext null
+            // If we can't parse an int, we might want to check if the tag is different 
+            // from a stored "last seen tag", but currentVersionCode is safer.
 
             val assets = release.optJSONArray("assets") ?: return@withContext null
             var downloadUrl: String? = null
