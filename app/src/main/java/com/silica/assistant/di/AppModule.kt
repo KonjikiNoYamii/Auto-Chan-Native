@@ -13,6 +13,7 @@ import org.koin.dsl.module
 import com.silica.assistant.core.llm.LlmRepository
 import com.silica.assistant.core.llm.KtorLlmRepository
 import com.silica.assistant.core.llm.MoodManager
+import com.silica.assistant.core.auth.AuthRepository
 
 val appModule = module {
     single {
@@ -26,8 +27,10 @@ val appModule = module {
     single { get<SilicaDatabase>().chatDao() }
     single { get<SilicaDatabase>().userFactDao() }
     single { get<SilicaDatabase>().userProfileDao() }
+    single { get<SilicaDatabase>().questDao() }
 
-    single { MoodManager(get()) }
+    single { MoodManager(get(), get()) }
+    single { AuthRepository(get(), get(), androidContext()) }
 
     single {
         HttpClient(OkHttp) {
@@ -48,4 +51,3 @@ val appModule = module {
     
     single<LlmRepository> { KtorLlmRepository(get(), get(), get(), get()) }
 }
-

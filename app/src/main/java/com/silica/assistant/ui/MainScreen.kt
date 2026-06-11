@@ -61,6 +61,9 @@ import com.silica.assistant.ui.ssh.LaptopInfoScreen
 import com.silica.assistant.ui.ssh.SshScreen
 import com.silica.assistant.ui.ssh.SshEditorScreen
 import com.silica.assistant.ui.theme.DeepRose
+import com.silica.assistant.ui.auth.AuthScreen
+import com.silica.assistant.core.auth.AuthRepository
+import org.koin.compose.koinInject
 import com.silica.assistant.ui.AiTaskInputScreen
 import com.silica.assistant.ui.theme.Espresso
 import com.silica.assistant.ui.viewmodel.AssistantViewModel
@@ -81,12 +84,14 @@ private sealed class Screen {
     data object Debug : Screen()
     data object AiTaskInput : Screen()
     data object Affinity : Screen()
+    data object Auth : Screen()
 }
 
 @Composable
 fun MainScreen() {
     val context = LocalContext.current
     val viewModel: AssistantViewModel = viewModel()
+    val authRepository: AuthRepository = koinInject()
     val uiState = viewModel.uiState
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Main, referentialEqualityPolicy()) }
 
@@ -249,6 +254,7 @@ fun MainScreen() {
                                 "chat" -> Screen.Chat
                                 "debug" -> Screen.Debug
                                 "ai_task_input" -> Screen.AiTaskInput
+                                "auth" -> Screen.Auth
                                 else -> Screen.Main
                             }
                     OverlayEventBus.navigateScreen.value = null
@@ -417,6 +423,12 @@ fun MainScreen() {
         is Screen.Debug -> {
             DebugScreen(onBack = { currentScreen = Screen.Main })
         }
+        is Screen.Auth -> {
+            AuthScreen(
+                onAuthSuccess = { currentScreen = Screen.Main },
+                onBack = { currentScreen = Screen.Main }
+            )
+        }
     }
 
     if (currentScreen is Screen.AiTaskInput) {
@@ -550,6 +562,33 @@ private fun HeaderSection(greeting: String) {
                         text = "Apa yang bisa saya bantu?",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color(0xFF8C7A70)
+                )
+            }
+
+            val authRepository: AuthRepository = koinInject()
+            val scope = rememberCoroutineScope()
+            IconButton(
+                onClick = {
+                    if (authRepository.isLoggedIn()) {
+                        scope.launch {
+                            authRepository.syncPush()
+                            Toast.makeText(context, "Progress disinkronkan!", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        // Navigate using the sealed class for safety
+                        // (Alternatively use navigateScreen as before)
+                        android.util.Log.d("MainScreen", "Opening Auth")
+                        // In MainScreen, we should probably update the local state if possible, 
+                        // but let's use the EventBus to match existing patterns
+                        com.silica.assistant.core.overlay.OverlayEventBus.navigateScreen.value = "auth"
+                    }
+                },
+                modifier = Modifier.padding(end = 8.dp)
+            ) {
+                Icon(
+                    imageVector = if (authRepository.isLoggedIn()) Icons.Default.CloudDone else Icons.Default.CloudQueue,
+                    contentDescription = "Cloud",
+                    tint = Espresso
                 )
             }
         }
