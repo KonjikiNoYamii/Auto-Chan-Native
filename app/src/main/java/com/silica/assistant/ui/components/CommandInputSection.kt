@@ -8,6 +8,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.silica.assistant.ui.utils.rememberHapticFeedback
+import com.silica.assistant.ui.utils.HapticHelper
 
 @Composable
 fun CommandInputSection(
@@ -16,6 +18,7 @@ fun CommandInputSection(
     onExecute: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptic = rememberHapticFeedback()
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
@@ -40,7 +43,10 @@ fun CommandInputSection(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Button(
-                onClick = onExecute,
+                onClick = {
+                    HapticHelper.playClick(haptic)
+                    onExecute()
+                },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = commandText.isNotBlank(),
                 shape = MaterialTheme.shapes.small,

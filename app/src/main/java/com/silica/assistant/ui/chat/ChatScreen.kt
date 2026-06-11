@@ -160,7 +160,7 @@ fun ChatScreen(
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        "Yami sedang mengetik...",
+                                        "$assistantName sedang mengetik...",
                                         fontSize = 13.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

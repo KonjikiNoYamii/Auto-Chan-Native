@@ -287,6 +287,19 @@ fun CustomizeScreen(onBack: () -> Unit) {
                 refreshKey = refreshKey
             )
 
+            AssetItem(
+                label = "Chat Icon (AI)",
+                type = CustomAssetManager.AssetType.CHAT_ICON,
+                isCustom = CustomAssetManager.hasCustom(context, CustomAssetManager.AssetType.CHAT_ICON),
+                onPick = { pickImage(CustomAssetManager.AssetType.CHAT_ICON) },
+                onReset = {
+                    CustomAssetManager.resetCustom(context, CustomAssetManager.AssetType.CHAT_ICON)
+                    refreshKey++
+                    Toast.makeText(context, "Chat Icon reset ke default", Toast.LENGTH_SHORT).show()
+                },
+                refreshKey = refreshKey
+            )
+
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(

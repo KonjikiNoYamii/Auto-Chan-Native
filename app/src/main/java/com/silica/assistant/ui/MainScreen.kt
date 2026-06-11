@@ -68,6 +68,12 @@ import com.silica.assistant.ui.AiTaskInputScreen
 import com.silica.assistant.ui.theme.Espresso
 import com.silica.assistant.ui.viewmodel.AssistantViewModel
 import com.silica.assistant.ui.affinity.AffinityScreen
+import com.silica.assistant.ui.profile.ProfileScreen
+import com.silica.assistant.ui.utils.bounceClick
+import com.silica.assistant.ui.utils.rememberHapticFeedback
+import com.silica.assistant.ui.utils.HapticHelper
+import com.silica.assistant.core.system.SoundManager
+import androidx.compose.foundation.combinedClickable
 import java.util.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
@@ -84,6 +90,7 @@ private sealed class Screen {
     data object Debug : Screen()
     data object AiTaskInput : Screen()
     data object Affinity : Screen()
+    data object Profile : Screen()
     data object Auth : Screen()
 }
 
@@ -91,7 +98,6 @@ private sealed class Screen {
 fun MainScreen() {
     val context = LocalContext.current
     val viewModel: AssistantViewModel = viewModel()
-    val authRepository: AuthRepository = koinInject()
     val uiState = viewModel.uiState
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Main, referentialEqualityPolicy()) }
 
@@ -338,6 +344,7 @@ fun MainScreen() {
                                         }
                                         "Chat" -> currentScreen = Screen.Chat
                                         "Affinity" -> currentScreen = Screen.Affinity
+                                        "Profile" -> currentScreen = Screen.Profile
                                         "Guide" -> currentScreen = Screen.Guide
                                         "Customize" -> currentScreen = Screen.Customize
                                         "Debug" -> currentScreen = Screen.Debug
@@ -369,6 +376,16 @@ fun MainScreen() {
 
                             Spacer(modifier = Modifier.height(16.dp))
 
+                            QuestSection(
+                                activeQuests = viewModel.activeQuests,
+                                onAddQuest = { title, diff -> viewModel.addQuest(title, diff) },
+                                onCompleteQuest = { title -> viewModel.completeQuest(title) },
+                                onDeleteQuest = { quest -> viewModel.deleteQuest(quest) },
+                                onClassify = { title -> viewModel.classifyQuest(title) }
+                            )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
                             CommandHistorySection()
 
                             Spacer(modifier = Modifier.height(16.dp))
@@ -385,29 +402,46 @@ fun MainScreen() {
                 }
             }
         is Screen.Ssh -> {
-            SshScreen(
-                    onBack = { currentScreen = Screen.Main },
-                    defaultTab = (currentScreen as Screen.Ssh).tab,
-                    onOpenFile = { path -> currentScreen = Screen.Editor(path) }
-            )
+            SwipeToDismissContainer(onDismiss = { currentScreen = Screen.Main }) {
+                SshScreen(
+                        onBack = { currentScreen = Screen.Main },
+                        defaultTab = (currentScreen as Screen.Ssh).tab,
+                        onOpenFile = { path -> currentScreen = Screen.Editor(path) }
+                )
+            }
         }
         is Screen.Editor -> {
-            SshEditorScreen(
-                filePath = (currentScreen as Screen.Editor).filePath,
-                onBack = { currentScreen = Screen.Ssh(tab = 1) }
-            )
+            SwipeToDismissContainer(onDismiss = { currentScreen = Screen.Ssh(tab = 1) }) {
+                SshEditorScreen(
+                    filePath = (currentScreen as Screen.Editor).filePath,
+                    onBack = { currentScreen = Screen.Ssh(tab = 1) }
+                )
+            }
         }
         is Screen.Info -> {
-            LaptopInfoScreen(onBack = { currentScreen = Screen.Main })
+            SwipeToDismissContainer(onDismiss = { currentScreen = Screen.Main }) {
+                LaptopInfoScreen(onBack = { currentScreen = Screen.Main })
+            }
         }
         is Screen.Guide -> {
-            GuideScreen(onBack = { currentScreen = Screen.Main })
+            SwipeToDismissContainer(onDismiss = { currentScreen = Screen.Main }) {
+                GuideScreen(onBack = { currentScreen = Screen.Main })
+            }
         }
         is Screen.Customize -> {
-            CustomizeScreen(onBack = { currentScreen = Screen.Main })
+            SwipeToDismissContainer(onDismiss = { currentScreen = Screen.Main }) {
+                CustomizeScreen(onBack = { currentScreen = Screen.Main })
+            }
         }
         is Screen.Affinity -> {
-            AffinityScreen(viewModel = viewModel, onBack = { currentScreen = Screen.Main })
+            SwipeToDismissContainer(onDismiss = { currentScreen = Screen.Main }) {
+                AffinityScreen(viewModel = viewModel, onBack = { currentScreen = Screen.Main })
+            }
+        }
+        is Screen.Profile -> {
+            SwipeToDismissContainer(onDismiss = { currentScreen = Screen.Main }) {
+                ProfileScreen(viewModel = viewModel, onBack = { currentScreen = Screen.Main })
+            }
         }
         is Screen.OverlayTutorial -> {
             OverlayTutorialScreen(
@@ -418,16 +452,22 @@ fun MainScreen() {
             )
         }
         is Screen.Chat -> {
-            ChatScreen(onBack = { currentScreen = Screen.Main })
+            SwipeToDismissContainer(onDismiss = { currentScreen = Screen.Main }) {
+                ChatScreen(onBack = { currentScreen = Screen.Main })
+            }
         }
         is Screen.Debug -> {
-            DebugScreen(onBack = { currentScreen = Screen.Main })
+            SwipeToDismissContainer(onDismiss = { currentScreen = Screen.Main }) {
+                DebugScreen(onBack = { currentScreen = Screen.Main })
+            }
         }
         is Screen.Auth -> {
-            AuthScreen(
-                onAuthSuccess = { currentScreen = Screen.Main },
-                onBack = { currentScreen = Screen.Main }
-            )
+            SwipeToDismissContainer(onDismiss = { currentScreen = Screen.Main }) {
+                AuthScreen(
+                    onAuthSuccess = { currentScreen = Screen.Main },
+                    onBack = { currentScreen = Screen.Main }
+                )
+            }
         }
     }
 
@@ -454,33 +494,36 @@ fun MainScreen() {
     val scope = rememberCoroutineScope()
 
     updateInfo?.let { info ->
-        UpdateDialog(
-            currentVersion = currentVersionName,
-            newVersion = info.latestVersionName,
-            isDownloading = isDownloading,
-            downloadProgress = downloadProgress,
-            onUpdate = {
-                isDownloading = true
-                scope.launch {
-                    val result = UpdateDownloader.download(context, info.downloadUrl) { progress ->
-                        downloadProgress = progress
+        ZoomInAnimatedVisibility(visible = true) {
+            UpdateDialog(
+                currentVersion = currentVersionName,
+                newVersion = info.latestVersionName,
+                isDownloading = isDownloading,
+                downloadProgress = downloadProgress,
+                onUpdate = {
+                    isDownloading = true
+                    scope.launch {
+                        val result = UpdateDownloader.download(context, info.downloadUrl) { progress ->
+                            downloadProgress = progress
+                        }
+                        if (result != null) {
+                            isDownloading = false
+                            UpdateInstaller.install(context, result.file)
+                        } else {
+                            isDownloading = false
+                            android.widget.Toast
+                                .makeText(context, "Gagal mengunduh update", android.widget.Toast.LENGTH_SHORT)
+                                .show()
+                        }
                     }
-                    if (result != null) {
-                        isDownloading = false
-                        UpdateInstaller.install(context, result.file)
-                    } else {
-                        isDownloading = false
-                        android.widget.Toast
-                            .makeText(context, "Gagal mengunduh update", android.widget.Toast.LENGTH_SHORT)
-                            .show()
-                    }
-                }
-            },
-            onLater = { updateInfo = null }
-        )
+                },
+                onLater = { updateInfo = null }
+            )
+        }
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun HeaderSection(greeting: String) {
     val context = LocalContext.current
@@ -527,6 +570,10 @@ private fun HeaderSection(greeting: String) {
                 modifier = Modifier.align(Alignment.BottomStart).padding(20.dp),
                 verticalAlignment = Alignment.CenterVertically
         ) {
+            val authRepository: AuthRepository = koinInject()
+            val scope = rememberCoroutineScope()
+            val haptic = rememberHapticFeedback()
+
             if (iconBitmap != null) {
                 Image(
                         painter = BitmapPainter(iconBitmap),
@@ -534,7 +581,14 @@ private fun HeaderSection(greeting: String) {
                         modifier =
                                 Modifier.size(64.dp)
                                         .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        .combinedClickable(
+                                            onClick = { HapticHelper.playClick(haptic) },
+                                            onLongClick = {
+                                                HapticHelper.playLongPress(haptic)
+                                                Toast.makeText(context, "Waifu disayang~", Toast.LENGTH_SHORT).show()
+                                            }
+                                        ),
                         contentScale = ContentScale.Crop
                 )
             } else {
@@ -544,7 +598,14 @@ private fun HeaderSection(greeting: String) {
                         modifier =
                                 Modifier.size(64.dp)
                                         .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        .combinedClickable(
+                                            onClick = { HapticHelper.playClick(haptic) },
+                                            onLongClick = {
+                                                HapticHelper.playLongPress(haptic)
+                                                Toast.makeText(context, "Waifu disayang~", Toast.LENGTH_SHORT).show()
+                                            }
+                                        ),
                         contentScale = ContentScale.Crop
                 )
             }
@@ -565,21 +626,16 @@ private fun HeaderSection(greeting: String) {
                 )
             }
 
-            val authRepository: AuthRepository = koinInject()
-            val scope = rememberCoroutineScope()
             IconButton(
                 onClick = {
+                    HapticHelper.playClick(haptic)
                     if (authRepository.isLoggedIn()) {
                         scope.launch {
                             authRepository.syncPush()
+                            SoundManager.playChime()
                             Toast.makeText(context, "Progress disinkronkan!", Toast.LENGTH_SHORT).show()
                         }
                     } else {
-                        // Navigate using the sealed class for safety
-                        // (Alternatively use navigateScreen as before)
-                        android.util.Log.d("MainScreen", "Opening Auth")
-                        // In MainScreen, we should probably update the local state if possible, 
-                        // but let's use the EventBus to match existing patterns
                         com.silica.assistant.core.overlay.OverlayEventBus.navigateScreen.value = "auth"
                     }
                 },
@@ -597,6 +653,7 @@ private fun HeaderSection(greeting: String) {
 
 @Composable
 private fun QuickActionChips(onChipClick: (String) -> Unit = {}) {
+    val haptic = rememberHapticFeedback()
     val chips =
             listOf(
                     ChipData("Terminal", Icons.Filled.Terminal, DeepRose),
@@ -604,6 +661,7 @@ private fun QuickActionChips(onChipClick: (String) -> Unit = {}) {
                     ChipData("SSH", Icons.Filled.Lan, DeepRose),
                     ChipData("Chat", Icons.Filled.QuestionAnswer, DeepRose),
                     ChipData("Affinity", Icons.Filled.Favorite, DeepRose),
+                    ChipData("Profile", Icons.Filled.Person, DeepRose),
                     ChipData("Info", Icons.Filled.Info, DeepRose),
 
                     ChipData("Guide", Icons.AutoMirrored.Filled.MenuBook, DeepRose),
@@ -624,20 +682,23 @@ private fun QuickActionChips(onChipClick: (String) -> Unit = {}) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.padding(horizontal = 8.dp)
             ) {
-                FilledIconButton(
-                        onClick = { onChipClick(chip.label) },
-                        modifier = Modifier.size(48.dp),
-                        shape = CircleShape,
-                        colors =
-                                IconButtonDefaults.filledIconButtonColors(
-                                        containerColor = chip.color.copy(alpha = 0.15f),
-                                        contentColor = chip.color
-                                )
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .bounceClick(
+                            onClick = {
+                                HapticHelper.playClick(haptic)
+                                onChipClick(chip.label)
+                            }
+                        )
+                        .background(chip.color.copy(alpha = 0.15f), CircleShape),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                            chip.icon,
-                            contentDescription = chip.label,
-                            modifier = Modifier.size(24.dp)
+                        chip.icon,
+                        contentDescription = chip.label,
+                        modifier = Modifier.size(24.dp),
+                        tint = chip.color
                     )
                 }
                 Spacer(modifier = Modifier.height(4.dp))

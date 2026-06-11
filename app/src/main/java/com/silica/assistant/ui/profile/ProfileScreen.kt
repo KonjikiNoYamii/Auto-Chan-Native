@@ -1,0 +1,251 @@
+package com.silica.assistant.ui.profile
+
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.silica.assistant.core.llm.MoodManager
+import com.silica.assistant.ui.theme.DeepRose
+import com.silica.assistant.ui.theme.Espresso
+import com.silica.assistant.ui.viewmodel.AssistantViewModel
+import org.koin.compose.koinInject
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ProfileScreen(viewModel: AssistantViewModel, onBack: () -> Unit) {
+    val moodManager: MoodManager = koinInject()
+    val profile = viewModel.uiState.userProfile ?: return
+    val level = profile.level
+    val xp = profile.xp
+    val nextXp = moodManager.getXpThresholdPublic(level)
+    val progress = (xp.toFloat() / nextXp.toFloat()).coerceIn(0f, 1f)
+    
+    val relationshipStatus = when {
+        profile.relationshipRoute == "LOVER" -> "Pasangan (Lover) ❤️"
+        profile.relationshipRoute == "SOULMATE" -> "Sahabat Sejati 🌟"
+        level > 30 -> "Teman Akrab"
+        level > 15 -> "Kenalan Baik"
+        else -> "Orang Asing"
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("User Profile", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Profile Card Header
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .clip(RoundedCornerShape(32.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(DeepRose, DeepRose.copy(alpha = 0.7f))
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        modifier = Modifier
+                            .size(100.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.2f))
+                            .border(4.dp, Color.White, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Lv. $level",
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = profile.userName,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = relationshipStatus,
+                        fontSize = 14.sp,
+                        color = Color.White.copy(alpha = 0.9f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // Progress Section
+            SectionHeader("Level Progress", Icons.Default.TrendingUp)
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Experience (XP)", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Espresso)
+                        Text("$xp / $nextXp", fontSize = 14.sp, fontWeight = FontWeight.Black, color = DeepRose)
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(16.dp)
+                            .clip(CircleShape),
+                        color = DeepRose,
+                        trackColor = DeepRose.copy(alpha = 0.1f)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Selesaikan quest untuk mendapatkan XP tambahan ♪",
+                        fontSize = 11.sp,
+                        color = Color.Gray
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // Stats Section
+            SectionHeader("Statistik Diri", Icons.Default.BarChart)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                StatCard(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.LocalFireDepartment,
+                    label = "Streak",
+                    value = "${profile.currentStreak} Hari",
+                    color = Color(0xFFFF9800)
+                )
+                StatCard(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.Star,
+                    label = "Longest",
+                    value = "${profile.longestStreak} Hari",
+                    color = Color(0xFFFFC107)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // Inventory Summary (Optional)
+            SectionHeader("Pencapaian", Icons.Default.MilitaryTech)
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            ) {
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    AchievementItem(Icons.Default.TaskAlt, "Quest Master", "Kamu sudah rajin mengerjakan tugas.")
+                    AchievementItem(Icons.Default.Favorite, "Partner Sejati", "Kedekatanmu dengan Silica sangat tinggi.")
+                }
+            }
+            
+            Spacer(Modifier.height(40.dp))
+            
+            Text(
+                "Profil ini mencerminkan dedikasi dan perjalananmu bersama Silica ♪",
+                fontSize = 12.sp,
+                color = Color.Gray,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 24.dp)
+            )
+            
+            Spacer(Modifier.height(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String, icon: ImageVector) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.size(4.dp, 18.dp).background(DeepRose, CircleShape))
+        Spacer(Modifier.width(10.dp))
+        Icon(icon, null, tint = DeepRose, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Espresso)
+    }
+}
+
+@Composable
+private fun StatCard(modifier: Modifier, icon: ImageVector, label: String, value: String, color: Color) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(icon, null, tint = color, modifier = Modifier.size(24.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(label, fontSize = 12.sp, color = Color.Gray)
+            Text(value, fontSize = 18.sp, fontWeight = FontWeight.Black, color = Espresso)
+        }
+    }
+}
+
+@Composable
+private fun AchievementItem(icon: ImageVector, title: String, desc: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier.size(40.dp).background(DeepRose.copy(alpha = 0.1f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, null, tint = DeepRose, modifier = Modifier.size(20.dp))
+        }
+        Spacer(Modifier.width(16.dp))
+        Column {
+            Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Espresso)
+            Text(desc, fontSize = 12.sp, color = Color.Gray)
+        }
+    }
+}

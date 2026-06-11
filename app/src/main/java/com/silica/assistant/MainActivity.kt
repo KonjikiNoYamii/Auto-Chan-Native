@@ -19,6 +19,7 @@ class MainActivity : ComponentActivity() {
 
         // 1. Pre-warm Voice System
         VoiceManager.init(this)
+        com.silica.assistant.core.system.SoundManager.init(this)
         
         // 2. Start Health Check for LLM
         lifecycleScope.launch {

@@ -5,8 +5,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.silica.assistant.core.llm.MoodManager
 import com.silica.assistant.core.llm.db.UserProfileDao
+import com.silica.assistant.core.llm.db.QuestDao
+import com.silica.assistant.core.llm.model.QuestEntity
 import com.silica.assistant.ui.state.AssistantUiState
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -14,12 +18,22 @@ import org.koin.core.component.inject
 class AssistantViewModel : ViewModel(), KoinComponent {
 
     private val userProfileDao: UserProfileDao by inject()
+    private val moodManager: MoodManager by inject()
+    private val questDao: QuestDao by inject()
 
     var uiState by mutableStateOf(AssistantUiState())
         private set
 
+    var inventory by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    var activeQuests by mutableStateOf<List<QuestEntity>>(emptyList())
+        private set
+
     init {
         loadProfile()
+        loadInventory()
+        observeQuests()
     }
 
     fun loadProfile() {
@@ -29,6 +43,44 @@ class AssistantViewModel : ViewModel(), KoinComponent {
         }
     }
 
+    fun loadInventory() {
+        viewModelScope.launch {
+            inventory = moodManager.getInventory()
+        }
+    }
+
+    private fun observeQuests() {
+        viewModelScope.launch {
+            questDao.getActiveQuests().collect { quests ->
+                activeQuests = quests
+            }
+        }
+    }
+
+    fun addQuest(title: String, difficulty: String) {
+        viewModelScope.launch {
+            moodManager.addQuest(title, difficulty)
+        }
+    }
+
+    fun completeQuest(title: String) {
+        viewModelScope.launch {
+            val result = moodManager.completeQuest(title)
+            com.silica.assistant.core.overlay.OverlayEventBus.onBubble?.invoke(result)
+            loadProfile()
+            loadInventory()
+        }
+    }
+
+    fun deleteQuest(quest: QuestEntity) {
+        viewModelScope.launch {
+            questDao.deleteQuest(quest)
+        }
+    }
+
+    suspend fun classifyQuest(title: String): String {
+        return com.silica.assistant.core.llm.LlmClient.classifyQuestDifficulty(title) ?: "MEDIUM"
+    }
 
     fun updateCommandText(text: String) {
         uiState = uiState.copy(commandText = text)
