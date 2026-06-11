@@ -136,12 +136,12 @@ private fun QuestItem(
             modifier = Modifier
                 .size(28.dp)
                 .clip(CircleShape)
-                .background(diffColor.copy(alpha = 0.1f))
+                .background(Color(0xFF4CAF50).copy(alpha = 0.1f))
                 .clickable { onComplete() }
-                .border(2.dp, diffColor.copy(alpha = 0.5f), CircleShape),
+                .border(2.dp, Color(0xFF4CAF50).copy(alpha = 0.5f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Check, null, tint = diffColor.copy(alpha = 0.7f), modifier = Modifier.size(16.dp))
+            Icon(Icons.Default.Check, null, tint = Color(0xFF4CAF50).copy(alpha = 0.7f), modifier = Modifier.size(16.dp))
         }
         
         Spacer(modifier = Modifier.width(14.dp))
