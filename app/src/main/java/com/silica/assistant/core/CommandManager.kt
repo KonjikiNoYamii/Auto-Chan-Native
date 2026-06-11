@@ -23,6 +23,7 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 
 import com.silica.assistant.core.llm.MoodManager
+import com.silica.assistant.core.system.SoundManager
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
@@ -52,6 +53,7 @@ object CommandManager : KoinComponent {
         if (lowerInput.contains("terima kasih") || lowerInput.contains("makasih") || lowerInput.contains("thank")) {
             moodManager.addXp(50)
             moodManager.updateMood(0.05f)
+            SoundManager.playChime()
         } else if (lowerInput.contains("bodoh") || lowerInput.contains("jelek") || lowerInput.contains("benci")) {
             moodManager.addXp(-100)
             moodManager.updateMood(-0.1f)
@@ -73,15 +75,18 @@ object CommandManager : KoinComponent {
         if (lowerInput.startsWith("tambah quest ") || lowerInput.startsWith("add quest ")) {
             val task = lowerInput.removePrefix("tambah quest ").removePrefix("add quest ").trim()
             if (task.isNotEmpty()) {
-                val difficulty = when {
+                val explicitDifficulty = when {
                     task.contains("(hard)") || task.contains("[hard]") -> "HARD"
+                    task.contains("(medium)") || task.contains("[medium]") -> "MEDIUM"
                     task.contains("(easy)") || task.contains("[easy]") -> "EASY"
-                    else -> "MEDIUM"
+                    else -> null
                 }
                 val cleanTask = task.replace(Regex("[\\[\\(](hard|easy|medium)[\\]\\)]"), "").trim()
+                
                 kotlinx.coroutines.GlobalScope.launch {
-                    moodManager.addQuest(cleanTask, difficulty)
-                    OverlayEventBus.onBubble?.invoke("Oke, aku sudah catat tugas: '$cleanTask' [$difficulty]. Semangat kerjanya ya ★")
+                    val finalDiff = explicitDifficulty ?: LlmClient.classifyQuestDifficulty(cleanTask) ?: "MEDIUM"
+                    moodManager.addQuest(cleanTask, finalDiff)
+                    OverlayEventBus.onBubble?.invoke("Oke, aku sudah catat tugas: '$cleanTask' [$finalDiff]. Semangat kerjanya ya ♪")
                 }
                 return
             }
@@ -92,6 +97,7 @@ object CommandManager : KoinComponent {
             if (task.isNotEmpty()) {
                 kotlinx.coroutines.GlobalScope.launch {
                     val result = moodManager.completeQuest(task)
+                    SoundManager.playQuestComplete()
                     OverlayEventBus.onBubble?.invoke(result)
                 }
                 return

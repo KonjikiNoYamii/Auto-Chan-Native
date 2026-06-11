@@ -63,5 +63,9 @@ object LlmClient : KoinComponent {
     suspend fun executeAiTask(userCommand: String): String? {
         return repository.executeAiTask(userCommand)
     }
+
+    suspend fun classifyQuestDifficulty(questTitle: String): String? {
+        return repository.classifyQuestDifficulty(questTitle)
+    }
 }
 
