@@ -401,6 +401,3 @@ class MoodManager(
         addXp(points * 10)
     }
 }
-points * 10)
-    }
-}
