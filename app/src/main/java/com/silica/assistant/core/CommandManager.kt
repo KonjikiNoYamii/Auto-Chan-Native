@@ -111,6 +111,14 @@ object CommandManager {
         }
 
         if (result == null) {
+            // AI task detection for non-matched commands
+            val taskIndicators = listOf("buat", "bikin", "tulis", "kerjakan", "buatin", "bikinin", "tuliskan", "lakukan", "eksekusi", "buatkan")
+            val firstWord = normalized.split(" ").firstOrNull() ?: ""
+            if (firstWord in taskIndicators || taskIndicators.any { normalized.startsWith("$it ") }) {
+                OverlayEventBus.aiTaskCallback?.invoke(effectiveInput)
+                return
+            }
+
             // Check if user is calling her name
             val assistantName = AssistantConfig.assistantName.lowercase()
             if (normalized == assistantName || normalized.startsWith("$assistantName ")) {
@@ -321,6 +329,10 @@ object CommandManager {
             "game_comment" -> {
                 val contextHint = extractContext(effectiveInput, "game_comment")
                 OverlayEventBus.gameCommentCallback?.invoke(contextHint)
+            }
+            "ai_task" -> {
+                val contextHint = extractContext(effectiveInput, "ai_task")
+                OverlayEventBus.aiTaskCallback?.invoke(contextHint.ifBlank { effectiveInput })
             }
             "open_debug" -> {
                 OverlayEventBus.navigateScreen.value = "debug"

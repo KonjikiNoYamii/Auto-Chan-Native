@@ -264,6 +264,20 @@ object CommandAliases {
             "buka debug",
             "lihat debug",
             "log komentar"
+        ),
+
+        "ai_task" to listOf(
+            "ai task",
+            "kerjakan",
+            "lakukan",
+            "eksekusi",
+            "buatkan program",
+            "buatkan script",
+            "buatkan kode",
+            "buatkan aplikasi",
+            "buatkan file",
+            "tuliskan program",
+            "tuliskan script"
         )
     )
 }

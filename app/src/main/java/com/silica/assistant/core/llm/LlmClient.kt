@@ -501,6 +501,103 @@ object LlmClient {
         }
     }
 
+    suspend fun generateTaskPlan(userCommand: String): String? {
+        return withContext(Dispatchers.IO) {
+            try {
+                quickHealthCheck()
+                val prompt = """
+Kamu adalah Yami, asisten AI yang sangat cakap.
+User memberi perintah: "$userCommand"
+
+Tugasmu:
+1. Pahami apa yang user minta
+2. Jika perlu kode/program, tulis kode lengkap dalam blok kode (```)
+3. Jika perlu perintah shell/SSH, sebutkan command yang tepat
+4. Beri rencana eksekusi yang jelas dan langsung
+
+Format:
+RENCANA: [judul singkat]
+[Penjelasan & langkah-langkah]
+
+[Kode/program jika ada dalam blok ```]
+
+PENTING: Langsung jawab, jangan minta konfirmasi dulu dalam jawaban ini.
+${LlmConfig.personalityPrompt}
+                """.trimIndent()
+                val msg = listOf(ChatMessage("user", prompt))
+                val payload = buildPayload(msg, "", stream = false)
+                if (activeProvider == "Gemini") {
+                    try {
+                        val raw = httpPost(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout + 10000)
+                        val r = parseResponse(raw).getOrNull()?.content
+                        if (r != null) return@withContext limitSentence(r)
+                    } catch (_: Exception) {}
+                }
+                val raw = httpPost(LlmConfig.endpoint, payload)
+                parseResponse(raw).getOrNull()?.content?.let { limitSentence(it) }
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    suspend fun executeAiTask(userCommand: String): String? {
+        return withContext(Dispatchers.IO) {
+            try {
+                quickHealthCheck()
+                val prompt = """
+Kamu adalah Yami, asisten AI.
+User menyetujui rencana dan sekarang perintah harus DIJALANKAN.
+Perintah: "$userCommand"
+
+Tugasmu:
+1. Jika perlu membuat kode/program, tulis kode LENGKAP dalam blok ``` dengan bahasa yang jelas
+2. Jika perlu perintah shell, sebutkan perintah shell yang tepat
+3. Jawab dengan format terstruktur
+
+Format jawaban:
+ACTION: [create_file | run_command | show_code | selesai]
+FILE: [path file jika perlu]
+CODE:
+```[language]
+[kode lengkap]
+```
+COMMAND: [perintah shell jika perlu]
+RESULT: [pesan yang akan ditampilkan ke user setelah selesai]
+
+Contoh untuk "buatkan program kalkulator python":
+ACTION: create_file
+FILE: /tmp/kalkulator.py
+CODE:
+```python
+print("Kalkulator Sederhana")
+a = float(input("Angka 1: "))
+b = float(input("Angka 2: "))
+print(f"Hasil: {a + b}")
+```
+COMMAND: python3 /tmp/kalkulator.py
+RESULT: Program kalkulator sudah dibuat dan dijalankan! Berikut outputnya:
+
+PENTING: Jawab dengan format di ATAS. JANGAN minta konfirmasi lagi.
+${LlmConfig.personalityPrompt}
+                """.trimIndent()
+                val msg = listOf(ChatMessage("user", prompt))
+                val payload = buildPayload(msg, "", stream = false)
+                if (activeProvider == "Gemini") {
+                    try {
+                        val raw = httpPost(LlmConfig.geminiEndpoint, payload, useAuth = false, timeout = LlmConfig.geminiTimeout + 20000)
+                        val r = parseResponse(raw).getOrNull()?.content
+                        if (r != null) return@withContext r
+                    } catch (_: Exception) {}
+                }
+                val raw = httpPost(LlmConfig.endpoint, payload)
+                parseResponse(raw).getOrNull()?.content
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
     private fun safeContent(text: String): String {
         val lower = text.lowercase()
         val safetyPhrases = listOf(

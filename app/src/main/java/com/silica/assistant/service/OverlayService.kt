@@ -26,9 +26,11 @@ import com.silica.assistant.R
 import com.silica.assistant.core.ActivityDetector
 import com.silica.assistant.core.CommandManager
 import com.silica.assistant.core.CustomAssetManager
+import com.silica.assistant.core.AiExecutionEngine
 import com.silica.assistant.core.debug.CommentDebugEntry
 import com.silica.assistant.core.debug.CommentDebugger
 import com.silica.assistant.core.debug.DebugTier
+import com.silica.assistant.core.ssh.SshManager
 import com.silica.assistant.core.llm.LlmClient
 import com.silica.assistant.core.llm.WaifuNotifier
 import com.silica.assistant.core.llm.YamiQuotes
@@ -99,6 +101,11 @@ class OverlayService : Service() {
     private var detecting = false
     private var nonGameCount = 0
     private var isCommentPending = false
+
+    // ── AI Task Execution ──
+    private var isAwaitingConfirmation = false
+    private var pendingAiTask: String? = null
+    private var pendingAiPlan: String? = null
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -278,13 +285,17 @@ class OverlayService : Service() {
 
         VoiceManager.onResult = { text ->
             VoiceManager.stop()
-            showBubble("🎤 $text")
-            handler.postDelayed({
-                if (bubbleText.text == "🎤 $text") {
-                    showBubble("...")
-                }
-            }, 800)
-            CommandManager.execute(this, text)
+            if (isAwaitingConfirmation) {
+                handleConfirmation(text)
+            } else {
+                showBubble("🎤 $text")
+                handler.postDelayed({
+                    if (bubbleText.text == "🎤 $text") {
+                        showBubble("...")
+                    }
+                }, 800)
+                CommandManager.execute(this, text)
+            }
         }
 
         VoiceManager.onStateChange = { listening ->
@@ -380,6 +391,10 @@ class OverlayService : Service() {
             } else {
                 generateContextComment(appName, false)
             }
+        }
+
+        OverlayEventBus.aiTaskCallback = { input ->
+            handleAiTask(input)
         }
 
         // Auto-redirect ke Settings kalau izin belum dikasih
@@ -984,6 +999,122 @@ class OverlayService : Service() {
                 isCommentPending = false
             }
         }
+    }
+
+    // =========================
+    // AI TASK EXECUTION
+    // =========================
+    private fun handleAiTask(userInput: String) {
+        if (isCommentPending) return
+        isCommentPending = true
+        pendingAiTask = userInput
+        showBubble("Baik, aku pikirkan...", persistent = true)
+        activityScope.launch {
+            try {
+                val plan = withContext(Dispatchers.IO) {
+                    LlmClient.generateTaskPlan(userInput)
+                }
+                if (plan == null || plan.isBlank()) {
+                    showBubble("Maaf, aku belum bisa merencanakan itu~")
+                    return@launch
+                }
+                pendingAiPlan = plan
+                showBubble(plan)
+                delay(2000)
+                showBubble("Setuju dengan rencana di atas?")
+                isAwaitingConfirmation = true
+            } finally {
+                isCommentPending = false
+            }
+        }
+    }
+
+    private fun executeAiTask() {
+        val userInput = pendingAiTask ?: run {
+            showBubble("Tidak ada task yang tertunda~")
+            return
+        }
+        if (isCommentPending) return
+        isCommentPending = true
+        showBubble("Baik, aku jalankan...", persistent = true)
+        activityScope.launch {
+            try {
+                val response = withContext(Dispatchers.IO) {
+                    LlmClient.executeAiTask(userInput)
+                } ?: run {
+                    // Fallback: try SSH with extracted code
+                    val plan = pendingAiPlan ?: ""
+                    val codeBlocks = AiExecutionEngine.extractCodeBlocks(plan)
+                    if (codeBlocks.isNotEmpty() && SshManager.isConnected()) {
+                        val results = mutableListOf<String>()
+                        for (block in codeBlocks) {
+                            val result = AiExecutionEngine.executeViaSsh(block.code, block.language)
+                            result.onSuccess { r -> results.add("✅ $r") }
+                                .onFailure { e -> results.add("❌ ${e.message}") }
+                        }
+                        if (results.isNotEmpty()) {
+                            showBubble(results.joinToString("\n"))
+                            return@launch
+                        }
+                    }
+                    showBubble("Selesai~ Kode sudah siap. Cek di atas ya~")
+                    return@launch
+                }
+                // Parse the AI execution response
+                val resultText = extractExecutionResult(response)
+                showBubble(resultText)
+            } finally {
+                isCommentPending = false
+                pendingAiTask = null
+                pendingAiPlan = null
+            }
+        }
+    }
+
+    private fun handleConfirmation(response: String) {
+        val lower = response.lowercase().trim()
+        val affirmations = listOf("ya", "setuju", "y", "oke", "ok", "lanjut", "jalankan", "betul", "benar", "yes", "siap", "iya", "iyo", "yoi", "baek", "iyaa", "y", "silahkan")
+        val rejections = listOf("tidak", "nggak", "batal", "gak jadi", "stop", "kaga", "no", "cancel", "jangan", "enggak", "tidak jadi", "ndak", "kagak", "ngga")
+        if (lower in affirmations) {
+            isAwaitingConfirmation = false
+            showBubble("Baik, aku jalankan~")
+            executeAiTask()
+        } else if (lower in rejections) {
+            isAwaitingConfirmation = false
+            pendingAiTask = null
+            pendingAiPlan = null
+            showBubble("Baik, dibatalkan~")
+        } else {
+            // Treat as correction → re-plan with additional context
+            val original = pendingAiTask ?: ""
+            isAwaitingConfirmation = false
+            showBubble("Baik, aku sesuaikan~")
+            handleAiTask("$original. Tambahan: $response")
+        }
+    }
+
+    private fun extractExecutionResult(response: String): String {
+        // Try to find RESULT: tag in the AI response
+        val resultRegex = Regex("RESULT:\\s*(.+?)(?:\n|$)", RegexOption.DOT_MATCHES_ALL)
+        val match = resultRegex.find(response)
+        if (match != null) {
+            val result = match.groupValues[1].trim()
+            return result
+
+        }
+        // Check for code blocks + execution
+        val codeBlocks = AiExecutionEngine.extractCodeBlocks(response)
+        if (codeBlocks.isNotEmpty() && SshManager.isConnected()) {
+            val results = mutableListOf<String>()
+            for (block in codeBlocks) {
+                val result = AiExecutionEngine.executeViaSsh(block.code, block.language)
+                result.onSuccess { r -> results.add("✅ $r") }
+                    .onFailure { e -> results.add("❌ ${e.message}") }
+            }
+            if (results.isNotEmpty()) return results.joinToString("\n")
+        }
+        // Just return the first meaningful line
+        return response.lines().firstOrNull { it.length > 20 } ?: "Selesai~"
     }
 
     // =========================
