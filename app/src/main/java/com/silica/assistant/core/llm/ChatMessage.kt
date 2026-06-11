@@ -1,5 +1,8 @@
 package com.silica.assistant.core.llm
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class ChatMessage(
     val role: String,
     val content: String,

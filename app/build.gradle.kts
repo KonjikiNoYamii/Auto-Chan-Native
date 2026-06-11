@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
+    id("com.google.devtools.ksp") version "1.9.22-1.0.17"
 }
 
 val keystoreFile = rootProject.file("keystore.properties")
@@ -107,6 +108,12 @@ dependencies {
     // Dependency Injection
     implementation(libs.koin.android)
     implementation(libs.koin.androidx.compose)
+
+    // Database
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    //noinspection KaptUsageIdea
+    "ksp"(libs.androidx.room.compiler)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
