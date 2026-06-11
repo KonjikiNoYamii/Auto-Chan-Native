@@ -5,6 +5,7 @@ import com.silica.assistant.core.llm.model.ChatMessageEntity
 import com.silica.assistant.core.llm.model.UserFactEntity
 import com.silica.assistant.core.llm.model.UserProfileEntity
 import com.silica.assistant.core.llm.model.QuestEntity
+import com.silica.assistant.core.llm.model.AchievementEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
