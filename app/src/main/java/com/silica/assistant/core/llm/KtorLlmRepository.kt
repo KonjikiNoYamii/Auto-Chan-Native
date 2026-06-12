@@ -64,7 +64,21 @@ class KtorLlmRepository(
     private suspend fun checkGeminiServer(): Boolean {
         if (!LlmConfig.useGeminiFallback) return false
         val key = LlmConfig.geminiApiKey
-        return key.isNotBlank() && (key.startsWith("AIza") || key.startsWith("AQ"))
+        if (key.isBlank()) {
+            android.util.Log.d("SilicaAI", "Gemini check: key is blank")
+            return false
+        }
+        return try {
+            val resp = client.get("https://generativelanguage.googleapis.com/v1beta/models") {
+                header("X-goog-api-key", key)
+            }
+            val ok = resp.status.value in 200..299
+            android.util.Log.d("SilicaAI", "Gemini real check: ${resp.status} -> $ok")
+            ok
+        } catch (e: Exception) {
+            android.util.Log.e("SilicaAI", "Gemini real check failed: ${e.message}")
+            false
+        }
     }
 
     private suspend fun checkLocalGeminiServer(): Boolean {
@@ -113,8 +127,10 @@ class KtorLlmRepository(
 
             when (activeProvider) {
                 "LocalGemini" -> {
+                    android.util.Log.d("SilicaAI", "Chat: using LocalGemini")
                     val result = chatLocal(history, fullMemoryContext)
                     if (result.isFailure) {
+                        android.util.Log.w("SilicaAI", "LocalGemini failed, fallback to Gemini")
                         activeProvider = "Gemini"
                         chatGeminiFirebase(history, fullMemoryContext)
                     } else {
@@ -122,8 +138,10 @@ class KtorLlmRepository(
                     }
                 }
                 "Gemini" -> {
+                    android.util.Log.d("SilicaAI", "Chat: using Gemini")
                     val result = chatGeminiFirebase(history, fullMemoryContext)
                     if (result.isFailure) {
+                        android.util.Log.w("SilicaAI", "Gemini failed, fallback to OpenRouter")
                         healthCheckFailCount++
                         healthCheckPassCount = 0
                         if (healthCheckFailCount >= CONFIDENCE_THRESHOLD) {
@@ -134,7 +152,10 @@ class KtorLlmRepository(
                         result
                     }
                 }
-                else -> chatOpenRouter(history, fullMemoryContext)
+                else -> {
+                    android.util.Log.d("SilicaAI", "Chat: using OpenRouter")
+                    chatOpenRouter(history, fullMemoryContext)
+                }
             }
         } catch (e: Exception) {
             android.util.Log.e("SilicaAI", "Chat error", e)
@@ -172,6 +193,7 @@ class KtorLlmRepository(
             )
 
             val url = "${LlmConfig.geminiEndpoint}${LlmConfig.geminiModel}:generateContent"
+            android.util.Log.d("SilicaAI", "Gemini URL: $url")
             val response: HttpResponse = client.post(url) {
                 contentType(ContentType.Application.Json)
                 header("X-goog-api-key", LlmConfig.geminiApiKey)
