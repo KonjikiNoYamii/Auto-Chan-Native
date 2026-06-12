@@ -113,7 +113,6 @@ fun MainScreen() {
     var showUsagePermissionDialog by remember { mutableStateOf(false) }
     var showAccessibilityDialog by remember { mutableStateOf(false) }
     var showNotificationDialog by remember { mutableStateOf(false) }
-    var showBatteryDialog by remember { mutableStateOf(false) }
     var showWriteSettingsDialog by remember { mutableStateOf(false) }
 
     val recordPermissionLauncher = rememberLauncherForActivityResult(
@@ -188,13 +187,9 @@ fun MainScreen() {
         if (!android.provider.Settings.System.canWrite(context)) {
             showWriteSettingsDialog = true
         }
-
-        // 7. Check Battery Optimization
-        val pm = context.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
-        if (!pm.isIgnoringBatteryOptimizations(context.packageName)) {
-            showBatteryDialog = true
-        }
     }
+
+    BackHandler(enabled = currentScreen !is Screen.Main) { currentScreen = Screen.Main }
 
     if (showOverlayPermissionDialog) {
         AlertDialog(
@@ -289,32 +284,6 @@ fun MainScreen() {
             },
             dismissButton = {
                 TextButton(onClick = { showWriteSettingsDialog = false }) { Text("Nanti") }
-            }
-        )
-    }
-
-    if (showBatteryDialog) {
-        AlertDialog(
-            onDismissRequest = { showBatteryDialog = false },
-            title = { Text("Optimasi Baterai") },
-            text = { Text("Agar Silica tidak 'tertidur' oleh sistem Android, mohon matikan optimasi baterai untuk aplikasi ini ya~") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showBatteryDialog = false
-                    try {
-                        val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                            data = Uri.parse("package:${context.packageName}")
-                        }
-                        context.startActivity(intent)
-                    } catch (e: Exception) {
-                        // Fallback jika direct request tidak didukung
-                        val intent = Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                        context.startActivity(intent)
-                    }
-                }) { Text("Buka Settings") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showBatteryDialog = false }) { Text("Nanti") }
             }
         )
     }

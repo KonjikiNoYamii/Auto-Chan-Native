@@ -1,7 +1,11 @@
 package com.silica.assistant.ui.guide
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -17,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -506,6 +511,7 @@ private fun SshConnectionSection() {
 
 @Composable
 private fun PermissionsSection() {
+    val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionHeader("Izin Dibutuhkan", Icons.Filled.Security, Color(0xFFFF6B6B))
         Card(
@@ -517,18 +523,47 @@ private fun PermissionsSection() {
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                PermItem("Overlay (SYSTEM_ALERT_WINDOW)", "Menampilkan waifu mengambang")
-                PermItem("Mikrofon (RECORD_AUDIO)", "Voice command")
-                PermItem("Akses Penggunaan (Usage Stats)", "Deteksi game otomatis")
-                PermItem("Screen Capture (MediaProjection)", "Fitur ini apa & deskripsi layar")
-                PermItem("Aksesibilitas (AccessibilityService)", "Baca teks, klik, scroll, back")
-                PermItem("Ubah Setelan (WRITE_SETTINGS)", "Kontrol brightness")
+                PermButton("Overlay (SYSTEM_ALERT_WINDOW)", "Menampilkan waifu mengambang") {
+                    Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:${context.packageName}")
+                    ).let(context::startActivity)
+                }
+                PermButton("Mikrofon (RECORD_AUDIO)", "Voice command") {
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                        .setData(Uri.parse("package:${context.packageName}"))
+                        .let(context::startActivity)
+                }
+                PermButton("Akses Penggunaan (Usage Stats)", "Deteksi game otomatis") {
+                    Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).let(context::startActivity)
+                }
+                PermButton("Screen Capture (MediaProjection)", "Fitur ini apa & deskripsi layar") {
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                        .setData(Uri.parse("package:${context.packageName}"))
+                        .let(context::startActivity)
+                }
+                PermButton("Aksesibilitas (AccessibilityService)", "Baca teks, klik, scroll, back") {
+                    Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).let(context::startActivity)
+                }
+                PermButton("Ubah Setelan (WRITE_SETTINGS)", "Kontrol brightness") {
+                    Intent(
+                        Settings.ACTION_MANAGE_WRITE_SETTINGS,
+                        Uri.parse("package:${context.packageName}")
+                    ).let(context::startActivity)
+                }
+                PermButton("Optimasi Baterai", "Agar Silica tidak tertidur") {
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                        .setData(Uri.parse("package:${context.packageName}"))
+                        .let(context::startActivity)
+                }
+                PermButton("Notifikasi (POST_NOTIFICATIONS)", "Pemberitahuan latar belakang") {
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                        .setData(Uri.parse("package:${context.packageName}"))
+                        .let(context::startActivity)
+                }
             }
-            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-            TipItem("Aktifkan Aksesibilitas: Setelan > Aksesibilitas > Silica Assistant")
-            TipItem("Aktifkan Izin Lain: Akan muncul otomatis saat fitur dipakai pertama")
         }
     }
 }
@@ -567,8 +602,14 @@ private fun TipItem(text: String) {
 }
 
 @Composable
-private fun PermItem(label: String, desc: String) {
-    Row(verticalAlignment = Alignment.Top) {
+private fun PermButton(label: String, desc: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.Top
+    ) {
         Icon(
             Icons.Filled.CheckCircle,
             contentDescription = null,
@@ -576,7 +617,7 @@ private fun PermItem(label: String, desc: String) {
             modifier = Modifier.size(18.dp).padding(top = 2.dp)
         )
         Spacer(Modifier.width(10.dp))
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = label,
                 fontWeight = FontWeight.SemiBold,
@@ -589,6 +630,12 @@ private fun PermItem(label: String, desc: String) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        Icon(
+            Icons.Filled.ChevronRight,
+            contentDescription = "Buka Settings",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            modifier = Modifier.size(18.dp).padding(top = 2.dp)
+        )
     }
 }
 
