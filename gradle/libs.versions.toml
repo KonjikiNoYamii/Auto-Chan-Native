@@ -15,7 +15,6 @@ serialization = "1.6.2"
 coroutines = "1.7.3"
 room = "2.6.1"
 firebaseBom = "33.1.0"
-firebaseVertexai = "16.0.0-beta04"
 googleServices = "4.4.1"
 
 [libraries]
@@ -60,8 +59,6 @@ ucrop = { group = "com.github.yalantis", name = "ucrop", version.ref = "ucrop" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
 firebase-database = { group = "com.google.firebase", name = "firebase-database" }
-firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
-firebase-vertexai = { group = "com.google.firebase", name = "firebase-vertexai", version.ref = "firebaseVertexai" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

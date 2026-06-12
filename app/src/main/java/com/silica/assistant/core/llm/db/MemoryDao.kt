@@ -16,6 +16,9 @@ interface ChatDao {
     @Query("SELECT * FROM chat_messages ORDER BY timestamp DESC LIMIT :limit")
     suspend fun getRecentMessages(limit: Int): List<ChatMessageEntity>
 
+    @Query("SELECT * FROM chat_messages ORDER BY timestamp ASC")
+    suspend fun getAllMessagesSync(): List<ChatMessageEntity>
+
     @Query("DELETE FROM chat_messages")
     suspend fun clearHistory()
 }
@@ -30,6 +33,9 @@ interface UserFactDao {
 
     @Query("SELECT * FROM user_facts WHERE `key` = :key LIMIT 1")
     suspend fun getFact(key: String): UserFactEntity?
+
+    @Query("DELETE FROM user_facts")
+    suspend fun deleteAllFacts()
 }
 
 @Dao
@@ -52,6 +58,9 @@ interface QuestDao {
     @Update
     suspend fun updateQuest(quest: QuestEntity)
 
+    @Query("SELECT * FROM quests ORDER BY createdAt DESC")
+    suspend fun getAllQuestsSync(): List<QuestEntity>
+
     @Query("SELECT * FROM quests WHERE isCompleted = 0 ORDER BY createdAt DESC")
     fun getActiveQuests(): Flow<List<QuestEntity>>
 
@@ -64,6 +73,9 @@ interface QuestDao {
     @Query("SELECT COUNT(*) FROM quests WHERE isCompleted = 1 AND completedAt >= :startTime")
     suspend fun getCompletedCountSince(startTime: Long): Int
 
+    @Query("DELETE FROM quests")
+    suspend fun deleteAllQuests()
+
     @Delete
     suspend fun deleteQuest(quest: QuestEntity)
 }
@@ -72,6 +84,9 @@ interface QuestDao {
 interface AchievementDao {
     @Query("SELECT * FROM achievements ORDER BY category, tier ASC")
     fun getAllAchievements(): kotlinx.coroutines.flow.Flow<List<AchievementEntity>>
+
+    @Query("SELECT * FROM achievements ORDER BY category, tier ASC")
+    suspend fun getAllAchievementsSync(): List<AchievementEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAchievements(achievements: List<AchievementEntity>)
@@ -84,5 +99,8 @@ interface AchievementDao {
 
     @Query("SELECT COUNT(*) FROM achievements")
     suspend fun getCount(): Int
+
+    @Query("DELETE FROM achievements")
+    suspend fun deleteAllAchievements()
 }
 

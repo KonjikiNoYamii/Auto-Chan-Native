@@ -7,11 +7,17 @@ import com.google.firebase.database.FirebaseDatabase
 import com.silica.assistant.core.llm.db.UserProfileDao
 import com.silica.assistant.core.llm.db.QuestDao
 import com.silica.assistant.core.llm.db.UserFactDao
+import com.silica.assistant.core.llm.db.AchievementDao
+import com.silica.assistant.core.llm.db.ChatDao
 import com.silica.assistant.core.llm.model.UserProfileEntity
 import com.silica.assistant.core.llm.model.QuestEntity
 import com.silica.assistant.core.llm.model.UserFactEntity
+import com.silica.assistant.core.llm.model.AchievementEntity
+import com.silica.assistant.core.llm.model.ChatMessageEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -20,11 +26,14 @@ class AuthRepository(
     private val userProfileDao: UserProfileDao,
     private val questDao: QuestDao,
     private val userFactDao: UserFactDao,
+    private val achievementDao: AchievementDao,
+    private val chatDao: ChatDao,
     private val context: Context
 ) {
     private val TAG = "AuthRepository"
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
     private val database: FirebaseDatabase = FirebaseDatabase.getInstance()
+    private val syncMutex = Mutex()
 
     fun isLoggedIn(): Boolean = auth.currentUser != null
     fun getUserId(): String? = auth.currentUser?.uid
@@ -51,20 +60,23 @@ class AuthRepository(
             Log.d(TAG, "Mencoba daftar: $finalEmail")
             val result = auth.createUserWithEmailAndPassword(finalEmail, password).await()
             val userId = result.user?.uid
-            
+
             if (userId != null) {
                 try {
                     Log.d(TAG, "Auth sukses, mencoba inisialisasi database untuk UID: $userId")
                     val profile = userProfileDao.getProfile() ?: UserProfileEntity()
-                    
-                    // Gunakan timeout agar tidak loading selamanya jika rules/koneksi bermasalah
+
                     withTimeout(10000) {
-                        database.getReference("users").child(userId).child("profile").setValue(profile).await()
+                        val userRef = database.getReference("users").child(userId)
+                        userRef.child("profile").setValue(profile).await()
+                        userRef.child("quests").setValue(emptyList<QuestEntity>()).await()
+                        userRef.child("facts").setValue(emptyList<UserFactEntity>()).await()
+                        userRef.child("achievements").setValue(emptyList<AchievementEntity>()).await()
+                        userRef.child("chats").setValue(emptyList<ChatMessageEntity>()).await()
                     }
                     Log.d(TAG, "Database inisialisasi sukses")
                 } catch (e: Exception) {
                     Log.e(TAG, "Database inisialisasi gagal (tapi akun sudah dibuat)", e)
-                    // Kita tetap anggap sukses daftar agar user bisa coba login/sync nanti
                 }
             }
             Result.success(AuthResponse(true, "Pendaftaran berhasil!", userId = userId))
@@ -76,24 +88,30 @@ class AuthRepository(
 
     suspend fun syncPush(): Result<SyncResponse> = withContext(Dispatchers.IO) {
         val userId = getUserId() ?: return@withContext Result.failure(Exception("Not logged in"))
-        try {
-            Log.d(TAG, "Memulai sync push untuk UID: $userId")
-            val profile = userProfileDao.getProfile() ?: return@withContext Result.failure(Exception("No local profile"))
-            val quests = questDao.getActiveQuests().first()
-            val facts = userFactDao.getAllFacts().first()
+        syncMutex.withLock {
+            try {
+                Log.d(TAG, "Memulai sync push untuk UID: $userId")
+                val profile = userProfileDao.getProfile() ?: return@withContext Result.failure(Exception("No local profile"))
+                val quests = questDao.getAllQuestsSync()
+                val facts = userFactDao.getAllFacts().first()
+                val achievements = achievementDao.getAllAchievementsSync()
+                val chats = chatDao.getAllMessagesSync()
 
-            val userRef = database.getReference("users").child(userId)
-            
-            withTimeout(20000) {
-                userRef.child("profile").setValue(profile).await()
-                userRef.child("quests").setValue(quests).await()
-                userRef.child("facts").setValue(facts).await()
+                val userRef = database.getReference("users").child(userId)
+
+                withTimeout(30000) {
+                    userRef.child("profile").setValue(profile).await()
+                    userRef.child("quests").setValue(quests).await()
+                    userRef.child("facts").setValue(facts).await()
+                    userRef.child("achievements").setValue(achievements).await()
+                    userRef.child("chats").setValue(chats).await()
+                }
+
+                Result.success(SyncResponse(true, "Profile, Quest, Achievement, Chat & Memori berhasil diunggah!"))
+            } catch (e: Exception) {
+                Log.e(TAG, "Sync push gagal", e)
+                Result.failure(e)
             }
-
-            Result.success(SyncResponse(true, "Progress, Quest & Memori berhasil diunggah!"))
-        } catch (e: Exception) {
-            Log.e(TAG, "Sync push gagal", e)
-            Result.failure(e)
         }
     }
 
@@ -106,7 +124,7 @@ class AuthRepository(
             val profileSnapshot = withTimeout(15000) {
                 userRef.child("profile").get().await()
             }
-            val remoteProfile = profileSnapshot.getValue(UserProfileEntity::class.java) 
+            val remoteProfile = profileSnapshot.getValue(UserProfileEntity::class.java)
                 ?: return@withContext Result.failure(Exception("No remote profile found"))
 
             val questsSnapshot = withTimeout(15000) {
@@ -119,10 +137,33 @@ class AuthRepository(
             }
             val remoteFacts = factsSnapshot.children.mapNotNull { it.getValue(UserFactEntity::class.java) }
 
+            val achievementsSnapshot = withTimeout(15000) {
+                userRef.child("achievements").get().await()
+            }
+            val remoteAchievements = achievementsSnapshot.children.mapNotNull { it.getValue(AchievementEntity::class.java) }
+
+            val chatsSnapshot = withTimeout(15000) {
+                userRef.child("chats").get().await()
+            }
+            val remoteChats = chatsSnapshot.children.mapNotNull { it.getValue(ChatMessageEntity::class.java) }
+
             userProfileDao.updateProfile(remoteProfile)
+
+            questDao.deleteAllQuests()
             remoteQuests.forEach { questDao.insertQuest(it) }
+
+            userFactDao.deleteAllFacts()
             remoteFacts.forEach { userFactDao.insertFact(it) }
 
+            achievementDao.deleteAllAchievements()
+            if (remoteAchievements.isNotEmpty()) {
+                achievementDao.insertAchievements(remoteAchievements)
+            }
+
+            chatDao.clearHistory()
+            remoteChats.forEach { chatDao.insertMessage(it) }
+
+            Log.d(TAG, "Sync pull sukses: profile, ${remoteQuests.size} quests, ${remoteFacts.size} facts, ${remoteAchievements.size} achievements, ${remoteChats.size} chats")
             Result.success(remoteProfile)
         } catch (e: Exception) {
             Log.e(TAG, "Sync pull gagal", e)

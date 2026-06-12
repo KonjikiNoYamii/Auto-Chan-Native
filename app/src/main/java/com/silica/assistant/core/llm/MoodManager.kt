@@ -138,8 +138,7 @@ class MoodManager(
         
         val updatedQuest = quest.copy(isCompleted = true, completedAt = System.currentTimeMillis())
         questDao.updateQuest(updatedQuest)
-        triggerAutoSync()
-        
+
         val profile = getProfile()
         val today = getTodayDate()
         val yesterday = getYesterdayDate()

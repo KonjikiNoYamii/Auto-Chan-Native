@@ -32,7 +32,7 @@ val appModule = module {
 
     single { com.silica.assistant.core.llm.AchievementManager(get()) }
     single { MoodManager(get(), get(), get(), get()) }
-    single { AuthRepository(get(), get(), get(), androidContext()) }
+    single { AuthRepository(get(), get(), get(), get(), get(), androidContext()) }
 
     single {
         HttpClient(OkHttp) {
