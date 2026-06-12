@@ -35,6 +35,20 @@ object LlmConfig : KoinComponent {
     fun save() {
         scope.launch {
             userFactDao.insertFact(UserFactEntity("personality_prompt", personalityPrompt))
+            triggerAutoSync()
+        }
+    }
+
+    private fun triggerAutoSync() {
+        scope.launch {
+            try {
+                val authRepository: com.silica.assistant.core.auth.AuthRepository = org.koin.core.context.GlobalContext.get().get()
+                if (authRepository.isLoggedIn()) {
+                    authRepository.syncPush()
+                }
+            } catch (e: Exception) {
+                // Koin might not be ready or repository not found
+            }
         }
     }
 }
