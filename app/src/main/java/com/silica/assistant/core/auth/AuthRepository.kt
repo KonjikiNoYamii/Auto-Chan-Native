@@ -28,6 +28,7 @@ class AuthRepository(
     private val userFactDao: UserFactDao,
     private val achievementDao: AchievementDao,
     private val chatDao: ChatDao,
+    private val friendDao: com.silica.assistant.core.llm.db.FriendDao,
     private val context: Context
 ) {
     private val TAG = "AuthRepository"
@@ -73,6 +74,7 @@ class AuthRepository(
                         userRef.child("facts").setValue(emptyList<UserFactEntity>()).await()
                         userRef.child("achievements").setValue(emptyList<AchievementEntity>()).await()
                         userRef.child("chats").setValue(emptyList<ChatMessageEntity>()).await()
+                        userRef.child("friends").setValue(emptyList<FriendEntity>()).await()
                     }
                     Log.d(TAG, "Database inisialisasi sukses")
                 } catch (e: Exception) {
@@ -96,6 +98,7 @@ class AuthRepository(
                 val facts = userFactDao.getAllFacts().first()
                 val achievements = achievementDao.getAllAchievementsSync()
                 val chats = chatDao.getAllMessagesSync()
+                val friends = friendDao.getAllFriendsSync()
 
                 val userRef = database.getReference("users").child(userId)
 
@@ -105,9 +108,10 @@ class AuthRepository(
                     userRef.child("facts").setValue(facts).await()
                     userRef.child("achievements").setValue(achievements).await()
                     userRef.child("chats").setValue(chats).await()
+                    userRef.child("friends").setValue(friends).await()
                 }
 
-                Result.success(SyncResponse(true, "Profile, Quest, Achievement, Chat & Memori berhasil diunggah!"))
+                Result.success(SyncResponse(true, "Semua data berhasil diunggah ke cloud!"))
             } catch (e: Exception) {
                 Log.e(TAG, "Sync push gagal", e)
                 Result.failure(e)
@@ -148,6 +152,11 @@ class AuthRepository(
                 }
                 val remoteChats = chatsSnapshot.children.mapNotNull { it.getValue(ChatMessageEntity::class.java) }
 
+                val friendsSnapshot = withTimeout(15000) {
+                    userRef.child("friends").get().await()
+                }
+                val remoteFriends = friendsSnapshot.children.mapNotNull { it.getValue(FriendEntity::class.java) }
+
                 userProfileDao.updateProfile(remoteProfile)
 
                 questDao.deleteAllQuests()
@@ -164,7 +173,10 @@ class AuthRepository(
                 chatDao.clearHistory()
                 remoteChats.forEach { chatDao.insertMessage(it) }
 
-                Log.d(TAG, "Sync pull sukses: profile, ${remoteQuests.size} quests, ${remoteFacts.size} facts, ${remoteAchievements.size} achievements, ${remoteChats.size} chats")
+                friendDao.deleteAllFriends()
+                remoteFriends.forEach { friendDao.insertFriend(it) }
+
+                Log.d(TAG, "Sync pull sukses: profile, ${remoteQuests.size} quests, ${remoteFacts.size} facts, ${remoteAchievements.size} achievements, ${remoteChats.size} chats, ${remoteFriends.size} friends")
                 Result.success(remoteProfile)
             } catch (e: Exception) {
                 Log.e(TAG, "Sync pull gagal", e)

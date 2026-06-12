@@ -91,6 +91,9 @@ class SocialRepository(
         
         // Save to local DB
         friendDao.insertFriend(FriendEntity(userId = otherUserId, nickname = otherNickname, status = "ACCEPTED"))
+        
+        // Trigger sync to update local friends list to cloud backup
+        authRepository.syncPush()
     }
 
     fun observeMessages(otherUserId: String): Flow<List<SocialMessageEntity>> = callbackFlow {
