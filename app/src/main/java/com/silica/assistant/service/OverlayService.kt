@@ -814,7 +814,32 @@ class OverlayService : Service() {
 
     // ── Game mode: pure AI only ──
 
-    private fun generateContextComment(appName: String, isGame: Boolean) {
+    private fun executeAutomation(action: String) {
+        when (action) {
+            "GAME_MODE" -> {
+                if (!GameModeManager.isGameMode) {
+                    val metrics = resources.displayMetrics
+                    val sizeDp = com.silica.assistant.core.config.AssistantConfig.overlaySizeGameMode
+                    waifuWidth = (sizeDp * metrics.density).toInt()
+                    waifuHeight = (sizeDp * metrics.density).toInt()
+                    val den = waifuWidth / (120f * metrics.density) * metrics.density
+                    GameModeManager.enterGameMode(this, params.x, params.y, displayWidth, displayHeight, den, auto = true)
+
+                    handler.post {
+                        waifuImage.layoutParams.width = waifuWidth
+                        waifuImage.layoutParams.height = waifuHeight
+                        windowManager.updateViewLayout(overlayView, params)
+                    }
+                }
+            }
+            "BRIGHTNESS_MAX" -> com.silica.assistant.core.system.BrightnessController.max(this)
+            "BRIGHTNESS_MIN" -> com.silica.assistant.core.system.BrightnessController.min(this)
+            "VOLUME_UP" -> com.silica.assistant.core.system.VolumeController.volumeUp(this)
+            "VOLUME_MAX" -> com.silica.assistant.core.system.VolumeController.maxVolume(this)
+        }
+    }
+
+    private suspend fun generateContextComment(appName: String, isGame: Boolean) {
         if (isCommentPending) return
         isCommentPending = true
         showBubble("Mari kita lihat... (─.─)", persistent = true)

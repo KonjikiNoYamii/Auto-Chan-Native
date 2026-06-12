@@ -104,9 +104,28 @@ class ActivityDetector(private val context: Context) {
         }
     }
 
-    private var lastSpontaneousCommentTime = 0L
-    private val SPONTANEOUS_INTERVAL = 15 * 60 * 1000 // 15 minutes
     private val activityScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
+
+    data class Automation(
+        val action: String, // GAME_MODE, BRIGHTNESS_MIN, BRIGHTNESS_MAX, VOLUME_MUTE, VOLUME_MAX
+        val description: String
+    )
+
+    private val appAutomations = mapOf(
+        "com.miHoYo.GenshinImpact" to Automation("GAME_MODE", "Mengaktifkan Game Mode untuk Genshin Impact..."),
+        "com.mobile.legends" to Automation("GAME_MODE", "Persiapan tempur! Mengaktifkan Game Mode..."),
+        "com.netflix.mediaclient" to Automation("BRIGHTNESS_MAX", "Menyesuaikan layar agar nonton lebih nyaman..."),
+        "com.google.android.youtube" to Automation("VOLUME_UP", "Menambah volume untuk kenyamanan nonton..."),
+        "com.android.settings" to Automation("BRIGHTNESS_MAX", "Menerangkan layar untuk pengaturan..."),
+        "com.whatsapp" to Automation("NONE", ""),
+    )
+
+    fun getAutomationForApp(packageName: String): Automation? {
+        // Check exact match or prefixes for known games
+        return appAutomations[packageName] ?: if (com.silica.assistant.overlay.GameModeManager.isGame(context, packageName)) {
+            Automation("GAME_MODE", "Mendeteksi game, mengaktifkan Game Mode otomatis... ♪")
+        } else null
+    }
 
     fun checkAndTriggerSpontaneousComment(appName: String) {
         val now = System.currentTimeMillis()
