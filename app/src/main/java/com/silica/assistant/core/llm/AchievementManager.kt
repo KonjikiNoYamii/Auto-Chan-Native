@@ -88,7 +88,7 @@ class AchievementManager(private val achievementDao: AchievementDao) {
 
     private fun notifyAchievement(achievement: AchievementEntity) {
         scope.launch(Dispatchers.Main) {
-            OverlayEventBus.onBubble?.invoke("🎊 **ACHIEVEMENT UNLOCKED!** 🎊 (＾▽＾)\n'${achievement.title}'\n${achievement.description}")
+            com.silica.assistant.core.overlay.OverlayEventBus.onBubble?.invoke("(＾▽＾) **ACHIEVEMENT UNLOCKED!** ♪\n'${achievement.title}'\n${achievement.description}")
         }
     }
 }

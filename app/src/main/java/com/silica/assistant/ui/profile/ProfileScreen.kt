@@ -59,8 +59,8 @@ fun ProfileScreen(
     val progress = (xp.toFloat() / nextXp.toFloat()).coerceIn(0f, 1f)
     
     val relationshipStatus = when {
-        profile.relationshipRoute == "LOVER" -> "Pasangan (Lover) ❤️"
-        profile.relationshipRoute == "SOULMATE" -> "Sahabat Sejati 🌟"
+        profile.relationshipRoute == "LOVER" -> "Pasangan (Lover) (♡‿♡)"
+        profile.relationshipRoute == "SOULMATE" -> "Sahabat Sejati (☆▽☆)"
         level > 30 -> "Teman Akrab"
         level > 15 -> "Kenalan Baik"
         else -> "Orang Asing"

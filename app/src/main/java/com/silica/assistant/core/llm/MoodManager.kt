@@ -277,9 +277,9 @@ class MoodManager(
         val hardCount = allCompleted.count { it.difficulty == "HARD" }
         achievementManager.checkAchievements(newProfile, allCompleted.size, hardCount)
 
-        val verifyMsg = if (eligible) "\n✨ **QUEST TERVERIFIKASI!** Aku mendeteksi aktivitasmu. ♪" else "\n⚠️ **QUEST MANUAL.** Aku tidak mendeteksi aktivitas aplikasi terkait."
+        val verifyMsg = if (eligible) "\n(☆▽☆) **QUEST TERVERIFIKASI!** Aku mendeteksi aktivitasmu. ♪" else "\n(¬_¬) **QUEST MANUAL.** Aku tidak mendeteksi aktivitas aplikasi terkait."
         
-        val levelMsg = if (leveledUp) "\n🎊 **LEVEL UP!** Kamu sekarang Level $currentLevel! 🎊" else ""
+        val levelMsg = if (leveledUp) "\n(＾▽＾) **LEVEL UP!** Kamu sekarang Level $currentLevel! ♪" else ""
         val streakMsg = when {
             newStreak == 7 -> "\nWah, kamu sudah produktif selama seminggu penuh! Aku sangat bangga padamu ♪"
             newStreak == 30 -> "\nSatu bulan penuh produktif! Kamu luar biasa, Partner! ♪"

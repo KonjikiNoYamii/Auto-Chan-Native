@@ -114,7 +114,7 @@ fun QuestHistoryScreen(viewModel: AssistantViewModel, onBack: () -> Unit) {
                                         Text(quest.title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Espresso)
                                         if (quest.isEligible) {
                                             Spacer(Modifier.width(4.dp))
-                                            Text("✨", fontSize = 12.sp)
+                                            Icon(Icons.Default.Verified, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(14.dp))
                                         }
                                     }
                                     Text(
