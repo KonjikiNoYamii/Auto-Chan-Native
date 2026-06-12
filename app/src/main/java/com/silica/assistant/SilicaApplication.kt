@@ -17,5 +17,11 @@ class SilicaApplication : Application() {
             androidContext(this@SilicaApplication)
             modules(appModule)
         }
+
+        com.silica.assistant.core.config.AssistantConfig.init()
+        com.silica.assistant.core.llm.LlmConfig.init()
+        
+        val chatDao = org.koin.core.context.GlobalContext.get().get<com.silica.assistant.core.llm.db.ChatDao>()
+        com.silica.assistant.core.llm.WaifuNotifier.init(this, chatDao)
     }
 }

@@ -2,8 +2,16 @@ package com.silica.assistant.core.llm
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import androidx.core.app.NotificationCompat
+import com.silica.assistant.MainActivity
+import com.silica.assistant.core.llm.db.ChatDao
+import com.silica.assistant.core.llm.model.ChatMessageEntity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlin.random.Random
 
 object WaifuNotifier {
@@ -11,7 +19,14 @@ object WaifuNotifier {
     private const val MIN_INTERVAL_MS = 30 * 60 * 1000L
 
     private var ctx: Context? = null
+    private var chatDao: ChatDao? = null
     private var lastRandomNotifTime = 0L
+
+    fun init(context: Context, dao: ChatDao) {
+        ctx = context.applicationContext
+        chatDao = dao
+        createChannel(context)
+    }
 
     private val idleMessages = listOf(
         "...",
@@ -75,19 +90,57 @@ object WaifuNotifier {
         "Hmph. Server kamu bermasalah. Pakai cadangan.",
     )
 
+    private val morningMessages = listOf(
+        "Selamat pagi. Bangunlah, dunia tidak akan menunggumu.",
+        "Matahari sudah tinggi. Jangan malas-malasan terus.",
+        "Pagi... Jangan lupa sarapan, dasar ceroboh.",
+        "Oi, sudah pagi. Ayo mulai harimu."
+    )
+
+    private val nightMessages = listOf(
+        "Sudah larut. Kenapa kamu belum tidur?",
+        "Istirahatlah, tubuhmu bukan mesin.",
+        "Selamat malam. Semoga mimpimu tidak seaneh biasanya.",
+        "Matikan layarmu, sudah waktunya tidur."
+    )
+
     private val allRandom = idleMessages + tsundereMessages + caringMessages + playfulMessages
 
-    fun init(context: Context) {
-        ctx = context.applicationContext
-        createChannel(context)
+    fun cancelAllNotifications() {
+        val context = ctx ?: return
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.cancelAll()
+    }
+
+    fun showTimeBasedGreeting() {
+        val context = ctx ?: return
+        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        val message = when (hour) {
+            in 5..10 -> morningMessages.random()
+            in 21..23, in 0..3 -> nightMessages.random()
+            else -> allRandom.random() // Fallback to random idle/tsundere/caring message
+        }
+        
+        // Add message to chat database
+        chatDao?.let { dao ->
+            CoroutineScope(Dispatchers.IO).launch {
+                dao.insertMessage(ChatMessageEntity(role = "assistant", content = message))
+            }
+        }
+        
+        show(context, message, isHighPriority = true)
     }
 
     private fun createChannel(context: Context) {
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Yami - Random",
-            NotificationManager.IMPORTANCE_LOW
-        )
+            "Yami - Assistant",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "Notifikasi dari Yami"
+            enableLights(true)
+            lightColor = android.graphics.Color.MAGENTA
+        }
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(channel)
     }
@@ -111,17 +164,28 @@ object WaifuNotifier {
         show(context, message)
     }
 
-    private fun show(context: Context, message: String) {
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+    private fun show(context: Context, message: String, isHighPriority: Boolean = false) {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            putExtra("OPEN_SCREEN", "CHAT")
+        }
+        
+        val pendingIntent = PendingIntent.getActivity(
+            context, 0, intent, 
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle("Yami")
             .setContentText(message)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(if (isHighPriority) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
-            .build()
+            .setContentIntent(pendingIntent)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
 
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val notifId = (System.currentTimeMillis() % Int.MAX_VALUE).toInt() + Random.nextInt(0, 100)
-        manager.notify(notifId, notification)
+        val notifId = if (isHighPriority) 1001 else Random.nextInt(1002, 9999)
+        manager.notify(notifId, builder.build())
     }
 }
