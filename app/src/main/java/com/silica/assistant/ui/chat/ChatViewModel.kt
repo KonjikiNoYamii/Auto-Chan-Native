@@ -9,16 +9,97 @@ import androidx.lifecycle.viewModelScope
 import com.silica.assistant.core.llm.ChatMessage
 import com.silica.assistant.core.llm.EmotionMapper
 import com.silica.assistant.core.llm.LlmClient
-import com.silica.assistant.core.llm.LlmConfig
 import com.silica.assistant.core.llm.MemoryManager
+import com.silica.assistant.core.llm.db.ChatDao
+import com.silica.assistant.core.llm.model.ChatMessageEntity
+import com.silica.assistant.core.system.SoundManager
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-class ChatViewModel : ViewModel() {
+import com.silica.assistant.core.llm.MoodManager
+
+class ChatViewModel(
+    private val chatDao: ChatDao,
+    private val moodManager: MoodManager
+) : ViewModel() {
+
+    var inventory by mutableStateOf<List<String>>(emptyList())
+        private set
 
     init {
         viewModelScope.launch {
             LlmClient.startPeriodicHealthCheck()
+            observeChatHistory()
+            loadInventory()
+        }
+    }
+
+    fun loadInventory() {
+        viewModelScope.launch {
+            inventory = moodManager.getInventory()
+        }
+    }
+
+    fun giveGift(context: Context, item: String) {
+        viewModelScope.launch {
+            val (success, response) = moodManager.giveGift(item)
+            if (success) {
+                moodManager.removeItemFromInventory(item)
+                loadInventory()
+                
+                // Add message to UI and DB
+                val uMsg = ChatMessage(role = "user", content = "Memberi hadiah: $item")
+                val aMsg = ChatMessage(role = "assistant", content = response)
+                messages = messages + uMsg + aMsg
+                saveMessage("user", uMsg.content)
+                saveMessage("assistant", aMsg.content)
+            } else {
+                // Show refusal as AI message
+                val aMsg = ChatMessage(role = "assistant", content = response)
+                messages = messages + aMsg
+                saveMessage("assistant", aMsg.content)
+            }
+        }
+    }
+
+    private suspend fun observeChatHistory() {
+        chatDao.getRecentMessagesFlow(50).collectLatest { history ->
+            val reversedHistory = history.reversed()
+            
+            // Only update if the size changed or last message changed to avoid unnecessary UI flickering during typewriter
+            // Actually, typewriter effect modifies the 'messages' state directly. 
+            // If we observe DB, we might overwrite the typewriter state.
+            
+            // To handle typewriter correctly, we should probably only update if the DB has NEW messages
+            // that are NOT currently in our 'messages' list (excluding typing ones).
+            
+            val currentNonTypingMessages = messages.filter { !it.isTyping }
+            if (reversedHistory.size != currentNonTypingMessages.size || (reversedHistory.isNotEmpty() && reversedHistory.last().content != currentNonTypingMessages.lastOrNull()?.content)) {
+                 messages = reversedHistory.map { entity ->
+                    ChatMessage(
+                        role = entity.role,
+                        content = entity.content,
+                        timestamp = entity.timestamp,
+                        emotion = entity.emotion,
+                        isTyping = false,
+                        displayedContent = entity.content
+                    )
+                }
+            }
+        }
+    }
+
+    private fun saveMessage(role: String, content: String, emotion: String? = null) {
+        viewModelScope.launch {
+            chatDao.insertMessage(
+                ChatMessageEntity(
+                    role = role,
+                    content = content,
+                    timestamp = System.currentTimeMillis(),
+                    emotion = emotion
+                )
+            )
         }
     }
 
@@ -42,16 +123,22 @@ class ChatViewModel : ViewModel() {
         if (forgetCmd != null) {
             MemoryManager.removeMemory(context, forgetCmd)
             memories = MemoryManager.getMemories(context)
-            messages = messages + ChatMessage(role = "user", content = text)
-            messages = messages + ChatMessage(role = "assistant", content = "...Baik, aku lupakan itu.")
+            val uMsg = ChatMessage(role = "user", content = text)
+            val aMsg = ChatMessage(role = "assistant", content = "...Baik, aku lupakan itu.")
+            messages = messages + uMsg + aMsg
+            saveMessage("user", text)
+            saveMessage("assistant", aMsg.content)
             return
         }
 
         if (MemoryManager.isClearCommand(text)) {
             MemoryManager.clearAll(context)
             memories = emptyList()
-            messages = messages + ChatMessage(role = "user", content = text)
-            messages = messages + ChatMessage(role = "assistant", content = "...Semua ingatan dihapus.")
+            val uMsg = ChatMessage(role = "user", content = text)
+            val aMsg = ChatMessage(role = "assistant", content = "...Semua ingatan dihapus.")
+            messages = messages + uMsg + aMsg
+            saveMessage("user", text)
+            saveMessage("assistant", aMsg.content)
             return
         }
 
@@ -62,8 +149,11 @@ class ChatViewModel : ViewModel() {
             } else {
                 "Yang aku tahu:\n" + mems.mapIndexed { i, m -> "${i + 1}. $m" }.joinToString("\n")
             }
-            messages = messages + ChatMessage(role = "user", content = text)
-            messages = messages + ChatMessage(role = "assistant", content = content)
+            val uMsg = ChatMessage(role = "user", content = text)
+            val aMsg = ChatMessage(role = "assistant", content = content)
+            messages = messages + uMsg + aMsg
+            saveMessage("user", text)
+            saveMessage("assistant", content)
             return
         }
 
@@ -79,6 +169,8 @@ class ChatViewModel : ViewModel() {
         // send to LLM with memory context
         val userMsg = ChatMessage(role = "user", content = text)
         messages = messages + userMsg
+        saveMessage("user", text)
+        
         isLoading = true
         error = null
         val memoryCtx = MemoryManager.buildContext(context)
@@ -90,7 +182,35 @@ class ChatViewModel : ViewModel() {
                     for (i in bubbles.indices) {
                         val (cleanText, emotion) = EmotionMapper.parseEmotion(bubbles[i])
                         val e = if (i == 0) emotion else null
-                        messages = messages + ChatMessage(role = "assistant", content = cleanText, emotion = e)
+                        
+                        val newMessage = ChatMessage(
+                            role = "assistant", 
+                            content = cleanText, 
+                            emotion = e,
+                            isTyping = true,
+                            displayedContent = ""
+                        )
+                        messages = messages + newMessage
+                        saveMessage("assistant", cleanText, e)
+                        
+                        // Typewriter effect
+                        val messageIndex = messages.size - 1
+                        SoundManager.playSound("pop")
+                        for (charIndex in cleanText.indices) {
+                            delay(30) // speed of typing
+                            val updatedMessages = messages.toMutableList()
+                            val msg = updatedMessages[messageIndex]
+                            updatedMessages[messageIndex] = msg.copy(
+                                displayedContent = cleanText.take(charIndex + 1)
+                            )
+                            messages = updatedMessages
+                        }
+                        
+                        // Finalize typing
+                        val finalMessages = messages.toMutableList()
+                        finalMessages[messageIndex] = finalMessages[messageIndex].copy(isTyping = false)
+                        messages = finalMessages
+                        
                         delay(600)
                     }
                 }
@@ -121,5 +241,8 @@ class ChatViewModel : ViewModel() {
     fun clearChat() {
         messages = emptyList()
         error = null
+        viewModelScope.launch {
+            chatDao.clearHistory()
+        }
     }
 }

@@ -2,6 +2,7 @@ package com.silica.assistant.ui.chat
 
 import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,7 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import org.koin.androidx.compose.koinViewModel
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.painterResource
@@ -42,13 +43,14 @@ import java.util.*
 @Composable
 fun ChatScreen(
     onBack: () -> Unit,
-    viewModel: ChatViewModel = viewModel()
+    viewModel: ChatViewModel = koinViewModel()
 ) {
     val context = LocalContext.current
     val listState = rememberLazyListState()
     var inputText by remember { mutableStateOf("") }
     var showMemories by remember { mutableStateOf(false) }
     var showModelInfo by remember { mutableStateOf(false) }
+    var showGiftDialog by remember { mutableStateOf(false) }
 
     val assistantName = AssistantConfig.assistantName.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
     val chatIcon = remember(context) { CustomAssetManager.loadImageBitmap(context, CustomAssetManager.AssetType.CHAT_ICON) }
@@ -59,6 +61,8 @@ fun ChatScreen(
 
     LaunchedEffect(Unit) {
         viewModel.loadMemories(context)
+        viewModel.loadInventory()
+        com.silica.assistant.core.llm.WaifuNotifier.cancelAllNotifications()
     }
 
     LaunchedEffect(messages.size) {
@@ -207,6 +211,18 @@ fun ChatScreen(
 
             HorizontalDivider(modifier = Modifier.fillMaxWidth())
 
+            QuickActionRow(
+                onAction = { action ->
+                    if (action == "Kasih hadiah") {
+                        showGiftDialog = true
+                    } else {
+                        viewModel.sendMessage(context, action)
+                    }
+                },
+                enabled = !isLoading,
+                viewModel = viewModel
+            )
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -251,6 +267,65 @@ fun ChatScreen(
     if (showModelInfo) {
         ModelInfoDialog(onDismiss = { showModelInfo = false })
     }
+
+    if (showGiftDialog) {
+        GiftSelectionDialog(
+            inventory = viewModel.inventory,
+            onDismiss = { showGiftDialog = false },
+            onSend = { item ->
+                viewModel.giveGift(context, item)
+                showGiftDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun GiftSelectionDialog(
+    inventory: List<String>,
+    onDismiss: () -> Unit,
+    onSend: (String) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Pilih Hadiah") },
+        text = {
+            if (inventory.isEmpty()) {
+                Text("Tas kamu kosong. Selesaikan quest untuk mendapatkan item! ♪")
+            } else {
+                val itemCounts = inventory.groupingBy { it }.eachCount()
+                LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
+                    items(itemCounts.entries.toList()) { (item, count) ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .clickable { onSend(item) },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(item, modifier = Modifier.weight(1f))
+                                Badge(containerColor = DeepRose) {
+                                    Text("x$count", color = Color.White, fontSize = 10.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Tutup") }
+        }
+    )
 }
 
 @Composable
@@ -458,6 +533,51 @@ private fun MemoriesDialog(
 }
 
 @Composable
+private fun QuickActionRow(
+    onAction: (String) -> Unit,
+    enabled: Boolean,
+    viewModel: ChatViewModel
+) {
+    val suggestions = listOf("Halo!", "Terima kasih ♪", "Kasih hadiah", "Apa kabar?", "Status ku")
+    val hasItems = viewModel.inventory.isNotEmpty()
+    
+    androidx.compose.foundation.lazy.LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(suggestions) { text ->
+            val isGift = text == "Kasih hadiah"
+            ActionChip(
+                text = text, 
+                enabled = enabled && (!isGift || hasItems)
+            ) { onAction(text) }
+        }
+    }
+}
+
+@Composable
+private fun ActionChip(text: String, enabled: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(16.dp),
+        color = DeepRose.copy(alpha = 0.1f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, DeepRose.copy(alpha = 0.2f))
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            fontSize = 12.sp,
+            color = DeepRose,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+        )
+    }
+}
+
+@Composable
 private fun ChatBubble(message: ChatMessage, assistantName: String) {
     val context = LocalContext.current
     val isUser = message.role == "user"
@@ -506,7 +626,7 @@ private fun ChatBubble(message: ChatMessage, assistantName: String) {
             ) {
                 SelectionContainer {
                     Text(
-                        text = message.content,
+                        text = message.displayedContent,
                         fontSize = 14.sp,
                         color = if (isUser) Color.White
                         else MaterialTheme.colorScheme.onSurface

@@ -6,12 +6,17 @@ import com.silica.assistant.core.llm.model.UserFactEntity
 import com.silica.assistant.core.llm.model.UserProfileEntity
 import com.silica.assistant.core.llm.model.QuestEntity
 import com.silica.assistant.core.llm.model.AchievementEntity
+import com.silica.assistant.core.llm.model.FriendEntity
+import com.silica.assistant.core.llm.model.SocialMessageEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ChatDao {
     @Insert
     suspend fun insertMessage(message: ChatMessageEntity)
+
+    @Query("SELECT * FROM chat_messages ORDER BY timestamp DESC LIMIT :limit")
+    fun getRecentMessagesFlow(limit: Int): Flow<List<ChatMessageEntity>>
 
     @Query("SELECT * FROM chat_messages ORDER BY timestamp DESC LIMIT :limit")
     suspend fun getRecentMessages(limit: Int): List<ChatMessageEntity>
@@ -102,5 +107,35 @@ interface AchievementDao {
 
     @Query("DELETE FROM achievements")
     suspend fun deleteAllAchievements()
+}
+
+@Dao
+interface FriendDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFriend(friend: FriendEntity)
+
+    @Query("SELECT * FROM friends ORDER BY lastMessageTime DESC")
+    fun getAllFriends(): Flow<List<FriendEntity>>
+
+    @Query("SELECT * FROM friends WHERE userId = :userId LIMIT 1")
+    suspend fun getFriend(userId: String): FriendEntity?
+
+    @Query("DELETE FROM friends WHERE userId = :userId")
+    suspend fun deleteFriend(userId: String)
+}
+
+@Dao
+interface SocialMessageDao {
+    @Insert
+    suspend fun insertMessage(message: SocialMessageEntity)
+
+    @Query("SELECT * FROM social_messages WHERE chatId = :chatId ORDER BY timestamp ASC")
+    fun getMessagesForChat(chatId: String): Flow<List<SocialMessageEntity>>
+
+    @Query("UPDATE social_messages SET isRead = 1 WHERE chatId = :chatId AND senderId != :currentUserId")
+    suspend fun markAsRead(chatId: String, currentUserId: String)
+
+    @Query("DELETE FROM social_messages WHERE chatId = :chatId")
+    suspend fun deleteChat(chatId: String)
 }
 
