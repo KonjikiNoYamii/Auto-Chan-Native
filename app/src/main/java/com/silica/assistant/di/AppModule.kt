@@ -14,6 +14,7 @@ import com.silica.assistant.core.llm.LlmRepository
 import com.silica.assistant.core.llm.KtorLlmRepository
 import com.silica.assistant.core.llm.MoodManager
 import com.silica.assistant.core.auth.AuthRepository
+import com.silica.assistant.core.ActivityDetector
 
 val appModule = module {
     single {
@@ -21,7 +22,7 @@ val appModule = module {
             androidContext(),
             SilicaDatabase::class.java,
             "silica_database"
-        ).build()
+        ).fallbackToDestructiveMigration().build()
     }
     
     single { get<SilicaDatabase>().chatDao() }
