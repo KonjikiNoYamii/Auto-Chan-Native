@@ -54,7 +54,7 @@ class KtorLlmRepository(
                 healthCheckFailCount++
                 healthCheckPassCount = 0
                 if (healthCheckFailCount >= CONFIDENCE_THRESHOLD) {
-                    activeProvider = if (checkGeminiServer()) "Gemini" else "OpenRouter"
+                    activeProvider = if (checkGeminiServer()) "Gemini" else "Tidak Ada"
                 }
             }
             delay(if (activeProvider == "LocalGemini" || activeProvider == "Gemini") 15_000L else 10_000L)
@@ -101,7 +101,7 @@ class KtorLlmRepository(
             activeProvider = when {
                 checkLocalGeminiServer() -> "LocalGemini"
                 checkGeminiServer() -> "Gemini"
-                else -> "OpenRouter"
+                else -> "Tidak Ada"
             }
         }
     }
@@ -141,20 +141,15 @@ class KtorLlmRepository(
                     android.util.Log.d("SilicaAI", "Chat: using Gemini")
                     val result = chatGeminiFirebase(history, fullMemoryContext)
                     if (result.isFailure) {
-                        android.util.Log.w("SilicaAI", "Gemini failed, fallback to OpenRouter")
-                        healthCheckFailCount++
-                        healthCheckPassCount = 0
-                        if (healthCheckFailCount >= CONFIDENCE_THRESHOLD) {
-                            activeProvider = "OpenRouter"
-                        }
-                        chatOpenRouter(history, fullMemoryContext)
+                        android.util.Log.w("SilicaAI", "Gemini also failed")
+                        Result.failure(Exception("Gemini API tidak tersedia. Periksa koneksi atau API key."))
                     } else {
                         result
                     }
                 }
                 else -> {
-                    android.util.Log.d("SilicaAI", "Chat: using OpenRouter")
-                    chatOpenRouter(history, fullMemoryContext)
+                    android.util.Log.e("SilicaAI", "No AI provider available")
+                    Result.failure(Exception("Tidak ada provider AI yang tersedia. Nyalakan laptop (local server) atau periksa API key Gemini."))
                 }
             }
         } catch (e: Exception) {
@@ -244,25 +239,6 @@ class KtorLlmRepository(
         }
     }
 
-    private suspend fun chatOpenRouter(history: List<ChatMessage>, memoryContext: String): Result<ChatMessage> {
-        val payload = buildChatRequest(history, memoryContext, stream = false)
-        val response: HttpResponse = client.post(LlmConfig.endpoint) {
-            contentType(ContentType.Application.Json)
-            header("Authorization", "Bearer ${LlmConfig.apiKey}")
-            setBody(payload)
-        }
-        
-        return if (response.status.value in 200..299) {
-            val chatResponse = response.body<ChatResponse>()
-            val content = chatResponse.choices.firstOrNull()?.message?.content ?: ""
-            val safeContent = safeContent(content)
-            chatDao.insertMessage(ChatMessageEntity(role = "assistant", content = safeContent))
-            Result.success(ChatMessage(role = "assistant", content = safeContent))
-        } else {
-            val errBody = response.bodyAsText()
-            Result.failure(Exception("HTTP ${response.status}: ${errBody.take(500)}"))
-        }
-    }
     override fun chatStream(messages: List<ChatMessage>, memoryContext: String): Flow<String> = flow {
         quickHealthCheck()
         
@@ -278,53 +254,8 @@ class KtorLlmRepository(
             return@flow
         }
         
-        messages.filter { it.role == "user" }.forEach { 
-            chatDao.insertMessage(ChatMessageEntity(role = it.role, content = it.content))
-        }
-
-        val history = chatDao.getRecentMessages(MAX_HISTORY_CONTEXT).reversed().map { 
-            ChatMessage(role = it.role, content = it.content)
-        }
-
-        val personalityContext = moodManager.getMoodPromptSnippet()
-        val fullMemoryContext = "$personalityContext $memoryContext"
-
-        val payload = buildChatRequest(history, fullMemoryContext, stream = true)
-
-        val fullResponse = StringBuilder()
-        client.preparePost(LlmConfig.endpoint) {
-            contentType(ContentType.Application.Json)
-            header("Authorization", "Bearer ${LlmConfig.apiKey}")
-            setBody(payload)
-        }.execute { response ->
-            if (response.status.value !in 200..299) {
-                throw Exception("HTTP ${response.status}")
-            }
-            val channel = response.bodyAsChannel()
-            while (!channel.isClosedForRead) {
-                val line = channel.readUTF8Line() ?: break
-                if (line.startsWith("data: ")) {
-                    val data = line.removePrefix("data: ").trim()
-                    if (data == "[DONE]") break
-                    try {
-                        val jsonElement = json.parseToJsonElement(data)
-                        val content = jsonElement.jsonObject["choices"]
-                            ?.jsonArray?.getOrNull(0)
-                            ?.jsonObject?.get("delta")
-                            ?.jsonObject?.get("content")
-                            ?.jsonPrimitive?.content ?: ""
-                        if (content.isNotEmpty()) {
-                            fullResponse.append(content)
-                            emit(content)
-                        }
-                    } catch (_: Exception) {}
-                }
-            }
-        }
-        
-        if (fullResponse.isNotEmpty()) {
-            chatDao.insertMessage(ChatMessageEntity(role = "assistant", content = fullResponse.toString()))
-        }
+        emit("Tidak ada provider AI yang tersedia. Nyalakan laptop atau periksa API key Gemini.")
+        return@flow
     }
 
     override suspend fun generateActivityComment(appName: String, isGame: Boolean, contextHint: String?): String? {

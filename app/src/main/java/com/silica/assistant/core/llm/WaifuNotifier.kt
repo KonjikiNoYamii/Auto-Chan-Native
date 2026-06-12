@@ -59,7 +59,7 @@ object WaifuNotifier {
         "Hari ini cukup membosankan. Hibur aku.",
     )
 
-    private val switchToGeminiMessages = listOf(
+    private val switchToLocalMessages = listOf(
         "Nah, gitu dong. Server kamu udah hidup.",
         "Oh, balik lagi? Ya udah, balik ke server kamu.",
         "Akhirnya server kamu respon lagi.",
@@ -67,8 +67,8 @@ object WaifuNotifier {
         "Koneksi kamu membaik. Aku balik.",
     )
 
-    private val switchToOpenRouterMessages = listOf(
-        "Server kamu lambat... aku pake OpenRouter dulu.",
+    private val switchToGeminiMessages = listOf(
+        "Server kamu lambat... aku pake Gemini dulu.",
         "Servermu lelet. Ganti dulu ya.",
         "Koneksi server kamu jelek. Pake yang lain aja.",
         "Server kamu nggak responsif. Aku alihkan dulu.",
@@ -97,7 +97,7 @@ object WaifuNotifier {
         val message = if (provider == "Gemini") {
             switchToGeminiMessages.random()
         } else {
-            switchToOpenRouterMessages.random()
+            switchToLocalMessages.random()
         }
         show(context, message)
     }

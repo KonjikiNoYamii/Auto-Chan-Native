@@ -255,7 +255,6 @@ fun ChatScreen(
 
 @Composable
 private fun EmptyChatState() {
-    val apiReady = LlmConfig.apiKey.isNotBlank()
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Icon(
             Icons.Filled.QuestionAnswer,
@@ -298,16 +297,21 @@ private fun EmptyChatState() {
                 val provider = LlmClient.activeProvider
                 val localActive = provider == "LocalGemini"
                 val geminiActive = provider == "Gemini" && LlmConfig.useGeminiFallback
+                val noProvider = provider == "Tidak Ada"
                 Text(
-                    if (localActive) "Local Server Aktif" 
-                    else if (geminiActive) "Gemini Server Aktif" 
-                    else if (apiReady) "OpenRouter - Fallback" 
-                    else "API key belum diatur",
+                    when {
+                        localActive -> "Local Server Aktif"
+                        geminiActive -> "Gemini Server Aktif"
+                        noProvider -> "Tidak Ada Provider"
+                        else -> provider
+                    },
                     fontSize = 12.sp,
-                    color = if (localActive) Color(0xFF00FF88) 
-                    else if (geminiActive) Color(0xFFFF69B4) 
-                    else if (apiReady) Color(0xFF00FF88) 
-                    else MaterialTheme.colorScheme.error
+                    color = when {
+                        localActive -> Color(0xFF00FF88)
+                        geminiActive -> Color(0xFFFF69B4)
+                        noProvider -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -363,8 +367,8 @@ private fun ModelInfoDialog(onDismiss: () -> Unit) {
                 Spacer(modifier = Modifier.height(8.dp))
                 val provider = LlmClient.activeProvider
                 val geminiActive = provider == "Gemini" && LlmConfig.useGeminiFallback
-                InfoRow("Provider Aktif", if (geminiActive) "Gemini" else "OpenRouter")
-                InfoRow("Endpoint", if (geminiActive) LlmConfig.geminiEndpoint else LlmConfig.endpoint)
+                InfoRow("Provider Aktif", provider)
+                InfoRow("Endpoint", if (geminiActive) LlmConfig.geminiEndpoint else LlmConfig.localEndpoint)
             }
         },
         confirmButton = {

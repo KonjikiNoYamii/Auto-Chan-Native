@@ -14,11 +14,6 @@ if (keystoreFile.exists()) {
     keystoreProps.load(keystoreFile.inputStream())
 }
 
-val envFile = rootProject.file(".env")
-val groqKey = if (envFile.exists()) {
-    envFile.readLines().firstOrNull { it.startsWith("GROQ_API_KEY=") }?.substringAfter("=")?.trim() ?: ""
-} else ""
-
 android {
     namespace = "com.silica.assistant"
     compileSdk = 34
@@ -29,7 +24,6 @@ android {
         targetSdk = 34
         versionCode = 5
         versionName = "1.2"
-        buildConfigField("String", "OPENROUTER_API_KEY", "\"${groqKey}\"")
         
         val localProperties = Properties()
         val localPropertiesFile = rootProject.file("local.properties")

@@ -417,7 +417,7 @@ private fun SectionLabel(text: String) {
 @Composable
 private fun FiturUtamaSection() {
     val items = listOf(
-        "AI Chat (Yami)" to "Ngobrol dengan Konjiki no Yami lewat teks. Dual provider: OpenRouter (utama) + Gemini (cadangan).",
+        "AI Chat (Yami)" to "Ngobrol dengan Konjiki no Yami lewat teks. Dual provider: local server (laptop) + Gemini API (cadangan).",
         "Voice Command" to "Perintah suara otomatis diproses. Support bahasa Indonesia + Inggris + typo tolerance.",
         "Screen-Aware" to "Waifu bisa baca teks layar (aksesibilitas) + lihat screenshot (media projection). Deskripsi otomatis tiap 2 menit.",
         "Klik & Scroll" to "Klik elemen berdasarkan teks, scroll, back, home — semua via AccessibilityService.",
