@@ -72,9 +72,12 @@ class KtorLlmRepository(
         return try {
             val healthUrl = LlmConfig.localEndpoint
                 .replace("/v1/chat/completions", "/health")
+            android.util.Log.d("SilicaAI", "Health check: $healthUrl")
             val resp = client.get(healthUrl)
+            android.util.Log.d("SilicaAI", "Health check response: ${resp.status}")
             resp.status.value in 200..299
         } catch (e: Exception) {
+            android.util.Log.e("SilicaAI", "Health check failed: ${e.message}")
             false
         }
     }

@@ -31,6 +31,7 @@
         android:roundIcon="@drawable/favicon"
         android:allowBackup="true"
         android:fullBackupContent="true"
+        android:usesCleartextTraffic="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         tools:targetApi="31">
 

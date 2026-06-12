@@ -296,13 +296,16 @@ private fun EmptyChatState() {
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 val provider = LlmClient.activeProvider
+                val localActive = provider == "LocalGemini"
                 val geminiActive = provider == "Gemini" && LlmConfig.useGeminiFallback
                 Text(
-                    if (geminiActive) "Gemini Server Aktif" 
+                    if (localActive) "Local Server Aktif" 
+                    else if (geminiActive) "Gemini Server Aktif" 
                     else if (apiReady) "OpenRouter - Fallback" 
                     else "API key belum diatur",
                     fontSize = 12.sp,
-                    color = if (geminiActive) Color(0xFFFF69B4) 
+                    color = if (localActive) Color(0xFF00FF88) 
+                    else if (geminiActive) Color(0xFFFF69B4) 
                     else if (apiReady) Color(0xFF00FF88) 
                     else MaterialTheme.colorScheme.error
                 )
@@ -312,6 +315,14 @@ private fun EmptyChatState() {
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
+                if (localActive) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        "Server: ${LlmConfig.localEndpoint.removePrefix("https://").take(30)}...",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                }
                 if (geminiActive) {
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(

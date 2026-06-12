@@ -9,7 +9,7 @@ object LlmConfig {
     var geminiTimeout: Int = 30000
     var useGeminiFallback: Boolean = true
 
-    var localEndpoint: String = "http://192.168.1.7:8000/v1/chat/completions"
+    var localEndpoint: String = "https://truth-riveter-flier.ngrok-free.dev/v1/chat/completions"
     var localApiKey: String = ""
     var useLocalPrimary: Boolean = true
 
