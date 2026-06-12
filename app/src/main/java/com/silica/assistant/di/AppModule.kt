@@ -21,7 +21,7 @@ val appModule = module {
             androidContext(),
             SilicaDatabase::class.java,
             "silica_database"
-        ).fallbackToDestructiveMigration().build()
+        ).build()
     }
     
     single { get<SilicaDatabase>().chatDao() }
@@ -29,10 +29,13 @@ val appModule = module {
     single { get<SilicaDatabase>().userProfileDao() }
     single { get<SilicaDatabase>().questDao() }
     single { get<SilicaDatabase>().achievementDao() }
+    single { get<SilicaDatabase>().friendDao() }
+    single { get<SilicaDatabase>().socialMessageDao() }
 
     single { com.silica.assistant.core.llm.AchievementManager(get()) }
     single { MoodManager(get(), get(), get(), get()) }
     single { AuthRepository(get(), get(), get(), get(), get(), androidContext()) }
+    single { com.silica.assistant.core.auth.SocialRepository(get(), get(), get()) }
 
     single {
         HttpClient(OkHttp) {
@@ -52,4 +55,8 @@ val appModule = module {
     }
     
     single<LlmRepository> { KtorLlmRepository(get(), get(), get()) }
+    
+    factory { com.silica.assistant.ui.chat.ChatViewModel(get(), get()) }
+    factory { com.silica.assistant.ui.chat.SocialViewModel(get(), get()) }
+    factory { (otherUserId: String) -> com.silica.assistant.ui.chat.SocialChatViewModel(otherUserId, get(), get()) }
 }

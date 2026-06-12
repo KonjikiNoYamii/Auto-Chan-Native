@@ -1,5 +1,12 @@
 package com.silica.assistant.ui
 
+import com.silica.assistant.ui.chat.SocialChatScreen
+
+import com.silica.assistant.core.llm.model.FriendEntity
+import com.silica.assistant.core.llm.model.UserProfileEntity
+import com.silica.assistant.ui.chat.SocialScreen
+import com.silica.assistant.ui.profile.UserProfileScreen
+
 import android.Manifest
 import android.net.Uri
 import android.content.Intent
@@ -95,14 +102,26 @@ private sealed class Screen {
     data object QuestHistory : Screen()
     data object AchievementGallery : Screen()
     data object Auth : Screen()
+    data object Social : Screen()
+    data class UserProfile(val profile: UserProfileEntity) : Screen()
+    data class DirectChat(val friend: FriendEntity) : Screen()
 }
 
 @Composable
-fun MainScreen() {
+fun MainScreen(initialScreen: com.silica.assistant.ui.state.Screen = com.silica.assistant.ui.state.Screen.Main) {
     val context = LocalContext.current
     val viewModel: AssistantViewModel = viewModel()
     val uiState = viewModel.uiState
-    var currentScreen by remember { mutableStateOf<Screen>(Screen.Main, referentialEqualityPolicy()) }
+    var currentScreen by remember { 
+        mutableStateOf<Screen>(
+            when(initialScreen) {
+                com.silica.assistant.ui.state.Screen.Chat -> Screen.Chat
+                com.silica.assistant.ui.state.Screen.Social -> Screen.Social
+                else -> Screen.Main
+            }, 
+            referentialEqualityPolicy()
+        ) 
+    }
 
     var updateInfo by remember { mutableStateOf<UpdateChecker.UpdateInfo?>(null) }
     var isDownloading by remember { mutableStateOf(false) }
@@ -350,6 +369,7 @@ fun MainScreen() {
                             when (dest) {
                                 "ssh" -> Screen.Ssh(tab = 0)
                                 "chat" -> Screen.Chat
+                                "social" -> Screen.Social
                                 "debug" -> Screen.Debug
                                 "ai_task_input" -> Screen.AiTaskInput
                                 "auth" -> Screen.Auth
@@ -438,6 +458,7 @@ fun MainScreen() {
                                             currentScreen = Screen.Info
                                         }
                                         "Chat" -> currentScreen = Screen.Chat
+                                        "Social" -> currentScreen = Screen.Social
                                         "Affinity" -> currentScreen = Screen.Affinity
                                         "Profile" -> currentScreen = Screen.Profile
                                         "Guide" -> currentScreen = Screen.Guide
@@ -576,6 +597,39 @@ fun MainScreen() {
                 AuthScreen(
                     onAuthSuccess = { currentScreen = Screen.Main },
                     onBack = { currentScreen = Screen.Main }
+                )
+            }
+        }
+        is Screen.Social -> {
+            SwipeToDismissContainer(onDismiss = { currentScreen = Screen.Main }) {
+                SocialScreen(
+                    onBack = { currentScreen = Screen.Main },
+                    onViewProfile = { profile -> currentScreen = Screen.UserProfile(profile) },
+                    onChat = { friend -> currentScreen = Screen.DirectChat(friend) }
+                )
+            }
+        }
+        is Screen.UserProfile -> {
+            val profile = (currentScreen as Screen.UserProfile).profile
+            SwipeToDismissContainer(onDismiss = { currentScreen = Screen.Social }) {
+                UserProfileScreen(
+                    profile = profile,
+                    onBack = { currentScreen = Screen.Social },
+                    onAddFriend = { 
+                        // Logic handled in SocialViewModel mostly, but we can trigger it here if needed
+                    },
+                    onChat = {
+                        currentScreen = Screen.DirectChat(FriendEntity(userId = profile.userName, nickname = profile.userName))
+                    }
+                )
+            }
+        }
+        is Screen.DirectChat -> {
+            val friend = (currentScreen as Screen.DirectChat).friend
+            SwipeToDismissContainer(onDismiss = { currentScreen = Screen.Social }) {
+                SocialChatScreen(
+                    friend = friend,
+                    onBack = { currentScreen = Screen.Social }
                 )
             }
         }
@@ -770,7 +824,9 @@ private fun QuickActionChips(onChipClick: (String) -> Unit = {}) {
                     ChipData("File", Icons.Filled.Folder, DeepRose),
                     ChipData("SSH", Icons.Filled.Lan, DeepRose),
                     ChipData("Chat", Icons.Filled.QuestionAnswer, DeepRose),
+                    ChipData("Social", Icons.Filled.People, DeepRose),
                     ChipData("Affinity", Icons.Filled.Favorite, DeepRose),
+
                     ChipData("Profile", Icons.Filled.Person, DeepRose),
                     ChipData("Info", Icons.Filled.Info, DeepRose),
 
