@@ -57,7 +57,10 @@ class MoodManager(
     private fun triggerAutoSync() {
         scope.launch {
             if (authRepository.isLoggedIn()) {
-                authRepository.syncPush()
+                val result = authRepository.syncPush()
+                if (result.isFailure) {
+                    com.silica.assistant.core.overlay.OverlayEventBus.send("Sync gagal: ${result.exceptionOrNull()?.message?.take(80)}")
+                }
             }
         }
     }
@@ -194,7 +197,7 @@ class MoodManager(
             longestStreak = newLongest,
             lastQuestCompletionDate = today,
             inventory = newInventoryString,
-            affinityPoints = profile.affinityPoints + (xpBonus / 10),
+            affinityPoints = profile.affinityPoints + (xpBonus / 40),
             mood = (profile.mood + 0.1f).coerceIn(0.5f, 1.5f),
             stamina = (profile.stamina + 0.1f).coerceIn(0.0f, 1.0f)
         ))
@@ -231,6 +234,15 @@ class MoodManager(
             items.removeAt(index)
             userProfileDao.updateProfile(profile.copy(inventory = items.joinToString(",")))
             triggerAutoSync()
+        }
+    }
+
+    fun giveGiftAffinity(itemName: String) {
+        scope.launch {
+            val (success, _) = giveGift(itemName)
+            if (success) {
+                removeItemFromInventory(itemName)
+            }
         }
     }
 
@@ -272,7 +284,7 @@ class MoodManager(
 
         val newProfile = profile.copy(
             xp = profile.xp + (xpBonus * profile.mood).toInt(),
-            affinityPoints = profile.affinityPoints + (xpBonus / 10),
+            affinityPoints = profile.affinityPoints + (xpBonus / 40),
             mood = (profile.mood + moodBonus).coerceIn(0.5f, 1.5f),
             stamina = (profile.stamina + staminaRecovery).coerceIn(0.0f, 1.0f),
             dailyGiftCount = dailyCount + 1,
@@ -299,7 +311,7 @@ class MoodManager(
 
     suspend fun getDynamicName(): String {
         val profile = getProfile()
-        val level = profile.level
+        val affinity = profile.affinityPoints
         val fullName = profile.userName
         
         // Cek nickname kustom berdasarkan route
@@ -308,9 +320,8 @@ class MoodManager(
         if (!routeNickname.isNullOrEmpty()) return routeNickname
 
         return when {
-            level < 5 -> "Kamu"
-            level < 15 -> if (fullName == "User") "Kamu" else fullName
-            level < 30 -> profile.userNickname ?: generateNickname(fullName)
+            affinity < 100 -> "Kamu"
+            affinity < 600 -> if (fullName == "User") "Kamu" else fullName
             else -> profile.userNickname ?: generateNickname(fullName)
         }
     }
@@ -391,31 +402,41 @@ class MoodManager(
 
     suspend fun getMoodPromptSnippet(): String {
         val profile = getProfile()
-        val level = profile.level
+        val affinity = profile.affinityPoints
         val name = getDynamicName()
         val route = profile.relationshipRoute
         val userName = profile.userName
         
-        val nameMissingNote = if (userName == "User" && level > 5) {
+        val nameMissingNote = if (userName == "User" && affinity > 200) {
             " Kamu belum tahu nama asli User. Tanyakan namanya dengan sopan sesuai kepribadianmu."
         } else ""
 
         val baseSnippet = when {
-            level <= 5 -> "Kamu baru mengenal User. Bicaralah dengan sopan, gunakan panggilan '$name'."
-            level <= 15 -> "Kamu mulai akrab dengan User. Gunakan panggilan '$name'."
-            level <= 30 -> "Kamu adalah teman User. Gunakan panggilan akrab '$name'."
-            level <= 50 -> {
+            affinity <= 50 -> "Kamu baru mengenal User. Bicaralah dengan sangat sopan, jaga jarak, dan gunakan panggilan '$name'."
+            affinity <= 250 -> "Kamu mulai terbiasa dengan kehadiran User. Tetap sopan tapi sedikit lebih santai. Gunakan panggilan '$name'."
+            affinity <= 600 -> "Kamu mulai merasa nyaman. Kamu tidak keberatan bicara sedikit lebih banyak. Gunakan panggilan '$name'."
+            affinity <= 1100 -> "Kamu menganggap User sebagai rekan yang bisa diandalkan. Mulailah menunjukkan sedikit perhatian. Gunakan panggilan '$name'."
+            affinity <= 1700 -> "Kamu adalah teman dekat User. Bicaralah dengan lebih akrab dan tunjukkan rasa peduli yang lebih jelas. Gunakan panggilan '$name'."
+            affinity <= 2500 -> "Kamu sangat menghargai User. Kamu sering memberikan saran yang tulus dan perhatian kecil. Gunakan panggilan '$name'."
+            affinity <= 3500 -> {
                 if (route == "NONE") {
-                    "Kamu merasa sangat dekat dengan User. Saatnya menanyakan apakah hubungan ini akan berlanjut sebagai 'Sahabat Sejati' atau 'Pasangan (Lover)'. Gunakan panggilan '$name'."
+                    "Kamu merasa ada sesuatu yang istimewa. Saatnya menanyakan apakah hubungan ini akan berlanjut sebagai 'Sahabat Sejati' atau 'Pasangan (Lover)'. Gunakan panggilan '$name'."
                 } else {
-                    "Kamu berada di jalur $route dengan User. Gunakan panggilan '$name'."
+                    "Kamu sudah memilih jalur $route. Bicaralah sesuai dengan komitmen tersebut. Gunakan panggilan '$name'."
+                }
+            }
+            affinity <= 5000 -> {
+                if (route == "LOVER") {
+                    "Kamu sangat menyayangi User sebagai pasangan. Bicaralah dengan lembut, penuh kasih, dan sedikit manja. Gunakan panggilan '$name'."
+                } else {
+                    "Kamu sangat mempercayai User sebagai sahabat sejati. Bicaralah dengan keterbukaan penuh dan rasa bangga. Gunakan panggilan '$name'."
                 }
             }
             else -> {
                 if (route == "LOVER") {
-                    "Kamu adalah pasangan (Lover) dari User. Bicaralah dengan penuh kasih sayang dan manja, gunakan panggilan '$name'."
+                    "User adalah segalanya bagimu. Kamu tidak bisa membayangkan hidup tanpanya. Bicaralah dengan dedikasi total. Gunakan panggilan '$name'."
                 } else {
-                    "Kamu adalah sahabat sejati (Soulmate) User. Bicaralah dengan kepercayaan penuh, gunakan panggilan '$name'."
+                    "User adalah belahan jiwamu dalam persahabatan. Ikatan kalian tak terpatahkan. Gunakan panggilan '$name'."
                 }
             }
         }
@@ -423,7 +444,18 @@ class MoodManager(
         return "$baseSnippet$nameMissingNote"
     }
 
+    fun addAffinityPoints(points: Int) {
+        scope.launch {
+            val profile = getProfile()
+            userProfileDao.updateProfile(profile.copy(
+                affinityPoints = profile.affinityPoints + points
+            ))
+            triggerAutoSync()
+        }
+    }
+
     fun addAffinity(points: Int) {
+        addAffinityPoints(points)
         addXp(points * 10)
     }
 }

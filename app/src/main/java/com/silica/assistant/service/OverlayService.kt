@@ -283,7 +283,8 @@ class OverlayService : Service() {
 
         // 🧠 VOICE SYSTEM (ONLY ONE SOURCE)
         VoiceManager.init(this)
-        WaifuNotifier.init(this)
+        val chatDao = org.koin.core.context.GlobalContext.get().get<com.silica.assistant.core.llm.db.ChatDao>()
+        WaifuNotifier.init(this, chatDao)
 
         // Instant check for Game Mode on start
         activityScope.launch {
@@ -317,7 +318,7 @@ class OverlayService : Service() {
             showBubble("🎤 $text")
             handler.postDelayed({
                 if (bubbleText.text == "🎤 $text") {
-                    showBubble("...")
+                    showBubble("... ( -_ -)")
                 }
             }, 800)
             CommandManager.execute(this, text)
@@ -407,7 +408,7 @@ class OverlayService : Service() {
                 handler.post {
                     val normalized = normalizeContextHint(contextHint)
                     if (normalized.isNullOrBlank()) {
-                        showBubble("Hmm, biarkan aku lihat...")
+                        showBubble("Hmm, biarkan aku lihat... ( ._ .)")
                     } else {
                         showBubble("$normalized? Biarkan aku lihat...")
                     }
@@ -816,7 +817,7 @@ class OverlayService : Service() {
     private fun generateContextComment(appName: String, isGame: Boolean) {
         if (isCommentPending) return
         isCommentPending = true
-        showBubble("Mari kita lihat...", persistent = true)
+        showBubble("Mari kita lihat... (─.─)", persistent = true)
         val startTime = System.currentTimeMillis()
         val tokenBuf = StringBuilder()
         activityScope.launch {
@@ -851,7 +852,7 @@ class OverlayService : Service() {
         isCommentPending = true
         val normalized = normalizeContextHint(contextHint)
         if (normalized.isNullOrBlank()) {
-            showBubble("Mari kita lihat...", persistent = true)
+            showBubble("Mari kita lihat... (─.─)", persistent = true)
         } else {
             showBubble("$normalized? Sebentar...", persistent = true)
         }
@@ -938,7 +939,7 @@ class OverlayService : Service() {
         }
 
         isCommentPending = true
-        showBubble("Mari kita lihat...", persistent = true)
+        showBubble("Mari kita lihat... (─.─)", persistent = true)
         activityScope.launch {
             try {
                 val acc = OverlayEventBus.accessibilityService
@@ -1018,7 +1019,7 @@ class OverlayService : Service() {
         lastAutoScreenCommentTime = now
 
         isCommentPending = true
-        showBubble("Hmm...", persistent = true)
+        showBubble("Hmm... ( -_ -)", persistent = true)
         activityScope.launch {
             try {
                 val appName = lastDetectedApp?.let {

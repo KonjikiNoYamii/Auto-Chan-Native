@@ -5,13 +5,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.silica.assistant.core.auth.AuthRepository
 import com.silica.assistant.core.llm.MoodManager
 import com.silica.assistant.core.llm.db.UserProfileDao
 import com.silica.assistant.core.llm.db.QuestDao
 import com.silica.assistant.core.llm.model.QuestEntity
 import com.silica.assistant.ui.state.AssistantUiState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
@@ -21,6 +24,7 @@ class AssistantViewModel : ViewModel(), KoinComponent {
     private val moodManager: MoodManager by inject()
     private val questDao: QuestDao by inject()
     private val achievementDao: com.silica.assistant.core.llm.db.AchievementDao by inject()
+    private val authRepository: AuthRepository by inject()
 
     var uiState by mutableStateOf(AssistantUiState())
         private set
@@ -38,9 +42,24 @@ class AssistantViewModel : ViewModel(), KoinComponent {
         private set
 
     init {
-        loadProfile()
-        loadInventory()
-        observeData()
+        viewModelScope.launch {
+            loadProfile()
+            loadInventory()
+            observeData()
+            syncFromCloud()
+        }
+    }
+
+    private suspend fun syncFromCloud() {
+        if (authRepository.isLoggedIn()) {
+            val result = withContext(Dispatchers.IO) {
+                authRepository.syncPull()
+            }
+            result.onSuccess {
+                loadProfile()
+                loadInventory()
+            }
+        }
     }
 
     private fun observeData() {

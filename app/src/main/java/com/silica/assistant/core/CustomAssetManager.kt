@@ -3,15 +3,24 @@ package com.silica.assistant.core
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.drawable.BitmapDrawable
-import android.media.MediaPlayer
 import android.net.Uri
 import android.widget.ImageView
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import com.silica.assistant.core.llm.db.UserFactDao
+import com.silica.assistant.core.llm.model.UserFactEntity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 import java.io.File
 
-object CustomAssetManager {
+object CustomAssetManager : KoinComponent {
+
+    private val userFactDao: UserFactDao by inject()
+    private val scope = CoroutineScope(Dispatchers.IO)
 
     private const val PREFS_NAME = "custom_assets"
     private const val DIR_NAME = "custom_assets"
@@ -93,32 +102,38 @@ object CustomAssetManager {
             hour < 18 -> GREETING_EVENING
             else -> GREETING_NIGHT
         }
-        return prefs(context).getString(key, null)
+        return runBlocking { userFactDao.getFact(key)?.value }
     }
 
     fun getAllCustomGreetings(context: Context): Map<String, String?> {
-        return mapOf(
-            GREETING_MORNING to prefs(context).getString(GREETING_MORNING, null),
-            GREETING_AFTERNOON to prefs(context).getString(GREETING_AFTERNOON, null),
-            GREETING_EVENING to prefs(context).getString(GREETING_EVENING, null),
-            GREETING_NIGHT to prefs(context).getString(GREETING_NIGHT, null),
-        )
+        return runBlocking {
+            mapOf(
+                GREETING_MORNING to userFactDao.getFact(GREETING_MORNING)?.value,
+                GREETING_AFTERNOON to userFactDao.getFact(GREETING_AFTERNOON)?.value,
+                GREETING_EVENING to userFactDao.getFact(GREETING_EVENING)?.value,
+                GREETING_NIGHT to userFactDao.getFact(GREETING_NIGHT)?.value,
+            )
+        }
     }
 
     fun saveGreeting(context: Context, period: String, text: String) {
-        prefs(context).edit().putString(period, text).apply()
+        scope.launch {
+            userFactDao.insertFact(UserFactEntity(period, text))
+        }
     }
 
     fun resetGreeting(context: Context, period: String) {
-        prefs(context).edit().remove(period).apply()
+        scope.launch {
+            userFactDao.insertFact(UserFactEntity(period, ""))
+        }
     }
 
     fun resetAllGreetings(context: Context) {
-        prefs(context).edit()
-            .remove(GREETING_MORNING)
-            .remove(GREETING_AFTERNOON)
-            .remove(GREETING_EVENING)
-            .remove(GREETING_NIGHT)
-            .apply()
+        scope.launch {
+            userFactDao.insertFact(UserFactEntity(GREETING_MORNING, ""))
+            userFactDao.insertFact(UserFactEntity(GREETING_AFTERNOON, ""))
+            userFactDao.insertFact(UserFactEntity(GREETING_EVENING, ""))
+            userFactDao.insertFact(UserFactEntity(GREETING_NIGHT, ""))
+        }
     }
 }

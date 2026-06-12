@@ -155,6 +155,7 @@ fun CustomizeScreen(onBack: () -> Unit) {
                         onValueChange = { 
                             assistantName = it
                             com.silica.assistant.core.config.AssistantConfig.assistantName = it
+                            com.silica.assistant.core.config.AssistantConfig.save()
                         },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -171,6 +172,7 @@ fun CustomizeScreen(onBack: () -> Unit) {
                         onValueChange = { 
                             customGreeting = it
                             com.silica.assistant.core.config.AssistantConfig.customGreeting = it
+                            com.silica.assistant.core.config.AssistantConfig.save()
                         },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -187,6 +189,7 @@ fun CustomizeScreen(onBack: () -> Unit) {
                         onValueChange = { 
                             personalityPrompt = it
                             com.silica.assistant.core.llm.LlmConfig.personalityPrompt = it
+                            com.silica.assistant.core.llm.LlmConfig.save()
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(8.dp),
@@ -224,6 +227,7 @@ fun CustomizeScreen(onBack: () -> Unit) {
                         onValueChange = { 
                             defaultSize = it
                             com.silica.assistant.core.config.AssistantConfig.overlaySizeDefault = it.toInt()
+                            com.silica.assistant.core.config.AssistantConfig.save()
                         },
                         valueRange = 60f..200f,
                         steps = 14
@@ -238,6 +242,7 @@ fun CustomizeScreen(onBack: () -> Unit) {
                         onValueChange = { 
                             gameSize = it
                             com.silica.assistant.core.config.AssistantConfig.overlaySizeGameMode = it.toInt()
+                            com.silica.assistant.core.config.AssistantConfig.save()
                         },
                         valueRange = 40f..150f,
                         steps = 11

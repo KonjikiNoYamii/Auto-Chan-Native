@@ -18,20 +18,34 @@ object EmotionMapper {
         "sad" to R.drawable.mybinik,
     )
 
-    private val emotionFallback = mapOf(
-        "happy" to "...Hmph.",
-        "angry" to "...Jangan bicara sembarangan.",
-        "blush" to "...Dasar.",
-        "sad" to "...",
+    private val emotionToEmotes = mapOf(
+        "happy" to listOf("(^_^)", "(^.^)", "(o^.^o)", "(n.n)", "(＾▽＾)", "(✿◠‿◠)", "( ´ ▽ ` )ﾉ", "(b ᵔ▽ᵔ)b", "fufu~", "(´∀｀*)"),
+        "angry" to listOf("(#`皿´)", "(ノ ゜Д゜)ノ", "(＃￣0￣)"),
+        "blush" to listOf("(///_///)", "(>///<)", "(*^.^*)"),
+        "sad" to listOf("(T_T)", "(;-;)", "( ._.)", "(╥﹏╥)", "(｡╯3╰｡)", "(ノ﹏ヽ)"),
+        "idle" to listOf("( -_ -)", "( ._ .)", "(─.─)", "(¬_¬)", "( 一_一)", "(￣^￣)", "(─‿─)", "(︶‿︶)", "(￣ω￣)"),
     )
+
+    private val emotionFallback = mapOf(
+        "happy" to "...Hmph. (^_^)",
+        "angry" to "...Jangan bicara sembarangan. (#`皿´)",
+        "blush" to "...Dasar. (///_///)",
+        "sad" to "... (T_T)",
+    )
+
+    fun getRandomEmote(emotion: String?): String {
+        val emotes = emotionToEmotes[emotion] ?: emotionToEmotes["idle"]!!
+        return emotes.random()
+    }
 
     fun parseEmotion(text: String): Pair<String, String?> {
         var clean = text.trim()
         for ((tag, emotion) in tagToEmotion) {
-            if (clean.endsWith(tag)) {
-                clean = clean.removeSuffix(tag).trim()
-                if (clean.isBlank()) {
-                    return Pair(emotionFallback[emotion] ?: "...", emotion)
+            if (clean.contains(tag)) {
+                val emote = getRandomEmote(emotion)
+                clean = clean.replace(tag, emote).trim()
+                if (clean.isBlank() || clean == emote) {
+                    return Pair(emotionFallback[emotion] ?: emote, emotion)
                 }
                 return Pair(clean, emotion)
             }

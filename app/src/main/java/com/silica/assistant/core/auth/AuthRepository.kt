@@ -117,57 +117,59 @@ class AuthRepository(
 
     suspend fun syncPull(): Result<UserProfileEntity> = withContext(Dispatchers.IO) {
         val userId = getUserId() ?: return@withContext Result.failure(Exception("Not logged in"))
-        try {
-            Log.d(TAG, "Memulai sync pull untuk UID: $userId")
-            val userRef = database.getReference("users").child(userId)
+        syncMutex.withLock {
+            try {
+                Log.d(TAG, "Memulai sync pull untuk UID: $userId")
+                val userRef = database.getReference("users").child(userId)
 
-            val profileSnapshot = withTimeout(15000) {
-                userRef.child("profile").get().await()
+                val profileSnapshot = withTimeout(15000) {
+                    userRef.child("profile").get().await()
+                }
+                val remoteProfile = profileSnapshot.getValue(UserProfileEntity::class.java)
+                    ?: return@withContext Result.failure(Exception("No remote profile found"))
+
+                val questsSnapshot = withTimeout(15000) {
+                    userRef.child("quests").get().await()
+                }
+                val remoteQuests = questsSnapshot.children.mapNotNull { it.getValue(QuestEntity::class.java) }
+
+                val factsSnapshot = withTimeout(15000) {
+                    userRef.child("facts").get().await()
+                }
+                val remoteFacts = factsSnapshot.children.mapNotNull { it.getValue(UserFactEntity::class.java) }
+
+                val achievementsSnapshot = withTimeout(15000) {
+                    userRef.child("achievements").get().await()
+                }
+                val remoteAchievements = achievementsSnapshot.children.mapNotNull { it.getValue(AchievementEntity::class.java) }
+
+                val chatsSnapshot = withTimeout(15000) {
+                    userRef.child("chats").get().await()
+                }
+                val remoteChats = chatsSnapshot.children.mapNotNull { it.getValue(ChatMessageEntity::class.java) }
+
+                userProfileDao.updateProfile(remoteProfile)
+
+                questDao.deleteAllQuests()
+                remoteQuests.forEach { questDao.insertQuest(it) }
+
+                userFactDao.deleteAllFacts()
+                remoteFacts.forEach { userFactDao.insertFact(it) }
+
+                achievementDao.deleteAllAchievements()
+                if (remoteAchievements.isNotEmpty()) {
+                    achievementDao.insertAchievements(remoteAchievements)
+                }
+
+                chatDao.clearHistory()
+                remoteChats.forEach { chatDao.insertMessage(it) }
+
+                Log.d(TAG, "Sync pull sukses: profile, ${remoteQuests.size} quests, ${remoteFacts.size} facts, ${remoteAchievements.size} achievements, ${remoteChats.size} chats")
+                Result.success(remoteProfile)
+            } catch (e: Exception) {
+                Log.e(TAG, "Sync pull gagal", e)
+                Result.failure(e)
             }
-            val remoteProfile = profileSnapshot.getValue(UserProfileEntity::class.java)
-                ?: return@withContext Result.failure(Exception("No remote profile found"))
-
-            val questsSnapshot = withTimeout(15000) {
-                userRef.child("quests").get().await()
-            }
-            val remoteQuests = questsSnapshot.children.mapNotNull { it.getValue(QuestEntity::class.java) }
-
-            val factsSnapshot = withTimeout(15000) {
-                userRef.child("facts").get().await()
-            }
-            val remoteFacts = factsSnapshot.children.mapNotNull { it.getValue(UserFactEntity::class.java) }
-
-            val achievementsSnapshot = withTimeout(15000) {
-                userRef.child("achievements").get().await()
-            }
-            val remoteAchievements = achievementsSnapshot.children.mapNotNull { it.getValue(AchievementEntity::class.java) }
-
-            val chatsSnapshot = withTimeout(15000) {
-                userRef.child("chats").get().await()
-            }
-            val remoteChats = chatsSnapshot.children.mapNotNull { it.getValue(ChatMessageEntity::class.java) }
-
-            userProfileDao.updateProfile(remoteProfile)
-
-            questDao.deleteAllQuests()
-            remoteQuests.forEach { questDao.insertQuest(it) }
-
-            userFactDao.deleteAllFacts()
-            remoteFacts.forEach { userFactDao.insertFact(it) }
-
-            achievementDao.deleteAllAchievements()
-            if (remoteAchievements.isNotEmpty()) {
-                achievementDao.insertAchievements(remoteAchievements)
-            }
-
-            chatDao.clearHistory()
-            remoteChats.forEach { chatDao.insertMessage(it) }
-
-            Log.d(TAG, "Sync pull sukses: profile, ${remoteQuests.size} quests, ${remoteFacts.size} facts, ${remoteAchievements.size} achievements, ${remoteChats.size} chats")
-            Result.success(remoteProfile)
-        } catch (e: Exception) {
-            Log.e(TAG, "Sync pull gagal", e)
-            Result.failure(e)
         }
     }
 }

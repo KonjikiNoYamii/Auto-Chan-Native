@@ -71,19 +71,21 @@ fun AffinityScreen(viewModel: AssistantViewModel, onBack: () -> Unit) {
     }
 
     val relationshipLevel = when {
-        points > 100 -> "Sangat Menyayangi (Loving)"
-        points > 50 -> "Teman Dekat (Friendly)"
-        points < -50 -> "Dingin / Kesal (Cold)"
+        points > 3500 -> "Belahan Jiwa (Soulmate)"
+        points > 1500 -> "Sangat Menyayangi (Loving)"
+        points > 500 -> "Teman Dekat (Friendly)"
+        points < -500 -> "Dingin / Kesal (Cold)"
         else -> "Teman Biasa (Neutral)"
     }
 
     val levelColor = when {
-        points > 50 -> DeepRose
-        points < -50 -> Color.Gray
+        points > 1500 -> DeepRose
+        points > 500 -> Color(0xFFFF9800) // Orange
+        points < -500 -> Color.Gray
         else -> Espresso
     }
 
-    val progress = ((points + 100).toFloat() / 300f).coerceIn(0f, 1f)
+    val progress = (points.toFloat() / 5000f).coerceIn(0f, 1f)
 
     Scaffold(
         topBar = {
@@ -178,7 +180,7 @@ fun AffinityScreen(viewModel: AssistantViewModel, onBack: () -> Unit) {
                         verticalAlignment = Alignment.Bottom
                     ) {
                         Text("Poin Afinitas", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Espresso)
-                        Text("$points / 200", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = levelColor)
+                        Text("$points / 5000", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = levelColor)
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     LinearProgressIndicator(
@@ -192,6 +194,13 @@ fun AffinityScreen(viewModel: AssistantViewModel, onBack: () -> Unit) {
                     )
                 }
             }
+
+            Spacer(Modifier.height(32.dp))
+
+            // Relationship Roadmap
+            SectionHeader("Roadmap Hubungan", Icons.Default.Map)
+            Spacer(Modifier.height(12.dp))
+            RelationshipRoadmap(points)
 
             Spacer(Modifier.height(32.dp))
 
@@ -231,6 +240,110 @@ private fun SectionHeader(title: String, icon: androidx.compose.ui.graphics.vect
         Icon(icon, null, tint = DeepRose, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
         Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Espresso)
+    }
+}
+
+@Composable
+private fun RelationshipRoadmap(currentPoints: Int) {
+    val tiers = listOf(
+        Triple("Teman Biasa", 0, Icons.Default.Person),
+        Triple("Teman Dekat", 500, Icons.Default.Chat),
+        Triple("Sahabat", 1500, Icons.Default.Face),
+        Triple("Ikatan Mendalam", 2500, Icons.Default.Star),
+        Triple("Belahan Jiwa", 3500, Icons.Default.Favorite)
+    )
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        tiers.forEachIndexed { index, (title, target, icon) ->
+            val isUnlocked = currentPoints >= target
+            RoadmapItem(
+                title = title,
+                target = target,
+                icon = icon,
+                isUnlocked = isUnlocked,
+                isLast = index == tiers.size - 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun RoadmapItem(
+    title: String,
+    target: Int,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    isUnlocked: Boolean,
+    isLast: Boolean
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Timeline Circle & Line
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.width(32.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .background(
+                        if (isUnlocked) DeepRose else Color.Gray.copy(alpha = 0.2f),
+                        CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isUnlocked) icon else Icons.Default.Lock,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = if (isUnlocked) Color.White else Color.Gray
+                )
+            }
+            if (!isLast) {
+                Box(
+                    modifier = Modifier
+                        .width(2.dp)
+                        .height(30.dp)
+                        .background(if (isUnlocked) DeepRose.copy(alpha = 0.3f) else Color.Gray.copy(alpha = 0.1f))
+                )
+            }
+        }
+
+        Spacer(Modifier.width(16.dp))
+
+        // Content
+        Card(
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isUnlocked) DeepRose.copy(alpha = 0.05f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+            ),
+            border = if (isUnlocked) androidx.compose.foundation.BorderStroke(1.dp, DeepRose.copy(alpha = 0.1f)) else null
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = if (isUnlocked) title else "Terkunci",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = if (isUnlocked) Espresso else Color.Gray
+                    )
+                    Text(
+                        text = "Target: $target Poin",
+                        fontSize = 11.sp,
+                        color = if (isUnlocked) DeepRose else Color.Gray.copy(alpha = 0.6f)
+                    )
+                }
+                if (isUnlocked) {
+                    Icon(Icons.Default.CheckCircle, null, tint = DeepRose, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
     }
 }
 

@@ -7,5 +7,7 @@ data class ChatMessage(
     val role: String,
     val content: String,
     val timestamp: Long = System.currentTimeMillis(),
-    val emotion: String? = null
+    val emotion: String? = null,
+    val isTyping: Boolean = false,
+    var displayedContent: String = content
 )

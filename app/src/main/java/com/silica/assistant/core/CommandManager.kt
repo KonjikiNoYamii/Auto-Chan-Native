@@ -51,11 +51,11 @@ object CommandManager : KoinComponent {
 
         // Affinity Logic (Dynamic XP)
         if (lowerInput.contains("terima kasih") || lowerInput.contains("makasih") || lowerInput.contains("thank")) {
-            moodManager.addXp(50)
+            moodManager.addAffinity(5) // XP + Affinity
             moodManager.updateMood(0.05f)
             SoundManager.playChime()
         } else if (lowerInput.contains("bodoh") || lowerInput.contains("jelek") || lowerInput.contains("benci")) {
-            moodManager.addXp(-100)
+            moodManager.addAffinity(-10) // Negative XP + Negative Affinity
             moodManager.updateMood(-0.1f)
         }
 
@@ -86,7 +86,7 @@ object CommandManager : KoinComponent {
                 kotlinx.coroutines.GlobalScope.launch {
                     val finalDiff = explicitDifficulty ?: LlmClient.classifyQuestDifficulty(cleanTask) ?: "MEDIUM"
                     moodManager.addQuest(cleanTask, finalDiff)
-                    OverlayEventBus.onBubble?.invoke("Oke, aku sudah catat tugas: '$cleanTask' [$finalDiff]. Semangat kerjanya ya ♪")
+                    OverlayEventBus.onBubble?.invoke("Oke, aku sudah catat tugas: '$cleanTask' [$finalDiff]. Semangat kerjanya ya ♪ (^_^)")
                 }
                 return
             }
@@ -142,7 +142,7 @@ object CommandManager : KoinComponent {
 
         if (searchQuery != null) {
             if (GameModeManager.isGameMode) {
-                OverlayEventBus.onBubble?.invoke("🔇 Pencarian dinonaktifkan saat mode game")
+                OverlayEventBus.onBubble?.invoke("🔇 Pencarian dinonaktifkan saat mode game (¬_¬)")
                 return
             }
             OverlayEventBus.onBubble?.invoke("🔎 Searching $searchQuery")
@@ -241,7 +241,7 @@ object CommandManager : KoinComponent {
             }
 
             if (!AppLauncher.open(context, effectiveInput)) {
-                OverlayEventBus.onBubble?.invoke("😕 Maaf, saya tidak mengerti \"$effectiveInput\". Coba buka Panduan untuk lihat command yang tersedia.")
+                OverlayEventBus.onBubble?.invoke("😕 Maaf, saya tidak mengerti \"$effectiveInput\". Coba buka Panduan untuk lihat command yang tersedia. ( ._ .)")
             }
             return
         }
@@ -274,7 +274,7 @@ object CommandManager : KoinComponent {
                 if (Settings.canDrawOverlays(context)) {
                     val intent = Intent(context, OverlayService::class.java)
                     context.startService(intent)
-                    OverlayEventBus.onBubble?.invoke("🌸 Waifu activated!")
+                    OverlayEventBus.onBubble?.invoke("🌸 Waifu activated! (─‿─)")
                 } else {
                     val intent =
                             Intent(
