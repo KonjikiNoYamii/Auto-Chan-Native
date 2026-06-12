@@ -68,3 +68,24 @@ data class AchievementEntity(
     var unlockedAt: Long? = null
 )
 
+@Entity(tableName = "friends")
+data class FriendEntity(
+    @PrimaryKey val userId: String,
+    val nickname: String,
+    val level: Int = 1,
+    val aiName: String = "silica",
+    val status: String = "ACCEPTED", // PENDING_SENT, PENDING_RECEIVED, ACCEPTED
+    val lastMessage: String? = null,
+    val lastMessageTime: Long = 0
+)
+
+@Entity(tableName = "social_messages")
+data class SocialMessageEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val chatId: String, // userId1_userId2 (sorted)
+    val senderId: String,
+    val content: String,
+    val timestamp: Long = System.currentTimeMillis(),
+    val isRead: Boolean = false
+)
+
