@@ -42,7 +42,9 @@ data class UserProfileEntity(
     val moodState: String = "NEUTRAL",
     val aiName: String = "silica",
     val inventory: String = "", // Comma-separated items: "Taiyaki,Cokelat"
-    val customNicknames: String = "" // JSON or Comma-separated: "FRIEND:Dan,LOVER:Sayang"
+    val customNicknames: String = "", // JSON or Comma-separated: "FRIEND:Dan,LOVER:Sayang"
+    val verifiedQuestCount: Int = 0,
+    val totalQuestCount: Int = 0
 )
 
 @Entity(tableName = "quests")
@@ -52,7 +54,8 @@ data class QuestEntity(
     val difficulty: String = "MEDIUM", // EASY, MEDIUM, HARD
     val isCompleted: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
-    val completedAt: Long? = null
+    val completedAt: Long? = null,
+    val isEligible: Boolean = false
 )
 
 @Entity(tableName = "achievements")

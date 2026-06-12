@@ -170,6 +170,54 @@ fun ProfileScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
+            // Quest Authenticity Section
+            SectionHeader("Autentisitas Quest", Icons.Default.VerifiedUser)
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    val verified = profile.verifiedQuestCount
+                    val total = profile.totalQuestCount
+                    val authenticityRatio = if (total > 0) (verified.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 1f
+                    val percentage = (authenticityRatio * 100).toInt()
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Terverifikasi vs Manual", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Espresso)
+                        Text("$percentage%", fontSize = 16.sp, fontWeight = FontWeight.Black, color = if (percentage > 70) Color(0xFF4CAF50) else DeepRose)
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    LinearProgressIndicator(
+                        progress = { authenticityRatio },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(12.dp)
+                            .clip(CircleShape),
+                        color = if (percentage > 70) Color(0xFF4CAF50) else DeepRose,
+                        trackColor = Color.Gray.copy(alpha = 0.1f)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Total Quest: $total ($verified Terverifikasi)",
+                        fontSize = 11.sp,
+                        color = Color.Gray
+                    )
+                    Text(
+                        "Gunakan aplikasi yang relevan atau kirim bukti foto agar quest-mu terverifikasi oleh Silica. ♪",
+                        fontSize = 10.sp,
+                        color = Color.Gray.copy(alpha = 0.8f),
+                        lineHeight = 14.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
             // Stats Section
             SectionHeader("Statistik Diri", Icons.Default.BarChart)
             Row(

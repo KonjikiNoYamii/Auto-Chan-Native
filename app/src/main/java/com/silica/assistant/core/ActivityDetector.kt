@@ -127,6 +127,21 @@ class ActivityDetector(private val context: Context) {
         } else null
     }
 
+    fun hasUsedAppRecently(packageName: String, hours: Int = 3, minDurationMs: Long = 60_000): Boolean {
+        val manager = usageStatsManager ?: return false
+        try {
+            val endTime = System.currentTimeMillis()
+            val startTime = endTime - (hours * 3600_000L)
+            val stats = manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startTime, endTime)
+            
+            val appStats = stats.find { it.packageName == packageName }
+            return (appStats?.totalTimeInForeground ?: 0L) >= minDurationMs
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking recent usage", e)
+            return false
+        }
+    }
+
     fun checkAndTriggerSpontaneousComment(appName: String) {
         val now = System.currentTimeMillis()
         if (now - lastSpontaneousCommentTime > SPONTANEOUS_INTERVAL) {

@@ -33,9 +33,10 @@ val appModule = module {
     single { get<SilicaDatabase>().socialMessageDao() }
 
     single { com.silica.assistant.core.llm.AchievementManager(get()) }
-    single { MoodManager(get(), get(), get(), get()) }
+    single { MoodManager(get(), get(), get(), get(), get()) }
     single { AuthRepository(get(), get(), get(), get(), get(), get(), androidContext()) }
     single { com.silica.assistant.core.auth.SocialRepository(get(), get(), get()) }
+    single { ActivityDetector(androidContext()) }
 
     single {
         HttpClient(OkHttp) {

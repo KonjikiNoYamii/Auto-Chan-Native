@@ -21,9 +21,19 @@ class MoodManager(
     private val userProfileDao: UserProfileDao,
     private val questDao: QuestDao,
     private val authRepository: AuthRepository,
-    private val achievementManager: AchievementManager
+    private val achievementManager: AchievementManager,
+    private val activityDetector: com.silica.assistant.core.ActivityDetector
 ) {
     private val scope = CoroutineScope(Dispatchers.IO)
+
+    private val questCategoryMapping = mapOf(
+        "ngoding" to listOf("com.termux", "com.aide.ui", "com.github.android", "org.goffi.termux", "com.dualscreen.terminal"),
+        "coding" to listOf("com.termux", "com.aide.ui", "com.github.android"),
+        "belajar" to listOf("com.google.android.apps.docs", "com.adobe.reader", "com.duolingo", "com.sololearn", "org.khanacademy.android"),
+        "nonton" to listOf("com.google.android.youtube", "com.netflix.mediaclient", "com.disney.disneyplus", "com.mxtech.videoplayer.ad"),
+        "kerja" to listOf("com.microsoft.office.outlook", "com.slack", "com.google.android.apps.meetings", "com.microsoft.teams"),
+        "olahraga" to listOf("com.google.android.apps.fitness", "com.strava", "com.fitbit.FitbitMobile")
+    )
 
     init {
         scope.launch {
@@ -33,6 +43,62 @@ class MoodManager(
             achievementManager.initAchievements()
             resetDailyQuests()
         }
+    }
+
+    private fun isContextEligible(questTitle: String): Boolean {
+        val lowerTitle = questTitle.lowercase()
+        for ((category, packages) in questCategoryMapping) {
+            if (lowerTitle.contains(category)) {
+                // Check current foreground app first
+                val currentApp = activityDetector.getForegroundApp()
+                if (currentApp != null && packages.contains(currentApp)) return true
+                
+                // Then check recent history (3 hours)
+                for (pkg in packages) {
+                    if (activityDetector.hasUsedAppRecently(pkg)) return true
+                }
+            }
+        }
+        return false
+    }
+
+    suspend fun verifyWithVision(questTitle: String, imageJpeg: ByteArray): Pair<Boolean, String> {
+        val prompt = """
+            User mengirim foto ini sebagai bukti menyelesaikan tugas: "$questTitle".
+            Analisa foto tersebut. Apakah isinya sesuai dengan tugas tersebut?
+            Jika SESUAI: Balas HANYA dengan kata "VALID" diikuti alasan singkat dan emosi (senyum).
+            Jika TIDAK SESUAI: Balas HANYA dengan kata "FAKE" diikuti alasan kenapa itu palsu dan emosi (marah).
+            Karaktermu: Yami, assassin yang teliti dan tidak suka kebohongan.
+        """.trimIndent()
+        
+        val result = LlmClient.describeScreen("Bukti Quest", prompt, imageJpeg) ?: return Pair(false, "Hmm, aku tidak bisa melihat gambarnya dengan jelas. (¬_¬)")
+        
+        val isValid = result.startsWith("VALID", ignoreCase = true)
+        if (isValid) {
+            // Manual verification success
+            val quest = questDao.findActiveQuestByTitle(questTitle) ?: questDao.getCompletedQuests().first().find { it.title == questTitle }
+            if (quest != null) {
+                val updatedQuest = quest.copy(isEligible = true)
+                questDao.updateQuest(updatedQuest)
+                
+                val profile = getProfile()
+                userProfileDao.updateProfile(profile.copy(
+                    verifiedQuestCount = profile.verifiedQuestCount + 1,
+                    affinityPoints = profile.affinityPoints + 5 // Bonus points for evidence
+                ))
+                triggerAutoSync()
+            }
+        } else if (result.startsWith("FAKE", ignoreCase = true)) {
+            // User lied!
+            val profile = getProfile()
+            userProfileDao.updateProfile(profile.copy(
+                affinityPoints = (profile.affinityPoints - 10).coerceAtLeast(0),
+                mood = (profile.mood - 0.2f).coerceIn(0.5f, 1.5f)
+            ))
+            triggerAutoSync()
+        }
+        
+        return Pair(isValid, result.replace("VALID", "").replace("FAKE", "").trim())
     }
 
     private suspend fun resetDailyQuests() {
@@ -139,7 +205,8 @@ class MoodManager(
     suspend fun completeQuest(title: String): String {
         val quest = questDao.findActiveQuestByTitle(title) ?: return "Aku tidak menemukan tugas aktif bernama '$title'."
         
-        val updatedQuest = quest.copy(isCompleted = true, completedAt = System.currentTimeMillis())
+        val eligible = isContextEligible(title)
+        val updatedQuest = quest.copy(isCompleted = true, completedAt = System.currentTimeMillis(), isEligible = eligible)
         questDao.updateQuest(updatedQuest)
 
         val profile = getProfile()
@@ -199,7 +266,9 @@ class MoodManager(
             inventory = newInventoryString,
             affinityPoints = profile.affinityPoints + (xpBonus / 40),
             mood = (profile.mood + 0.1f).coerceIn(0.5f, 1.5f),
-            stamina = (profile.stamina + 0.1f).coerceIn(0.0f, 1.0f)
+            stamina = (profile.stamina + 0.1f).coerceIn(0.0f, 1.0f),
+            totalQuestCount = profile.totalQuestCount + 1,
+            verifiedQuestCount = profile.verifiedQuestCount + if (eligible) 1 else 0
         ))
         triggerAutoSync()
         
@@ -208,6 +277,8 @@ class MoodManager(
         val hardCount = allCompleted.count { it.difficulty == "HARD" }
         achievementManager.checkAchievements(newProfile, allCompleted.size, hardCount)
 
+        val verifyMsg = if (eligible) "\n✨ **QUEST TERVERIFIKASI!** Aku mendeteksi aktivitasmu. ♪" else "\n⚠️ **QUEST MANUAL.** Aku tidak mendeteksi aktivitas aplikasi terkait."
+        
         val levelMsg = if (leveledUp) "\n🎊 **LEVEL UP!** Kamu sekarang Level $currentLevel! 🎊" else ""
         val streakMsg = when {
             newStreak == 7 -> "\nWah, kamu sudah produktif selama seminggu penuh! Aku sangat bangga padamu ♪"
@@ -217,7 +288,7 @@ class MoodManager(
         }
 
         return "Kerja bagus! Kamu sudah menyelesaikan '${updatedQuest.title}'.\n" +
-               "Kamu mendapatkan **$xpBonus XP** dan menemukan **$itemFound**! ♪$levelMsg$streakMsg"
+               "Kamu mendapatkan **$xpBonus XP** dan menemukan **$itemFound**! ♪$verifyMsg$levelMsg$streakMsg"
     }
 
     suspend fun getInventory(): List<String> {

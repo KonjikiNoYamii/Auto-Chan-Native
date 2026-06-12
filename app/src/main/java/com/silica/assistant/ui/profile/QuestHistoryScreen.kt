@@ -22,10 +22,38 @@ import com.silica.assistant.ui.viewmodel.AssistantViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.ui.platform.LocalContext
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import kotlinx.coroutines.launch
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuestHistoryScreen(viewModel: AssistantViewModel, onBack: () -> Unit) {
     val completedQuests = viewModel.completedQuests
+    val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    
+    // Launcher for image picker
+    var selectedQuestTitle by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            val title = selectedQuestTitle ?: return@let
+            val inputStream = context.contentResolver.openInputStream(it)
+            val bytes = inputStream?.readBytes()
+            if (bytes != null) {
+                viewModel.verifyQuestWithPhoto(title, bytes) { success, message ->
+                    com.silica.assistant.core.overlay.OverlayEventBus.onBubble?.invoke(message)
+                }
+            }
+        }
+    }
+
     val dateFormat = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault())
 
     Scaffold(
@@ -74,17 +102,41 @@ fun QuestHistoryScreen(viewModel: AssistantViewModel, onBack: () -> Unit) {
                                 modifier = Modifier.padding(16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.History, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(24.dp))
+                                Icon(
+                                    if (quest.isEligible) Icons.Default.Verified else Icons.Default.History, 
+                                    null, 
+                                    tint = if (quest.isEligible) Color(0xFF4CAF50) else Color.Gray, 
+                                    modifier = Modifier.size(24.dp)
+                                )
                                 Spacer(Modifier.width(16.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(quest.title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Espresso)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(quest.title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Espresso)
+                                        if (quest.isEligible) {
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("✨", fontSize = 12.sp)
+                                        }
+                                    }
                                     Text(
-                                        text = "Jam: ${quest.completedAt?.let { SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it)) } ?: "-"}",
-                                        fontSize = 12.sp,
-                                        color = Color.Gray
+                                        text = if (quest.isEligible) "Terverifikasi Otomatis/Foto" else "Selesai Manual (Belum Terverifikasi)",
+                                        fontSize = 11.sp,
+                                        color = if (quest.isEligible) Color(0xFF4CAF50) else Color.Gray
                                     )
                                 }
-                                Text(quest.difficulty, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DeepRose)
+                                
+                                if (!quest.isEligible) {
+                                    IconButton(
+                                        onClick = { 
+                                            selectedQuestTitle = quest.title
+                                            imagePickerLauncher.launch("image/*") 
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(Icons.Default.FileUpload, "Verify with Photo", tint = DeepRose, modifier = Modifier.size(20.dp))
+                                    }
+                                } else {
+                                    Text(quest.difficulty, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DeepRose)
+                                }
                             }
                         }
                     }

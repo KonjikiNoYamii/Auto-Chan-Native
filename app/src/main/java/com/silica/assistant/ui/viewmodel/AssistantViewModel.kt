@@ -108,6 +108,14 @@ class AssistantViewModel : ViewModel(), KoinComponent {
         }
     }
 
+    fun verifyQuestWithPhoto(questTitle: String, imageJpeg: ByteArray, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val (success, message) = moodManager.verifyWithVision(questTitle, imageJpeg)
+            onResult(success, message)
+            loadProfile()
+        }
+    }
+
     suspend fun classifyQuest(title: String): String {
         return com.silica.assistant.core.llm.LlmClient.classifyQuestDifficulty(title) ?: "MEDIUM"
     }
