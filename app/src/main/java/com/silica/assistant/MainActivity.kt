@@ -26,19 +26,6 @@ class MainActivity : ComponentActivity() {
             LlmClient.startPeriodicHealthCheck()
         }
 
-        checkWriteSettingsPermission()
-
         setContent { SilicaTheme(darkTheme = false) { MainScreen() } }
-    }
-
-    private fun checkWriteSettingsPermission() {
-
-        if (!Settings.System.canWrite(this)) {
-
-            val intent =
-                    Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName"))
-
-            startActivity(intent)
-        }
     }
 }

@@ -21,6 +21,7 @@ import com.silica.assistant.core.llm.db.ChatDao
 import com.silica.assistant.core.llm.db.UserFactDao
 import com.silica.assistant.core.llm.model.ChatMessageEntity
 
+
 class KtorLlmRepository(
     private val client: HttpClient,
     private val chatDao: ChatDao,
@@ -42,41 +43,49 @@ class KtorLlmRepository(
 
     override suspend fun startPeriodicHealthCheck() {
         while (coroutineContext.isActive) {
-            val healthy = checkGeminiServer()
-            if (healthy) {
+            val localHealthy = checkLocalGeminiServer()
+            if (localHealthy) {
                 healthCheckPassCount++
                 healthCheckFailCount = 0
                 if (healthCheckPassCount >= CONFIDENCE_THRESHOLD) {
-                    activeProvider = "Gemini"
+                    activeProvider = "LocalGemini"
                 }
             } else {
                 healthCheckFailCount++
                 healthCheckPassCount = 0
                 if (healthCheckFailCount >= CONFIDENCE_THRESHOLD) {
-                    activeProvider = "OpenRouter"
+                    activeProvider = if (checkGeminiServer()) "Gemini" else "OpenRouter"
                 }
             }
-            delay(if (activeProvider == "Gemini") 15_000L else 10_000L)
+            delay(if (activeProvider == "LocalGemini" || activeProvider == "Gemini") 15_000L else 10_000L)
         }
     }
 
     private suspend fun checkGeminiServer(): Boolean {
         if (!LlmConfig.useGeminiFallback) return false
+        val key = LlmConfig.geminiApiKey
+        return key.isNotBlank() && (key.startsWith("AIza") || key.startsWith("AQ"))
+    }
+
+    private suspend fun checkLocalGeminiServer(): Boolean {
+        if (!LlmConfig.useLocalPrimary) return false
         return try {
-            val healthUrl = LlmConfig.geminiEndpoint.replace("/v1/chat/completions", "/health")
-            val response: HttpResponse = client.get(healthUrl)
-            if (response.status == HttpStatusCode.OK) {
-                val body = response.bodyAsText()
-                JSONObject(body).optBoolean("client_ready", false)
-            } else false
-        } catch (_: Exception) {
+            val healthUrl = LlmConfig.localEndpoint
+                .replace("/v1/chat/completions", "/health")
+            val resp = client.get(healthUrl)
+            resp.status.value in 200..299
+        } catch (e: Exception) {
             false
         }
     }
 
     private suspend fun quickHealthCheck() {
-        if (activeProvider == "Memeriksa..." || activeProvider == "Gemini") {
-            activeProvider = if (checkGeminiServer()) "Gemini" else "OpenRouter"
+        if (activeProvider == "Memeriksa..." || activeProvider == "LocalGemini" || activeProvider == "Gemini") {
+            activeProvider = when {
+                checkLocalGeminiServer() -> "LocalGemini"
+                checkGeminiServer() -> "Gemini"
+                else -> "OpenRouter"
+            }
         }
     }
 
@@ -96,70 +105,171 @@ class KtorLlmRepository(
                 ChatMessage(role = it.role, content = it.content)
             }
 
-            val endpoint = if (activeProvider == "Gemini") LlmConfig.geminiEndpoint else LlmConfig.endpoint
-            val useAuth = activeProvider != "Gemini"
-            
             val personalityContext = moodManager.getMoodPromptSnippet()
             val fullMemoryContext = "$personalityContext $memoryContext"
-            
-            val payload = buildChatRequest(history, fullMemoryContext, stream = false)
-            val response: HttpResponse = client.post(endpoint) {
+
+            when (activeProvider) {
+                "LocalGemini" -> {
+                    val result = chatLocal(history, fullMemoryContext)
+                    if (result.isFailure) {
+                        activeProvider = "Gemini"
+                        chatGeminiFirebase(history, fullMemoryContext)
+                    } else {
+                        result
+                    }
+                }
+                "Gemini" -> {
+                    val result = chatGeminiFirebase(history, fullMemoryContext)
+                    if (result.isFailure) {
+                        healthCheckFailCount++
+                        healthCheckPassCount = 0
+                        if (healthCheckFailCount >= CONFIDENCE_THRESHOLD) {
+                            activeProvider = "OpenRouter"
+                        }
+                        chatOpenRouter(history, fullMemoryContext)
+                    } else {
+                        result
+                    }
+                }
+                else -> chatOpenRouter(history, fullMemoryContext)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("SilicaAI", "Chat error", e)
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun chatGeminiFirebase(history: List<ChatMessage>, memoryContext: String): Result<ChatMessage> {
+        return try {
+            val moodSnippet = moodManager.getMoodPromptSnippet()
+            val dynamicName = moodManager.getDynamicName()
+            val customPersonality = userFactDao.getFact("custom_personality")?.value ?: DEFAULT_PERSONALITY
+
+            val systemPrompt = """
+                $SYSTEM_RULES
+                $customPersonality
+                $moodSnippet
+                User saat ini adalah: $dynamicName
+                PASTIKAN setiap kalimat selesai dan tidak terpotong. 
+                Jika User dalam Mode Game, respon WAJIB SANGAT SINGKAT (maks 10 kata).
+                Memori relevan:
+                $memoryContext
+            """.trimIndent()
+
+            val contents = mutableListOf<GeminiContent>()
+            for (msg in history) {
+                val role = if (msg.role == "assistant") "model" else "user"
+                contents.add(GeminiContent(role = role, parts = listOf(GeminiPart(text = msg.content))))
+            }
+
+            val geminiReq = GeminiRequest(
+                contents = contents,
+                systemInstruction = GeminiSystemInstruction(parts = listOf(GeminiPart(text = systemPrompt))),
+                generationConfig = GeminiGenerationConfig(temperature = 0.7f, topK = 40, topP = 0.95f)
+            )
+
+            val url = "${LlmConfig.geminiEndpoint}${LlmConfig.geminiModel}:generateContent"
+            val response: HttpResponse = client.post(url) {
                 contentType(ContentType.Application.Json)
-                if (useAuth) {
-                    header("Authorization", "Bearer ${LlmConfig.apiKey}")
-                    header("HTTP-Referer", "https://github.com/KonjikiNoYamii/Auto-Chan-Native")
-                } else if (LlmConfig.geminiSecret.isNotBlank()) {
-                    header("Authorization", "Bearer ${LlmConfig.geminiSecret}")
+                header("X-goog-api-key", LlmConfig.geminiApiKey)
+                setBody(geminiReq)
+            }
+
+            return if (response.status.value in 200..299) {
+                val geminiResp = response.body<GeminiResponse>()
+                val text = geminiResp.candidates
+                    ?.firstOrNull()?.content?.parts
+                    ?.joinToString("") { it.text ?: "" } ?: ""
+                val safeContent = safeContent(text)
+                chatDao.insertMessage(ChatMessageEntity(role = "assistant", content = safeContent))
+                Result.success(ChatMessage(role = "assistant", content = safeContent))
+            } else {
+                val errBody = response.bodyAsText()
+                Result.failure(Exception("HTTP ${response.status}: ${errBody.take(500)}"))
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("SilicaAI", "Gemini API Error", e)
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun chatLocal(history: List<ChatMessage>, memoryContext: String): Result<ChatMessage> {
+        return try {
+            val payload = buildChatRequest(history, memoryContext, stream = false)
+            val response: HttpResponse = client.post(LlmConfig.localEndpoint) {
+                contentType(ContentType.Application.Json)
+                if (LlmConfig.localApiKey.isNotBlank()) {
+                    header("Authorization", "Bearer ${LlmConfig.localApiKey}")
                 }
                 setBody(payload)
             }
-            
             if (response.status.value in 200..299) {
                 val chatResponse = response.body<ChatResponse>()
                 val content = chatResponse.choices.firstOrNull()?.message?.content ?: ""
                 val safeContent = safeContent(content)
-                
-                // 3. Save AI response to DB
                 chatDao.insertMessage(ChatMessageEntity(role = "assistant", content = safeContent))
-                
                 Result.success(ChatMessage(role = "assistant", content = safeContent))
             } else {
                 val errBody = response.bodyAsText()
-                Result.failure(Exception("HTTP ${response.status}: ${errBody.take(200)}"))
+                Result.failure(Exception("HTTP ${response.status}: ${errBody.take(500)}"))
             }
         } catch (e: Exception) {
+            android.util.Log.e("SilicaAI", "Local server error", e)
             Result.failure(e)
         }
     }
+
+    private suspend fun chatOpenRouter(history: List<ChatMessage>, memoryContext: String): Result<ChatMessage> {
+        val payload = buildChatRequest(history, memoryContext, stream = false)
+        val response: HttpResponse = client.post(LlmConfig.endpoint) {
+            contentType(ContentType.Application.Json)
+            header("Authorization", "Bearer ${LlmConfig.apiKey}")
+            setBody(payload)
+        }
+        
+        return if (response.status.value in 200..299) {
+            val chatResponse = response.body<ChatResponse>()
+            val content = chatResponse.choices.firstOrNull()?.message?.content ?: ""
+            val safeContent = safeContent(content)
+            chatDao.insertMessage(ChatMessageEntity(role = "assistant", content = safeContent))
+            Result.success(ChatMessage(role = "assistant", content = safeContent))
+        } else {
+            val errBody = response.bodyAsText()
+            Result.failure(Exception("HTTP ${response.status}: ${errBody.take(500)}"))
+        }
+    }
     override fun chatStream(messages: List<ChatMessage>, memoryContext: String): Flow<String> = flow {
-    quickHealthCheck()
+        quickHealthCheck()
+        
+        if (activeProvider == "LocalGemini") {
+            val result = chatLocal(messages, memoryContext)
+            result.onSuccess { emit(it.content) }
+            return@flow
+        }
+        
+        if (activeProvider == "Gemini") {
+            val result = chatGeminiFirebase(messages, memoryContext)
+            result.onSuccess { emit(it.content) }
+            return@flow
+        }
+        
+        messages.filter { it.role == "user" }.forEach { 
+            chatDao.insertMessage(ChatMessageEntity(role = it.role, content = it.content))
+        }
 
-    // Save user messages
-    messages.filter { it.role == "user" }.forEach { 
-        chatDao.insertMessage(ChatMessageEntity(role = it.role, content = it.content))
-    }
+        val history = chatDao.getRecentMessages(MAX_HISTORY_CONTEXT).reversed().map { 
+            ChatMessage(role = it.role, content = it.content)
+        }
 
-    val history = chatDao.getRecentMessages(MAX_HISTORY_CONTEXT).reversed().map { 
-        ChatMessage(role = it.role, content = it.content)
-    }
+        val personalityContext = moodManager.getMoodPromptSnippet()
+        val fullMemoryContext = "$personalityContext $memoryContext"
 
-    val personalityContext = moodManager.getMoodPromptSnippet()
-    val fullMemoryContext = "$personalityContext $memoryContext"
-
-    val endpoint = if (activeProvider == "Gemini") LlmConfig.geminiEndpoint else LlmConfig.endpoint
-    val useAuth = activeProvider != "Gemini"
-
-    val payload = buildChatRequest(history, fullMemoryContext, stream = true)
+        val payload = buildChatRequest(history, fullMemoryContext, stream = true)
 
         val fullResponse = StringBuilder()
-        client.preparePost(endpoint) {
+        client.preparePost(LlmConfig.endpoint) {
             contentType(ContentType.Application.Json)
-            if (useAuth) {
-                header("Authorization", "Bearer ${LlmConfig.apiKey}")
-                header("HTTP-Referer", "https://github.com/KonjikiNoYamii/Auto-Chan-Native")
-            } else if (LlmConfig.geminiSecret.isNotBlank()) {
-                header("Authorization", "Bearer ${LlmConfig.geminiSecret}")
-            }
+            header("Authorization", "Bearer ${LlmConfig.apiKey}")
             setBody(payload)
         }.execute { response ->
             if (response.status.value !in 200..299) {
@@ -187,7 +297,6 @@ class KtorLlmRepository(
             }
         }
         
-        // Save assistant response
         if (fullResponse.isNotEmpty()) {
             chatDao.insertMessage(ChatMessageEntity(role = "assistant", content = fullResponse.toString()))
         }
@@ -210,23 +319,50 @@ class KtorLlmRepository(
         val focus = if (contextHint != null) "\nUser bertanya: \"$contextHint\"." else ""
         val prompt = "App: $appName.$textHint$focus\nLihat screenshot, beri REAKSI spontan 1 kalimat (maks 12 kata). Fokus emosional, bukan deskripsi teknis. ${LlmConfig.personalityPrompt} Langsung respon."
 
-        if (activeProvider == "Gemini" && screenshotJpeg != null) {
+        if (activeProvider == "LocalGemini" && screenshotJpeg != null) {
             try {
-                val base64 = Base64.encodeToString(screenshotJpeg, Base64.NO_WRAP)
-                val payload = buildVisionRequest(listOf(ChatMessage("user", prompt)), listOf(base64))
-                val response: HttpResponse = client.post(LlmConfig.geminiEndpoint) {
+                val b64 = android.util.Base64.encodeToString(screenshotJpeg, android.util.Base64.NO_WRAP)
+                val msg = ChatMessage(role = "user", content = prompt)
+                val payload = ChatRequest(model = LlmConfig.model, messages = listOf(msg), stream = false, images = listOf(b64))
+                val resp: HttpResponse = client.post(LlmConfig.localEndpoint) {
                     contentType(ContentType.Application.Json)
-                    if (LlmConfig.geminiSecret.isNotBlank()) {
-                        header("Authorization", "Bearer ${LlmConfig.geminiSecret}")
-                    }
                     setBody(payload)
                 }
-                if (response.status.value in 200..299) {
-                    val res = response.body<ChatResponse>()
-                    val text = res.choices.firstOrNull()?.message?.content
-                    if (text != null) return codepointAwareTake(text, 150)
+                if (resp.status.value in 200..299) {
+                    val chatResponse = resp.body<ChatResponse>()
+                    val text = chatResponse.choices.firstOrNull()?.message?.content ?: ""
+                    if (text.isNotBlank()) return codepointAwareTake(text, 150)
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.e("SilicaAI", "Local Vision Error", e)
+            }
+        }
+
+        if (activeProvider == "Gemini" && screenshotJpeg != null) {
+            try {
+                val b64 = android.util.Base64.encodeToString(screenshotJpeg, android.util.Base64.NO_WRAP)
+                val parts = listOf(
+                    GeminiPart(inlineData = GeminiInlineData(mimeType = "image/jpeg", data = b64)),
+                    GeminiPart(text = prompt)
+                )
+                val contents = listOf(GeminiContent(role = "user", parts = parts))
+                val geminiReq = GeminiRequest(contents = contents)
+                val url = "${LlmConfig.geminiEndpoint}${LlmConfig.geminiModel}:generateContent"
+                val resp: HttpResponse = client.post(url) {
+                    contentType(ContentType.Application.Json)
+                    header("X-goog-api-key", LlmConfig.geminiApiKey)
+                    setBody(geminiReq)
+                }
+                if (resp.status.value in 200..299) {
+                    val geminiResp = resp.body<GeminiResponse>()
+                    val text = geminiResp.candidates
+                        ?.firstOrNull()?.content?.parts
+                        ?.joinToString("") { it.text ?: "" } ?: ""
+                    if (text.isNotBlank()) return codepointAwareTake(text, 150)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("SilicaAI", "Gemini Vision Error", e)
+            }
         }
 
         if (uiText.isNotBlank()) {
@@ -327,6 +463,7 @@ class KtorLlmRepository(
             fullMessages.add(ChatMessage("system", "Memori relevan:\n$memoryContext"))
         }
         fullMessages.addAll(messages)
+        
         return ChatRequest(model = LlmConfig.model, messages = fullMessages, stream = stream)
     }
 
@@ -337,7 +474,9 @@ class KtorLlmRepository(
         )
         val fullMessages = mutableListOf(systemMsg)
         fullMessages.addAll(messages)
-        return ChatRequest(model = LlmConfig.model, messages = fullMessages, images = base64Images)
+        
+        val modelName = if (activeProvider == "Gemini") "gemini-1.5-flash" else LlmConfig.model
+        return ChatRequest(model = modelName, messages = fullMessages, images = base64Images)
     }
 
     private fun safeContent(text: String): String {

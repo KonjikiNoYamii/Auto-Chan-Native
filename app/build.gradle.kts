@@ -15,8 +15,8 @@ if (keystoreFile.exists()) {
 }
 
 val envFile = rootProject.file(".env")
-val openRouterKey = if (envFile.exists()) {
-    envFile.readLines().firstOrNull { it.startsWith("OPENROUTER_API_KEY=") }?.substringAfter("=")?.trim() ?: ""
+val groqKey = if (envFile.exists()) {
+    envFile.readLines().firstOrNull { it.startsWith("GROQ_API_KEY=") }?.substringAfter("=")?.trim() ?: ""
 } else ""
 
 android {
@@ -29,7 +29,7 @@ android {
         targetSdk = 34
         versionCode = maxOf((System.currentTimeMillis() / 1000).toInt(), 4)
         versionName = "1.1"
-        buildConfigField("String", "OPENROUTER_API_KEY", "\"${openRouterKey}\"")
+        buildConfigField("String", "OPENROUTER_API_KEY", "\"${groqKey}\"")
         
         val localProperties = Properties()
         val localPropertiesFile = rootProject.file("local.properties")
@@ -124,4 +124,5 @@ dependencies {
     implementation(libs.firebase.auth)
     implementation(libs.firebase.database)
     implementation(libs.firebase.firestore)
+    implementation(libs.firebase.vertexai)
 }

@@ -11,6 +11,59 @@ data class ChatRequest(
     val images: List<String>? = null
 )
 
+// --- Native Gemini Models ---
+@Serializable
+data class GeminiRequest(
+    val contents: List<GeminiContent>,
+    val systemInstruction: GeminiSystemInstruction? = null,
+    val generationConfig: GeminiGenerationConfig? = null
+)
+
+@Serializable
+data class GeminiSystemInstruction(
+    val parts: List<GeminiPart>
+)
+
+@Serializable
+data class GeminiContent(
+    val role: String,
+    val parts: List<GeminiPart>
+)
+
+@Serializable
+data class GeminiPart(
+    val text: String? = null,
+    val inlineData: GeminiInlineData? = null
+)
+
+@Serializable
+data class GeminiInlineData(
+    val mimeType: String,
+    val data: String
+)
+
+@Serializable
+data class GeminiGenerationConfig(
+    val temperature: Float? = null,
+    val topK: Int? = null,
+    val topP: Float? = null,
+    val maxOutputTokens: Int? = null,
+    val stopSequences: List<String>? = null
+)
+
+@Serializable
+data class GeminiResponse(
+    val candidates: List<GeminiCandidate>? = null,
+    val error: ApiError? = null
+)
+
+@Serializable
+data class GeminiCandidate(
+    val content: GeminiContent,
+    val finishReason: String? = null
+)
+// --- End Native Gemini Models ---
+
 @Serializable
 data class ChatChoice(
     val message: ChatMessage? = null,

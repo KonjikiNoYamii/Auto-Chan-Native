@@ -111,6 +111,10 @@ fun MainScreen() {
     var screenCaptureLaunched by remember { mutableStateOf(false) }
     var showOverlayPermissionDialog by remember { mutableStateOf(false) }
     var showUsagePermissionDialog by remember { mutableStateOf(false) }
+    var showAccessibilityDialog by remember { mutableStateOf(false) }
+    var showNotificationDialog by remember { mutableStateOf(false) }
+    var showBatteryDialog by remember { mutableStateOf(false) }
+    var showWriteSettingsDialog by remember { mutableStateOf(false) }
 
     val recordPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -119,6 +123,14 @@ fun MainScreen() {
             Toast.makeText(context, "Izin mikrofon diberikan. Tekan waifu untuk mulai bicara", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(context, "Izin mikrofon diperlukan untuk voice command", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) {
+            Toast.makeText(context, "Izin notifikasi ditolak. Beberapa fitur mungkin tidak muncul", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -158,6 +170,30 @@ fun MainScreen() {
             showUsagePermissionDialog = true
         }
 
+        // 4. Check Accessibility
+        val expectedId = "${context.packageName}/${com.silica.assistant.service.SilicaAccessibilityService::class.java.canonicalName}"
+        val enabledServices = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+        if (enabledServices == null || !enabledServices.contains(expectedId)) {
+            showAccessibilityDialog = true
+        }
+
+        // 5. Check Notifications (Android 13+)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                showNotificationDialog = true
+            }
+        }
+
+        // 6. Check Write Settings
+        if (!android.provider.Settings.System.canWrite(context)) {
+            showWriteSettingsDialog = true
+        }
+
+        // 7. Check Battery Optimization
+        val pm = context.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+        if (!pm.isIgnoringBatteryOptimizations(context.packageName)) {
+            showBatteryDialog = true
+        }
     }
 
     if (showOverlayPermissionDialog) {
@@ -195,6 +231,90 @@ fun MainScreen() {
             },
             dismissButton = {
                 TextButton(onClick = { showUsagePermissionDialog = false }) { Text("Nanti") }
+            }
+        )
+    }
+
+    if (showAccessibilityDialog) {
+        AlertDialog(
+            onDismissRequest = { showAccessibilityDialog = false },
+            title = { Text("Accessibility Service") },
+            text = { Text("Silica butuh izin ini agar bisa 'melihat' layar dan membantumu melakukan aksi otomatis. Cari 'Silica Assistant' di menu yang muncul nanti ya~") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showAccessibilityDialog = false
+                    val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                    context.startActivity(intent)
+                }) { Text("Buka Settings") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAccessibilityDialog = false }) { Text("Nanti") }
+            }
+        )
+    }
+
+    if (showNotificationDialog) {
+        AlertDialog(
+            onDismissRequest = { showNotificationDialog = false },
+            title = { Text("Izin Notifikasi") },
+            text = { Text("Izinkan Silica mengirim notifikasi agar fitur asisten tetap berjalan lancar di latar belakang~") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showNotificationDialog = false
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }) { Text("Izinkan") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNotificationDialog = false }) { Text("Nanti") }
+            }
+        )
+    }
+
+    if (showWriteSettingsDialog) {
+        AlertDialog(
+            onDismissRequest = { showWriteSettingsDialog = false },
+            title = { Text("Ubah Pengaturan Sistem") },
+            text = { Text("Silica butuh izin ini untuk mengatur kecerahan layar atau volume secara otomatis sesuai perintahmu~") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showWriteSettingsDialog = false
+                    val intent = Intent(
+                        android.provider.Settings.ACTION_MANAGE_WRITE_SETTINGS,
+                        Uri.parse("package:${context.packageName}")
+                    )
+                    context.startActivity(intent)
+                }) { Text("Buka Settings") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWriteSettingsDialog = false }) { Text("Nanti") }
+            }
+        )
+    }
+
+    if (showBatteryDialog) {
+        AlertDialog(
+            onDismissRequest = { showBatteryDialog = false },
+            title = { Text("Optimasi Baterai") },
+            text = { Text("Agar Silica tidak 'tertidur' oleh sistem Android, mohon matikan optimasi baterai untuk aplikasi ini ya~") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showBatteryDialog = false
+                    try {
+                        val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                            data = Uri.parse("package:${context.packageName}")
+                        }
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        // Fallback jika direct request tidak didukung
+                        val intent = Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                        context.startActivity(intent)
+                    }
+                }) { Text("Buka Settings") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBatteryDialog = false }) { Text("Nanti") }
             }
         )
     }
