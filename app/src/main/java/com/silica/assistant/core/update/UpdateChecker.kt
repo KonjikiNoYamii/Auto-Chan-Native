@@ -37,9 +37,11 @@ object UpdateChecker {
             val tag = release.optString("tag_name", "") ?: return@withContext null
             val raw = tag.removePrefix("v")
 
-            val isNewer = raw.toIntOrNull()?.let { it > currentVersionCode }
-                ?: raw.toDoubleOrNull()?.let { it > (currentVersionName.toDoubleOrNull() ?: 0.0) }
-                ?: compareSemver(raw, currentVersionName) > 0
+            val isNewer = when {
+                raw.toIntOrNull() != null -> raw.toInt() > currentVersionCode
+                raw.toDoubleOrNull() != null -> raw.toDouble() > (currentVersionName.toDoubleOrNull() ?: 0.0)
+                else -> compareSemver(raw, currentVersionName) > 0
+            }
 
             if (!isNewer) return@withContext null
 
