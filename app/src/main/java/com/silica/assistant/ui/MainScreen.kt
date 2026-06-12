@@ -370,7 +370,10 @@ fun MainScreen() {
             android.util.Log.e("MainScreen", "Failed to get version code", e)
             0
         }
-        val info = UpdateChecker.check(currentVersionCode)
+        val currentVersionName = try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0"
+        } catch (_: Exception) { "1.0" }
+        val info = UpdateChecker.check(currentVersionCode, currentVersionName)
         if (info != null) {
             updateInfo = info
         }

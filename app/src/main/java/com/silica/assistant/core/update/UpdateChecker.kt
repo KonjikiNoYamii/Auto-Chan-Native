@@ -18,7 +18,7 @@ object UpdateChecker {
         val downloadUrl: String,
     )
 
-    suspend fun check(currentVersionCode: Int): UpdateInfo? = withContext(Dispatchers.IO) {
+    suspend fun check(currentVersionCode: Int, currentVersionName: String): UpdateInfo? = withContext(Dispatchers.IO) {
         try {
             val conn = URL(GITHUB_API).openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
@@ -35,27 +35,13 @@ object UpdateChecker {
             val release = JSONObject(json)
 
             val tag = release.optString("tag_name", "") ?: return@withContext null
+            val raw = tag.removePrefix("v")
 
-            // Try to parse version from tag (e.g., "v1.2.3" or "v15")
-            val latestVersionStr = tag.removePrefix("v")
-            
-            // If it's a simple integer (legacy support)
-            val latestVersionCode = latestVersionStr.toIntOrNull()
-            
-            val isNewer = if (latestVersionCode != null) {
-                latestVersionCode > currentVersionCode
-            } else {
-                // If it contains dots, it might be a version name (e.g. 1.2)
-                // For simplicity, we compare strings if not integers, 
-                // but better to compare against versionName from context if available.
-                // However, since we only have currentVersionCode here, 
-                // let's assume the user uses integer tags for auto-update logic.
-                false
-            }
+            val isNewer = raw.toIntOrNull()?.let { it > currentVersionCode }
+                ?: raw.toDoubleOrNull()?.let { it > (currentVersionName.toDoubleOrNull() ?: 0.0) }
+                ?: compareSemver(raw, currentVersionName) > 0
 
-            if (!isNewer && latestVersionCode != null) return@withContext null
-            // If we can't parse an int, we might want to check if the tag is different 
-            // from a stored "last seen tag", but currentVersionCode is safer.
+            if (!isNewer) return@withContext null
 
             val assets = release.optJSONArray("assets") ?: return@withContext null
             var downloadUrl: String? = null
@@ -71,7 +57,7 @@ object UpdateChecker {
             val url = downloadUrl ?: return@withContext null
             Log.d(TAG, "Update found: $tag")
             UpdateInfo(
-                latestVersionCode = latestVersionCode ?: 0,
+                latestVersionCode = raw.toIntOrNull() ?: 0,
                 latestVersionName = tag,
                 downloadUrl = url
             )
@@ -81,4 +67,14 @@ object UpdateChecker {
         }
     }
 
+    private fun compareSemver(a: String, b: String): Int {
+        val aParts = a.split(".").mapNotNull { it.toIntOrNull() }
+        val bParts = b.split(".").mapNotNull { it.toIntOrNull() }
+        for (i in 0 until maxOf(aParts.size, bParts.size)) {
+            val aVal = aParts.getOrElse(i) { 0 }
+            val bVal = bParts.getOrElse(i) { 0 }
+            if (aVal != bVal) return aVal - bVal
+        }
+        return 0
+    }
 }

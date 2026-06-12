@@ -27,8 +27,8 @@ android {
         applicationId = "com.silica.assistant"
         minSdk = 24
         targetSdk = 34
-        versionCode = maxOf((System.currentTimeMillis() / 1000).toInt(), 4)
-        versionName = "1.1"
+        versionCode = 5
+        versionName = "1.2"
         buildConfigField("String", "OPENROUTER_API_KEY", "\"${groqKey}\"")
         
         val localProperties = Properties()
