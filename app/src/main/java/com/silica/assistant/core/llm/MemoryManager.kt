@@ -4,6 +4,8 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
+import kotlinx.coroutines.*
+
 object MemoryManager {
     private const val PREFS_NAME = "llm_memories"
     private const val KEY_MEMORIES = "memories"

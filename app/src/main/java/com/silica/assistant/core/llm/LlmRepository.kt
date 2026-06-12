@@ -27,7 +27,8 @@ interface LlmRepository {
         appName: String,
         uiText: String,
         screenshotJpeg: ByteArray?,
-        contextHint: String? = null
+        contextHint: String? = null,
+        onToken: ((String) -> Unit)? = null
     ): String?
 
     suspend fun generateTaskPlan(userCommand: String): String?

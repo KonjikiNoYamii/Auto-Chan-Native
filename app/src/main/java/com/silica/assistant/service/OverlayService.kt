@@ -415,7 +415,7 @@ class OverlayService : Service() {
                 }
                 generateGameComment(appName, screenText, contextHint)
             } else {
-                generateContextComment(appName, false)
+                activityScope.launch { generateContextComment(appName, false) }
             }
         }
 

@@ -53,7 +53,7 @@ object LlmClient : KoinComponent {
     }
 
     suspend fun describeScreen(appName: String, uiText: String, screenshotJpeg: ByteArray?, contextHint: String? = null, onToken: ((String) -> Unit)? = null): String? {
-        return repository.describeScreen(appName, uiText, screenshotJpeg, contextHint)
+        return repository.describeScreen(appName, uiText, screenshotJpeg, contextHint, onToken)
     }
 
     suspend fun generateTaskPlan(userCommand: String): String? {

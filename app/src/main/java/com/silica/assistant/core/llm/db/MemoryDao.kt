@@ -117,11 +117,17 @@ interface FriendDao {
     @Query("SELECT * FROM friends ORDER BY lastMessageTime DESC")
     fun getAllFriends(): Flow<List<FriendEntity>>
 
+    @Query("SELECT * FROM friends ORDER BY lastMessageTime DESC")
+    suspend fun getAllFriendsSync(): List<FriendEntity>
+
     @Query("SELECT * FROM friends WHERE userId = :userId LIMIT 1")
     suspend fun getFriend(userId: String): FriendEntity?
 
     @Query("DELETE FROM friends WHERE userId = :userId")
     suspend fun deleteFriend(userId: String)
+
+    @Query("DELETE FROM friends")
+    suspend fun deleteAllFriends()
 }
 
 @Dao

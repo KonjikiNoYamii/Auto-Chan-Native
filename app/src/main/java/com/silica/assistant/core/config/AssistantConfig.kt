@@ -64,9 +64,16 @@ object AssistantConfig : KoinComponent {
 
     private fun triggerAutoSync() {
         scope.launch {
-            val authRepository: com.silica.assistant.core.auth.AuthRepository = org.koin.core.context.GlobalContext.get().get()
-            if (authRepository.isLoggedIn()) {
-                authRepository.syncPush()
+            try {
+                val authRepository: com.silica.assistant.core.auth.AuthRepository = org.koin.core.context.GlobalContext.get().get()
+                if (authRepository.isLoggedIn()) {
+                    val result = authRepository.syncPush()
+                    if (result.isFailure) {
+                        android.util.Log.e("AssistantConfig", "Sync failed: ${result.exceptionOrNull()?.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AssistantConfig", "Sync trigger error", e)
             }
         }
     }

@@ -9,11 +9,8 @@ import com.silica.assistant.core.llm.db.QuestDao
 import com.silica.assistant.core.llm.db.UserFactDao
 import com.silica.assistant.core.llm.db.AchievementDao
 import com.silica.assistant.core.llm.db.ChatDao
-import com.silica.assistant.core.llm.model.UserProfileEntity
-import com.silica.assistant.core.llm.model.QuestEntity
-import com.silica.assistant.core.llm.model.UserFactEntity
-import com.silica.assistant.core.llm.model.AchievementEntity
-import com.silica.assistant.core.llm.model.ChatMessageEntity
+import com.silica.assistant.core.llm.db.FriendDao
+import com.silica.assistant.core.llm.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -28,7 +25,7 @@ class AuthRepository(
     private val userFactDao: UserFactDao,
     private val achievementDao: AchievementDao,
     private val chatDao: ChatDao,
-    private val friendDao: com.silica.assistant.core.llm.db.FriendDao,
+    private val friendDao: FriendDao,
     private val context: Context
 ) {
     private val TAG = "AuthRepository"
@@ -97,18 +94,26 @@ class AuthRepository(
                 val quests = questDao.getAllQuestsSync()
                 val facts = userFactDao.getAllFacts().first()
                 val achievements = achievementDao.getAllAchievementsSync()
-                val chats = chatDao.getAllMessagesSync()
+                val chats = chatDao.getAllMessagesSync().takeLast(100)
                 val friends = friendDao.getAllFriendsSync()
 
                 val userRef = database.getReference("users").child(userId)
 
-                withTimeout(30000) {
-                    userRef.child("profile").setValue(profile).await()
-                    userRef.child("quests").setValue(quests).await()
-                    userRef.child("facts").setValue(facts).await()
-                    userRef.child("achievements").setValue(achievements).await()
-                    userRef.child("chats").setValue(chats).await()
-                    userRef.child("friends").setValue(friends).await()
+                withTimeout(60000) {
+                    val p = userRef.child("profile").setValue(profile)
+                    val q = userRef.child("quests").setValue(quests)
+                    val f = userRef.child("facts").setValue(facts)
+                    val a = userRef.child("achievements").setValue(achievements)
+                    val c = userRef.child("chats").setValue(chats)
+                    val fr = userRef.child("friends").setValue(friends)
+
+                    // Run in parallel
+                    p.await()
+                    q.await()
+                    f.await()
+                    a.await()
+                    c.await()
+                    fr.await()
                 }
 
                 Result.success(SyncResponse(true, "Semua data berhasil diunggah ke cloud!"))

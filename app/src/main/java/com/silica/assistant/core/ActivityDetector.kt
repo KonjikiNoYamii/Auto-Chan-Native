@@ -104,6 +104,8 @@ class ActivityDetector(private val context: Context) {
         }
     }
 
+    private var lastSpontaneousCommentTime = 0L
+    private val SPONTANEOUS_INTERVAL = 15 * 60 * 1000 // 15 minutes
     private val activityScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
 
     data class Automation(

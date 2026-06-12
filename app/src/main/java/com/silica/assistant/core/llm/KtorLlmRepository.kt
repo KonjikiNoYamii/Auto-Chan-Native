@@ -98,10 +98,15 @@ class KtorLlmRepository(
 
     private suspend fun quickHealthCheck() {
         if (activeProvider == "Memeriksa..." || activeProvider == "LocalGemini" || activeProvider == "Gemini") {
-            activeProvider = when {
-                checkLocalGeminiServer() -> "LocalGemini"
-                checkGeminiServer() -> "Gemini"
-                else -> "Tidak Ada"
+            coroutineScope {
+                val local = async { checkLocalGeminiServer() }
+                val remote = async { checkGeminiServer() }
+                
+                activeProvider = when {
+                    local.await() -> "LocalGemini"
+                    remote.await() -> "Gemini"
+                    else -> "Tidak Ada"
+                }
             }
         }
     }
@@ -269,7 +274,7 @@ class KtorLlmRepository(
         return chat(msg).getOrNull()?.content?.let { if (isGame) limitSentence(it) else it.take(300) }
     }
 
-    override suspend fun describeScreen(appName: String, uiText: String, screenshotJpeg: ByteArray?, contextHint: String?): String? {
+    override suspend fun describeScreen(appName: String, uiText: String, screenshotJpeg: ByteArray?, contextHint: String?, onToken: ((String) -> Unit)?): String? {
         quickHealthCheck()
         val textHint = if (uiText.isBlank()) "" else "\nTeks layar: ${uiText.take(200)}"
         val focus = if (contextHint != null) "\nUser bertanya: \"$contextHint\"." else ""
