@@ -398,6 +398,22 @@ class KtorLlmRepository(
             }
     }
 
+    override suspend fun extractUserFacts(text: String): List<String> {
+        val prompt = """
+            Ekstrak fakta penting tentang user dari pesan berikut: "$text"
+            Fakta harus berupa pernyataan orang ketiga yang singkat, contoh: "User suka kopi", "User tinggal di Jakarta", "User adalah mahasiswa".
+            Abaikan informasi yang tidak penting. Jika tidak ada fakta baru, balas HANYA dengan kata "NONE".
+            Jika ada lebih dari satu, pisahkan dengan baris baru.
+        """.trimIndent()
+        
+        val response = chat(listOf(ChatMessage("user", prompt))).getOrNull()?.content?.trim() ?: "NONE"
+        if (response.equals("NONE", ignoreCase = true)) return emptyList()
+        
+        return response.split("\n")
+            .map { it.trim().removePrefix("- ").removePrefix("* ") }
+            .filter { it.isNotBlank() && it.length > 5 }
+    }
+
     private suspend fun buildChatRequest(messages: List<ChatMessage>, memoryContext: String, stream: Boolean): ChatRequest {
         val moodSnippet = moodManager.getMoodPromptSnippet()
         val dynamicName = moodManager.getDynamicName()

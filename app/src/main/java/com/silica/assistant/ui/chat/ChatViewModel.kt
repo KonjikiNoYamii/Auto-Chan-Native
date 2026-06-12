@@ -157,12 +157,9 @@ class ChatViewModel(
             return
         }
 
-        // auto-store detected facts silently
-        val newFacts = MemoryManager.autoExtract(text)
-        for (fact in newFacts) {
-            MemoryManager.addMemory(context, fact)
-        }
-        if (newFacts.isNotEmpty()) {
+        // auto-store detected facts silently using AI
+        viewModelScope.launch {
+            MemoryManager.aiAutoExtract(context, text)
             memories = MemoryManager.getMemories(context)
         }
 

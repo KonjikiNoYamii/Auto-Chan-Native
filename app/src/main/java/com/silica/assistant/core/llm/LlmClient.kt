@@ -67,5 +67,9 @@ object LlmClient : KoinComponent {
     suspend fun classifyQuestDifficulty(questTitle: String): String? {
         return repository.classifyQuestDifficulty(questTitle)
     }
+
+    suspend fun extractUserFacts(text: String): List<String> {
+        return repository.extractUserFacts(text)
+    }
 }
 

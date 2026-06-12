@@ -35,4 +35,6 @@ interface LlmRepository {
     suspend fun executeAiTask(userCommand: String): String?
 
     suspend fun classifyQuestDifficulty(questTitle: String): String?
+
+    suspend fun extractUserFacts(text: String): List<String>
 }
