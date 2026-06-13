@@ -54,7 +54,28 @@ sealed class Action {
     object ScreenInfo : Action()
     data class GameComment(val context: String, val rawInput: String) : Action()
 
-    // Accessibility
+    // Accessibility - Gesture
+    data class ClickCoordinate(val x: Int, val y: Int) : Action()
+    data class ClickRegion(val region: String) : Action()
+    data class SwipeGesture(
+        val fromX: Float, val fromY: Float,
+        val toX: Float, val toY: Float,
+        val durationMs: Long = 400
+    ) : Action()
+    data class SwipeDirection(val direction: String) : Action()
+    data class LongPress(val x: Int, val y: Int, val durationMs: Long = 600) : Action()
+
+    // Accessibility - Type
+    data class TypeText(val text: String) : Action()
+    data class TypeInto(val text: String, val fieldHint: String) : Action()
+
+    // Accessibility - Wait
+    data class WaitForText(val text: String, val timeoutMs: Long = 5000) : Action()
+
+    // Macro
+    data class Macro(val steps: List<Action>, val description: String = "") : Action()
+
+    // Existing
     data class ClickElement(val keyword: String, val rawInput: String) : Action()
     object ScrollDown : Action()
     object ScrollUp : Action()
