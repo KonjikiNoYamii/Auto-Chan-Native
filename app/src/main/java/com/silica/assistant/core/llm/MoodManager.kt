@@ -1,5 +1,6 @@
 package com.silica.assistant.core.llm
 
+import android.util.Log
 import com.silica.assistant.core.auth.AuthRepository
 import com.silica.assistant.core.llm.db.UserProfileDao
 import com.silica.assistant.core.llm.db.QuestDao
@@ -125,7 +126,7 @@ class MoodManager(
             if (authRepository.isLoggedIn()) {
                 val result = authRepository.syncPush()
                 if (result.isFailure) {
-                    com.silica.assistant.core.overlay.OverlayEventBus.send("Sync gagal: ${result.exceptionOrNull()?.message?.take(80)}")
+                    Log.e("MoodManager", "Sync gagal: ${result.exceptionOrNull()?.message}")
                 }
             }
         }
