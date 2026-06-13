@@ -148,14 +148,14 @@ object ActionExecutor : KoinComponent {
                 }
                 OverlayEventBus.onBubble?.invoke("$ ${action.command}")
 
-                // Send to shell (for terminal display) if shell is open
-                val shell = SshManager.getShell()
+                // Auto-open shell if needed, then send command for terminal display
+                val shell = SshManager.getShell() ?: SshManager.openShell().getOrNull()
                 if (shell != null) {
                     shell.injectOutput("\n$ ${action.command}\n")
                     shell.sendCommand(action.command)
                 }
 
-                // Also capture output via exec channel for bubble preview
+                // Capture output via exec channel for bubble preview
                 Thread {
                     SshManager.executeCommand(action.command)
                         .onSuccess { result ->
@@ -163,7 +163,7 @@ object ActionExecutor : KoinComponent {
                             OverlayEventBus.onBubble?.invoke("✓ ${preview.ifBlank { "Selesai" }}")
                         }
                         .onFailure { e ->
-                            OverlayEventBus.onBubble?.invoke("Gagal: ${e.message}")
+                            OverlayEventBus.onBubble?.invoke("✗ ${e.message}")
                         }
                 }.start()
             }
@@ -179,8 +179,8 @@ object ActionExecutor : KoinComponent {
                     "ip" -> "hostname -I"
                     else -> "uptime"
                 }
-                // Send to shell for terminal display
-                val shell = SshManager.getShell()
+                // Auto-open shell if needed, send command for terminal display
+                val shell = SshManager.getShell() ?: SshManager.openShell().getOrNull()
                 if (shell != null) {
                     shell.injectOutput("\n$ ${command}\n")
                     shell.sendCommand(command)
