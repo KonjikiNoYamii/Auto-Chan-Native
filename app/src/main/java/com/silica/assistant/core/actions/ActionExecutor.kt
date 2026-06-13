@@ -148,22 +148,29 @@ object ActionExecutor : KoinComponent {
                 }
                 OverlayEventBus.onBubble?.invoke("$ ${action.command}")
 
-                // Auto-open shell if needed, then send command for terminal display
-                val shell = SshManager.getShell() ?: SshManager.openShell().getOrNull()
+                // Inject command text into shell for terminal display (if open)
+                val shell = SshManager.getShell()
                 if (shell != null) {
                     shell.injectOutput("\n$ ${action.command}\n")
-                    shell.sendCommand(action.command)
                 }
 
-                // Capture output via exec channel for bubble preview
+                // Run command ONCE via exec channel (clean output, no duplicate)
                 Thread {
                     SshManager.executeCommand(action.command)
                         .onSuccess { result ->
-                            val preview = result.lines().take(4).joinToString(" | ")
+                            val trimmed = result.trimEnd()
+                            val preview = trimmed.lines().take(4).joinToString(" | ")
                             OverlayEventBus.onBubble?.invoke("✓ ${preview.ifBlank { "Selesai" }}")
+                            // Inject result into shell for terminal display
+                            if (shell != null) {
+                                shell.injectOutput("${trimmed}\n")
+                            }
                         }
                         .onFailure { e ->
                             OverlayEventBus.onBubble?.invoke("✗ ${e.message}")
+                            if (shell != null) {
+                                shell.injectOutput("✗ ${e.message}\n")
+                            }
                         }
                 }.start()
             }
@@ -179,19 +186,24 @@ object ActionExecutor : KoinComponent {
                     "ip" -> "hostname -I"
                     else -> "uptime"
                 }
-                // Auto-open shell if needed, send command for terminal display
-                val shell = SshManager.getShell() ?: SshManager.openShell().getOrNull()
+                val shell = SshManager.getShell()
                 if (shell != null) {
                     shell.injectOutput("\n$ ${command}\n")
-                    shell.sendCommand(command)
                 }
                 Thread {
                     SshManager.executeCommand(command)
                         .onSuccess { result ->
-                            OverlayEventBus.onBubble?.invoke(result.lines().firstOrNull { it.isNotBlank() } ?: result.trim())
+                            val line = result.lines().firstOrNull { it.isNotBlank() } ?: result.trim()
+                            OverlayEventBus.onBubble?.invoke(line)
+                            if (shell != null) {
+                                shell.injectOutput("${line}\n")
+                            }
                         }
                         .onFailure { e ->
-                            OverlayEventBus.onBubble?.invoke("Gagal: ${e.message}")
+                            OverlayEventBus.onBubble?.invoke("✗ ${e.message}")
+                            if (shell != null) {
+                                shell.injectOutput("✗ ${e.message}\n")
+                            }
                         }
                 }.start()
             }

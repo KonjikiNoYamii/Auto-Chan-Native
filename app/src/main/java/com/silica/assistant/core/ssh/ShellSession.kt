@@ -11,8 +11,9 @@ class ShellSession(
 
     private val readerThread: Thread
     private var running = true
-    private val outputListeners = mutableListOf<(String) -> Unit>()
-    
+    private val outputListeners = java.util.concurrent.CopyOnWriteArrayList<(String) -> Unit>()
+    private val lock = Any()
+
     fun addOutputListener(listener: (String) -> Unit) {
         outputListeners.add(listener)
     }
@@ -45,7 +46,7 @@ class ShellSession(
                     if (len <= 0) break
                     val raw = String(buf, 0, len, Charsets.UTF_8)
                     val cleaned = normalizeOutput(raw)
-                    outputBuf.append(cleaned)
+                    synchronized(lock) { outputBuf.append(cleaned) }
                     outputListeners.forEach { it.invoke(cleaned) }
 
                     if (cleaned.contains("[sudo]", ignoreCase = true) ||
@@ -89,11 +90,11 @@ class ShellSession(
     }
 
     fun injectOutput(text: String) {
-        outputBuf.append(text)
+        synchronized(lock) { outputBuf.append(text) }
         outputListeners.forEach { it.invoke(text) }
     }
 
-    fun getFullOutput(): String = outputBuf.toString()
+    fun getFullOutput(): String = synchronized(lock) { outputBuf.toString() }
 
     override fun close() {
         running = false
