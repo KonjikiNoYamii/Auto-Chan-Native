@@ -13,6 +13,7 @@ object OverlayEventBus {
     var isSshActive = false
 
     var accessibilityService: SilicaAccessibilityService? = null
+    var setOverlayTouchable: ((Boolean) -> Unit)? = null
     var screenCaptureCallback: (() -> Unit)? = null
     var gameCommentCallback: ((String) -> Unit)? = null
     var aiTaskCallback: ((String) -> Unit)? = null

@@ -280,6 +280,17 @@ class OverlayService : Service() {
 
         OverlayEventBus.onBubble = { text -> showBubble(text) }
 
+        OverlayEventBus.setOverlayTouchable = { touchable ->
+            handler.post {
+                if (touchable) {
+                    params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+                } else {
+                    params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                }
+                try { windowManager.updateViewLayout(overlayView, params) } catch (_: Exception) {}
+            }
+        }
+
         // 🧠 VOICE SYSTEM (ONLY ONE SOURCE)
         VoiceManager.init(this)
         val chatDao = org.koin.core.context.GlobalContext.get().get<com.silica.assistant.core.llm.db.ChatDao>()
@@ -1047,6 +1058,7 @@ class OverlayService : Service() {
         super.onDestroy()
 
         OverlayEventBus.onBubble = null
+        OverlayEventBus.setOverlayTouchable = null
         VoiceManager.onResult = null
         VoiceManager.onStateChange = null
 
