@@ -146,11 +146,20 @@ object ActionExecutor : KoinComponent {
                     OverlayEventBus.onBubble?.invoke("SSH tidak terhubung")
                     return
                 }
-                OverlayEventBus.onBubble?.invoke("Menjalankan: ${action.command}")
+                OverlayEventBus.onBubble?.invoke("$ ${action.command}")
+
+                // Send to shell (for terminal display) if shell is open
+                val shell = SshManager.getShell()
+                if (shell != null) {
+                    shell.injectOutput("\n$ ${action.command}\n")
+                    shell.sendCommand(action.command)
+                }
+
+                // Also capture output via exec channel for bubble preview
                 Thread {
                     SshManager.executeCommand(action.command)
                         .onSuccess { result ->
-                            val preview = result.lines().take(6).joinToString(" | ")
+                            val preview = result.lines().take(4).joinToString(" | ")
                             OverlayEventBus.onBubble?.invoke("✓ ${preview.ifBlank { "Selesai" }}")
                         }
                         .onFailure { e ->
@@ -164,11 +173,17 @@ object ActionExecutor : KoinComponent {
                     return
                 }
                 val command = when (action.category) {
-                    "ram" -> "free -h | awk 'NR==2{print \"RAM: \"\$3\"/\"\$2}'"
-                    "disk" -> "df -h / | awk 'NR==2{print \"Disk: \"\$3\"/\"\$2\" (\"\$5\")\"}'"
+                    "ram" -> "free -h | grep Mem"
+                    "disk" -> "df -h / | tail -1"
                     "cpu" -> "top -bn1 | head -5 | tail -3"
-                    "ip" -> "hostname -I | awk '{print \$1}'"
+                    "ip" -> "hostname -I"
                     else -> "uptime"
+                }
+                // Send to shell for terminal display
+                val shell = SshManager.getShell()
+                if (shell != null) {
+                    shell.injectOutput("\n$ ${command}\n")
+                    shell.sendCommand(command)
                 }
                 Thread {
                     SshManager.executeCommand(command)
