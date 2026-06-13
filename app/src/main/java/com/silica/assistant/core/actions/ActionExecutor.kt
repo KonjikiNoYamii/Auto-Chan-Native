@@ -253,6 +253,153 @@ object ActionExecutor : KoinComponent {
                 }
             }
 
+            // ── Gesture: Click Coordinate ──
+            is Action.ClickCoordinate -> {
+                val acc = OverlayEventBus.accessibilityService
+                if (acc == null) {
+                    OverlayEventBus.onBubble?.invoke("Aksesibilitas belum aktif")
+                    return
+                }
+                if (acc.clickAt(action.x, action.y)) {
+                    OverlayEventBus.onBubble?.invoke("Klik di (${action.x}, ${action.y})")
+                } else {
+                    OverlayEventBus.onBubble?.invoke("Gagal klik")
+                }
+            }
+            is Action.ClickRegion -> {
+                val acc = OverlayEventBus.accessibilityService
+                if (acc == null) {
+                    OverlayEventBus.onBubble?.invoke("Aksesibilitas belum aktif. Aktifkan di Pengaturan > Aksesibilitas > Silica")
+                    return
+                }
+                val metrics = context.resources.displayMetrics
+                val w = metrics.widthPixels
+                val h = metrics.heightPixels
+                val region = action.region.lowercase()
+                val (x, y) = when {
+                    region.contains("pojok kiri") || region.contains("kiri atas") -> (w * 0.1).toInt() to (h * 0.1).toInt()
+                    region.contains("pojok kanan") || region.contains("kanan atas") -> (w * 0.9).toInt() to (h * 0.1).toInt()
+                    region.contains("kiri bawah") -> (w * 0.1).toInt() to (h * 0.9).toInt()
+                    region.contains("kanan bawah") -> (w * 0.9).toInt() to (h * 0.9).toInt()
+                    region == "pojok" -> (w * 0.1).toInt() to (h * 0.1).toInt()
+                    region.contains("tengah") || region == "tengah" -> (w / 2) to (h / 2)
+                    region.contains("kiri") -> (w * 0.1).toInt() to (h / 2)
+                    region.contains("kanan") -> (w * 0.9).toInt() to (h / 2)
+                    region.contains("atas") -> (w / 2) to (h * 0.1).toInt()
+                    region.contains("bawah") -> (w / 2) to (h * 0.9).toInt()
+                    else -> (w / 2) to (h / 2)
+                }
+                if (acc.clickAt(x, y)) {
+                    OverlayEventBus.onBubble?.invoke("Klik $region")
+                } else {
+                    OverlayEventBus.onBubble?.invoke("Gagal klik $region")
+                }
+            }
+
+            // ── Gesture: Swipe ──
+            is Action.SwipeGesture -> {
+                val acc = OverlayEventBus.accessibilityService
+                if (acc == null) {
+                    OverlayEventBus.onBubble?.invoke("Aksesibilitas belum aktif")
+                    return
+                }
+                if (acc.swipeFractional(action.fromX, action.fromY, action.toX, action.toY, action.durationMs)) {
+                    OverlayEventBus.onBubble?.invoke("Geser")
+                } else {
+                    OverlayEventBus.onBubble?.invoke("Gagal geser")
+                }
+            }
+            is Action.SwipeDirection -> {
+                val acc = OverlayEventBus.accessibilityService
+                if (acc == null) {
+                    OverlayEventBus.onBubble?.invoke("Aksesibilitas belum aktif")
+                    return
+                }
+                val dir = action.direction.lowercase()
+                val result = when {
+                    dir.contains("kiri") || dir.contains("left") -> acc.swipeFractional(0.7f, 0.5f, 0.3f, 0.5f)
+                    dir.contains("kanan") || dir.contains("right") -> acc.swipeFractional(0.3f, 0.5f, 0.7f, 0.5f)
+                    dir.contains("atas") || dir.contains("up") -> acc.swipeFractional(0.5f, 0.7f, 0.5f, 0.3f)
+                    dir.contains("bawah") || dir.contains("down") -> acc.swipeFractional(0.5f, 0.3f, 0.5f, 0.7f)
+                    else -> acc.swipeFractional(0.5f, 0.7f, 0.5f, 0.3f)
+                }
+                if (result) {
+                    OverlayEventBus.onBubble?.invoke("Geser ke $dir")
+                } else {
+                    OverlayEventBus.onBubble?.invoke("Gagal geser")
+                }
+            }
+
+            // ── Gesture: Long Press ──
+            is Action.LongPress -> {
+                val acc = OverlayEventBus.accessibilityService
+                if (action.x == 0 && action.y == 0) {
+                    // Center long press
+                    val metrics = context.resources.displayMetrics
+                    val cx = metrics.widthPixels / 2
+                    val cy = metrics.heightPixels / 2
+                    if (acc?.longPressAt(cx, cy, action.durationMs) == true) {
+                        OverlayEventBus.onBubble?.invoke("Tekan lama")
+                    } else {
+                        OverlayEventBus.onBubble?.invoke("Gagal tekan lama")
+                    }
+                } else {
+                    if (acc?.longPressAt(action.x, action.y, action.durationMs) == true) {
+                        OverlayEventBus.onBubble?.invoke("Tekan lama")
+                    } else {
+                        OverlayEventBus.onBubble?.invoke("Gagal tekan lama")
+                    }
+                }
+            }
+
+            // ── Type ──
+            is Action.TypeText -> {
+                val acc = OverlayEventBus.accessibilityService
+                if (acc?.typeText(action.text) == true) {
+                    OverlayEventBus.onBubble?.invoke("Teks diketik")
+                } else {
+                    // Fallback: try findAndType
+                    if (acc?.findAndType(action.text) == true) {
+                        OverlayEventBus.onBubble?.invoke("Teks diisi")
+                    } else {
+                        OverlayEventBus.onBubble?.invoke("Gagal mengetik")
+                    }
+                }
+            }
+            is Action.TypeInto -> {
+                val acc = OverlayEventBus.accessibilityService
+                // Try find field by hint first
+                if (acc?.findAndClick(action.fieldHint) == true) {
+                    if (acc.typeText(action.text) == true) {
+                        OverlayEventBus.onBubble?.invoke("${action.fieldHint} diisi")
+                    } else {
+                        OverlayEventBus.onBubble?.invoke("Gagal mengetik di ${action.fieldHint}")
+                    }
+                } else {
+                    OverlayEventBus.onBubble?.invoke("Field ${action.fieldHint} tidak ditemukan")
+                }
+            }
+
+            // ── Wait ──
+            is Action.WaitForText -> {
+                val acc = OverlayEventBus.accessibilityService
+                if (acc?.waitForText(action.text, action.timeoutMs) == true) {
+                    OverlayEventBus.onBubble?.invoke("Teks \"${action.text}\" ditemukan")
+                } else {
+                    OverlayEventBus.onBubble?.invoke("Teks \"${action.text}\" tidak muncul")
+                }
+            }
+
+            // ── Macro ──
+            is Action.Macro -> {
+                OverlayEventBus.onBubble?.invoke("Menjalankan ${action.steps.size} langkah...")
+                for ((i, step) in action.steps.withIndex()) {
+                    execute(context, step)
+                    try { Thread.sleep(500) } catch (_: InterruptedException) { break }
+                }
+                OverlayEventBus.onBubble?.invoke("Selesai: ${action.description.ifBlank { "${action.steps.size} langkah" }}")
+            }
+
             // ── Unknown ──
             is Action.Unknown -> {
                 Toast.makeText(context, "Unknown action: ${action.raw}", Toast.LENGTH_SHORT).show()

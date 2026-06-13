@@ -2,12 +2,23 @@ package com.silica.assistant.core.action
 
 import com.silica.assistant.core.CommandAliases
 import com.silica.assistant.core.model.CommandResult
+import com.silica.assistant.core.WakeWord
 
 object ActionMapper {
 
+    private fun stripWakeWord(input: String): String {
+        val lower = input.lowercase().trim()
+        for (alias in WakeWord.aliases) {
+            if (lower.startsWith(alias)) {
+                return input.trim().removePrefix(alias).trim()
+            }
+        }
+        return input.trim()
+    }
+
     fun map(result: CommandResult?): Action {
         if (result == null) return Action.Unknown("null")
-        return mapCommand(result.command, result.rawInput)
+        return mapCommand(result.command, stripWakeWord(result.rawInput))
     }
 
     private fun mapCommand(command: String, rawInput: String): Action {
@@ -77,9 +88,48 @@ object ActionMapper {
                     .trim()
                 Action.ClickElement(keyword, rawInput)
             }
+            "click_region" -> {
+                val region = rawInput
+                    .removePrefix("klik ").removePrefix("tap ")
+                    .trim()
+                Action.ClickRegion(region)
+            }
             "scroll_down" -> Action.ScrollDown
             "scroll_up" -> Action.ScrollUp
+            "swipe_direction" -> {
+                val dir = rawInput
+                    .removePrefix("geser ").removePrefix("swipe ").removePrefix("slide ")
+                    .trim()
+                Action.SwipeDirection(dir)
+            }
             "go_back" -> Action.GoBack
+            "type_text" -> {
+                val text = rawInput
+                    .removePrefix("ketik ").removePrefix("tulis ").removePrefix("type ")
+                    .trim()
+                Action.TypeText(text)
+            }
+            "type_into" -> {
+                val parts = rawInput
+                    .removePrefix("isi ").removePrefix("ketik di ").trim()
+                val denganIdx = parts.indexOf(" dengan ")
+                val colonIdx = parts.indexOf(": ")
+                val separator = if (denganIdx >= 0) denganIdx else if (colonIdx >= 0) colonIdx else -1
+                if (separator >= 0) {
+                    val field = parts.substring(0, separator).trim()
+                    val text = parts.substring(separator + 1).removePrefix("dengan ").removePrefix(": ").trim()
+                    Action.TypeInto(text, field)
+                } else {
+                    Action.TypeText(parts)
+                }
+            }
+            "long_press" -> Action.LongPress(0, 0, 600)
+            "wait_for_text" -> {
+                val text = rawInput
+                    .removePrefix("tunggu ").removePrefix("tunggu teks ").removePrefix("cari teks ")
+                    .removePrefix("wait for ").trim()
+                Action.WaitForText(text)
+            }
 
             else -> Action.Unknown(rawInput)
         }

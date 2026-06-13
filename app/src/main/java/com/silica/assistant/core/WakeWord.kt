@@ -4,7 +4,7 @@ import com.silica.assistant.core.command.StringSimilarity
 
 object WakeWord {
 
-    private val aliases = listOf(
+    val aliases = listOf(
         "silica",
         "silika",
         "si rika",
@@ -15,8 +15,19 @@ object WakeWord {
 
     private val singleWordAliases = listOf("silica", "silika", "sirika", "sylica", "cilika")
 
+    private val greetings = listOf("hai ", "hey ", "halo ", "hello ", "hei ", "hi ")
+
+    private fun stripGreeting(normalized: String): String {
+        for (greeting in greetings) {
+            if (normalized.startsWith(greeting)) {
+                return normalized.removePrefix(greeting).trim()
+            }
+        }
+        return normalized
+    }
+
     fun extractCommand(input: String): String? {
-        val normalized = input.lowercase().trim()
+        val normalized = stripGreeting(input.lowercase().trim())
 
         for (alias in aliases) {
             if (normalized.startsWith(alias)) {
@@ -38,7 +49,7 @@ object WakeWord {
     }
 
     fun isWakeWord(input: String): Boolean {
-        val normalized = input.lowercase().trim()
+        val normalized = stripGreeting(input.lowercase().trim())
         for (alias in aliases) {
             if (normalized.startsWith(alias)) return true
         }

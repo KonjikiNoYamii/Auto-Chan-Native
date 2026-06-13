@@ -283,15 +283,74 @@ object CommandAliases {
         "ai_task_typing" to listOf(
             "ketik",
             "tulis",
-            "mode teks",
             "mode ketik",
             "mode tulis",
+            "mode teks",
             "ketik perintah",
             "tulis perintah",
             "masukkan teks",
             "teks mode",
             "input teks",
             "input perintah"
+        ),
+
+        "click_region" to listOf(
+            "klik pojok kiri",
+            "klik pojok kanan",
+            "klik kiri atas",
+            "klik kanan atas",
+            "klik kiri bawah",
+            "klik kanan bawah",
+            "klik tengah",
+            "klik kiri",
+            "klik kanan",
+            "klik atas",
+            "klik bawah",
+            "tap pojok",
+            "tap tengah"
+        ),
+
+        "swipe_direction" to listOf(
+            "geser ke kiri",
+            "geser ke kanan",
+            "geser ke atas",
+            "geser ke bawah",
+            "slide left",
+            "slide right",
+            "slide up",
+            "slide down",
+            "swipe left",
+            "swipe right",
+            "swipe up",
+            "swipe down"
+        ),
+
+        "type_text" to listOf(
+            "ketik teks",
+            "tulis teks",
+            "type teks",
+            "ketikkan",
+            "tuliskan teks"
+        ),
+
+        "type_into" to listOf(
+            "isi",
+            "isi field",
+            "ketik di",
+            "tulis di"
+        ),
+
+        "long_press" to listOf(
+            "tekan lama",
+            "long press",
+            "tahan"
+        ),
+
+        "wait_for_text" to listOf(
+            "tunggu teks",
+            "wait for",
+            "tunggu",
+            "cari teks"
         )
     )
 }
