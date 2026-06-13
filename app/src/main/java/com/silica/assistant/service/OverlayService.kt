@@ -30,6 +30,7 @@ import com.silica.assistant.R
 import com.silica.assistant.core.ActivityDetector
 import com.silica.assistant.core.CommandManager
 import com.silica.assistant.core.CustomAssetManager
+import com.silica.assistant.core.automation.AutomationEngine
 import com.silica.assistant.core.debug.CommentDebugEntry
 import com.silica.assistant.core.debug.CommentDebugger
 import com.silica.assistant.core.debug.DebugTier
@@ -51,7 +52,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.random.Random
 
 import com.silica.assistant.core.llm.MoodManager
@@ -60,6 +60,7 @@ import org.koin.android.ext.android.inject
 class OverlayService : Service() {
 
     private val moodManager: MoodManager by inject()
+    private lateinit var automationEngine: AutomationEngine
     private lateinit var windowManager: WindowManager
     private lateinit var overlayView: View
     private lateinit var params: WindowManager.LayoutParams
@@ -110,8 +111,6 @@ class OverlayService : Service() {
     private var lastGameTouchTime = 0L
     private var detecting = false
     private var nonGameCount = 0
-    private var isCommentPending = false
-
 
 
     private val screenReceiver = object : BroadcastReceiver() {
@@ -332,7 +331,7 @@ class OverlayService : Service() {
         }
 
         VoiceManager.onErrorCallback = { error ->
-            if (!(isCommentPending && error == 5)) {
+            if (!(automationEngine.isPending() && error == 5)) {
                 val msg = when (error) {
                     7 -> "Hmph, aku nggak denger apa-apa..." // NO_MATCH
                     6 -> "Kok diem aja? Capek ya?" // SPEECH_TIMEOUT
@@ -388,8 +387,31 @@ class OverlayService : Service() {
         ScreenCaptureManager.init(this)
         ScreenCaptureManager.tryRestore(this)
 
+        automationEngine = AutomationEngine(
+            context = this,
+            scope = activityScope,
+            handler = handler,
+            callbacks = object : AutomationEngine.Callbacks {
+                override fun showBubble(text: String, persistent: Boolean) {
+                    this@OverlayService.showBubble(text, persistent)
+                }
+                override fun setBubbleText(text: String) {
+                    this@OverlayService.setBubbleText(text)
+                }
+                override fun finalizeBubble(text: String) {
+                    this@OverlayService.finalizeBubble(text)
+                }
+                override fun navigateTo(screen: String) {
+                    OverlayEventBus.navigateScreen.value = screen
+                }
+                override fun getLastDetectedApp(): String? {
+                    return this@OverlayService.lastDetectedApp
+                }
+            }
+        )
+
         OverlayEventBus.screenCaptureCallback = {
-            handleScreenInfo()
+            automationEngine.handleScreenInfo()
         }
 
         OverlayEventBus.gameCommentCallback = label@{ contextHint ->
@@ -406,16 +428,16 @@ class OverlayService : Service() {
                     return@label
                 }
                 handler.post {
-                    val normalized = normalizeContextHint(contextHint)
+                    val normalized = automationEngine.normalizeContextHint(contextHint)
                     if (normalized.isNullOrBlank()) {
-                        showBubble("Hmm, biarkan aku lihat... ( ._ .)")
+                        showBubble("Hmm, biarkan aku lihat...")
                     } else {
                         showBubble("$normalized? Biarkan aku lihat...")
                     }
                 }
-                generateGameComment(appName, screenText, contextHint)
+                automationEngine.generateGameComment(appName, screenText, contextHint)
             } else {
-                activityScope.launch { generateContextComment(appName, false) }
+                automationEngine.generateContextComment(appName, false)
             }
         }
 
@@ -458,23 +480,7 @@ class OverlayService : Service() {
     }
 
     private fun normalizeContextHint(hint: String?): String? {
-        if (hint.isNullOrBlank()) return hint
-        var result = hint.lowercase()
-
-        // Replace full words
-        result = result.replace(Regex("\\bsaya\\b"), "kamu")
-        result = result.replace(Regex("\\baku\\b"), "kamu")
-
-        // Replace suffixes
-        if (result.endsWith("ku")) {
-            result = result.substring(0, result.length - 2) + "mu"
-        }
-
-        // Replace common patterns
-        result = result.replace("diriku", "dirimu")
-        result = result.replace("milikku", "milikmu")
-
-        return result.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        return automationEngine.normalizeContextHint(hint)
     }
 
     private fun scheduleRandomQuote() {
@@ -714,7 +720,7 @@ class OverlayService : Service() {
                                     OverlayEventBus.navigateScreen.value = "request_screen_capture"
                                 }, 3500)
                             }
-                            generateContextComment(appName, true)
+                            automationEngine.generateContextComment(appName, true)
                             handler.post {
                                 waifuImage.layoutParams.width = waifuWidth
                                 waifuImage.layoutParams.height = waifuHeight
@@ -785,13 +791,13 @@ class OverlayService : Service() {
                         lastCommentTime = System.currentTimeMillis()
                         android.util.Log.d("GameModeDebug", "Triggering: Event AI ($detectedEvent)")
                         val appName = GameModeManager.currentAppName ?: "Game"
-                        generateGameComment(appName, rawScreenText, contextHint = "Kejadian menarik: $detectedEvent")
+                        automationEngine.generateGameComment(appName, rawScreenText, contextHint = "Kejadian menarik: $detectedEvent")
                     } else if (elapsed > nextCommentDelay) {
                         lastCommentTime = System.currentTimeMillis()
                         nextCommentDelay = Random.nextLong(180_000, 300_000)
                         android.util.Log.d("GameModeDebug", "Triggering: periodic AI")
                         val appName = GameModeManager.currentAppName ?: "Game"
-                        generateGameComment(appName, rawScreenText)
+                        automationEngine.generateGameComment(appName, rawScreenText)
                     }
                     
                     // Reset detected event if text cleared
@@ -839,247 +845,23 @@ class OverlayService : Service() {
         }
     }
 
-    private suspend fun generateContextComment(appName: String, isGame: Boolean) {
-        if (isCommentPending) return
-        isCommentPending = true
-        showBubble("Mari kita lihat... (─.─)", persistent = true)
-        val startTime = System.currentTimeMillis()
-        val tokenBuf = StringBuilder()
-        activityScope.launch {
-            try {
-                val comment = LlmClient.generateActivityComment(appName, isGame, onToken = { t ->
-                    tokenBuf.append(t)
-                    setBubbleText(tokenBuf.toString())
-                })
-                if (comment != null) {
-                    finalizeBubble(comment)
-                    CommentDebugger.record(CommentDebugEntry(
-                        appName = appName, contextHint = if (isGame) "Auto-Game" else "Auto-App",
-                        promptSent = "app_name: $appName", response = comment,
-                        tier = DebugTier.APP_AI, durationMs = System.currentTimeMillis() - startTime,
-                        provider = LlmClient.activeProvider))
-                } else {
-                    showBubble("Hmm, lagi bingung lihatnya. Coba lain kali ya~")
-                    CommentDebugger.record(CommentDebugEntry(
-                        appName = appName, contextHint = if (isGame) "Auto-Game" else "Auto-App",
-                        promptSent = "app_name: $appName", response = null,
-                        tier = DebugTier.ERROR, durationMs = System.currentTimeMillis() - startTime,
-                        errorMessage = "Activity comment null", provider = LlmClient.activeProvider))
-                }
-            } finally {
-                isCommentPending = false
-            }
-        }
+    private fun generateContextComment(appName: String, isGame: Boolean) {
+        automationEngine.generateContextComment(appName, isGame)
     }
 
     private fun generateGameComment(appName: String, screenText: String, contextHint: String? = null) {
-        if (isCommentPending) return
-        isCommentPending = true
-        val normalized = normalizeContextHint(contextHint)
-        if (normalized.isNullOrBlank()) {
-            showBubble("Mari kita lihat... (─.─)", persistent = true)
-        } else {
-            showBubble("$normalized? Sebentar...", persistent = true)
-        }
-        val startTime = System.currentTimeMillis()
-        activityScope.launch {
-            try {
-                // Tier 1: Screenshot + Gemini vision (pure AI) with streaming
-                val startT1 = System.currentTimeMillis()
-                val tokenBuf1 = StringBuilder()
-                val visionResult = withTimeoutOrNull(30_000L) {
-                    if (ScreenCaptureManager.isReady() && LlmClient.activeProvider == "Gemini") {
-                        val screenshot = ScreenCaptureManager.captureScaledJpeg(800)
-                        if (screenshot != null) {
-                            LlmClient.describeScreen(appName, screenText, screenshot, contextHint, onToken = { t ->
-                                tokenBuf1.append(t)
-                                setBubbleText(tokenBuf1.toString())
-                            })
-                        } else null
-                    } else null
-                }
-                if (visionResult != null) {
-                    finalizeBubble(visionResult)
-                    CommentDebugger.record(CommentDebugEntry(
-                        appName = appName, contextHint = contextHint,
-                        promptSent = contextHint ?: "(periodik)", response = visionResult,
-                        tier = DebugTier.VISION, durationMs = System.currentTimeMillis() - startT1,
-                        screenshotUsed = true, provider = LlmClient.activeProvider))
-                    return@launch
-                }
-
-                // Tier 2: Text-based LLM (pure AI from accessibility text)
-                if (screenText.length > 10) {
-                    val startT2 = System.currentTimeMillis()
-                    val tokenBuf2 = StringBuilder()
-                    val screenComment = LlmClient.generateScreenComment(appName, screenText, contextHint, onToken = { t ->
-                        tokenBuf2.append(t)
-                        setBubbleText(tokenBuf2.toString())
-                    })
-                    if (screenComment != null) {
-                        finalizeBubble(screenComment)
-                        CommentDebugger.record(CommentDebugEntry(
-                            appName = appName, contextHint = contextHint,
-                            promptSent = "screen_text: ${screenText.take(100)}", response = screenComment,
-                            tier = DebugTier.TEXT_AI, durationMs = System.currentTimeMillis() - startT2,
-                            provider = LlmClient.activeProvider))
-                        return@launch
-                    }
-                }
-
-                // Tier 3: App-name LLM fallback (pure AI)
-                val startT3 = System.currentTimeMillis()
-                val tokenBuf3 = StringBuilder()
-                val appComment = LlmClient.generateActivityComment(appName, true, contextHint, onToken = { t ->
-                    tokenBuf3.append(t)
-                    setBubbleText(tokenBuf3.toString())
-                })
-                if (appComment != null) {
-                    finalizeBubble(appComment)
-                    CommentDebugger.record(CommentDebugEntry(
-                        appName = appName, contextHint = contextHint,
-                        promptSent = "app_name: $appName", response = appComment,
-                        tier = DebugTier.APP_AI, durationMs = System.currentTimeMillis() - startT3,
-                        provider = LlmClient.activeProvider))
-                } else {
-                    showBubble("Hmm, lagi bingung lihatnya. Coba lain kali ya~")
-                    CommentDebugger.record(CommentDebugEntry(
-                        appName = appName, contextHint = contextHint,
-                        promptSent = "app_name: $appName", response = null,
-                        tier = DebugTier.ERROR, durationMs = System.currentTimeMillis() - startTime,
-                        errorMessage = "Semua tier gagal", provider = LlmClient.activeProvider))
-                }
-            } finally {
-                isCommentPending = false
-            }
-        }
+        automationEngine.generateGameComment(appName, screenText, contextHint)
     }
 
     private fun handleScreenInfo() {
-        if (isCommentPending) return
-        // Prevent screen capture during Game Mode to save resources and avoid interference
-        if (GameModeManager.isGameMode) {
-            android.util.Log.d("OverlayService", "Screen info skipped: Game Mode active")
-            return
-        }
-
-        isCommentPending = true
-        showBubble("Mari kita lihat... (─.─)", persistent = true)
-        activityScope.launch {
-            try {
-                val acc = OverlayEventBus.accessibilityService
-                val uiText = withContext(Dispatchers.Main) {
-                    acc?.getScreenText() ?: ""
-                }
-                val appName = lastDetectedApp ?: "unknown"
-                
-                // Re-check readiness inside the launch scope
-                val ready = ScreenCaptureManager.isReady()
-                
-                if (acc == null) {
-                    showBubble("Aktifkan aksesibilitas Silica dulu di Settings > Aksesibilitas ya~")
-                    withContext(Dispatchers.Main) {
-                        OverlayEventBus.navigateScreen.value = "accessibility_settings"
-                    }
-                    return@launch
-                }
-                
-                if (!ready) {
-                    showBubble("Aku butuh izin buat liat layar kamu bentar. Klik 'Start Now' di popup nanti ya~")
-                    withContext(Dispatchers.Main) {
-                        handler.postDelayed({
-                            OverlayEventBus.navigateScreen.value = "request_screen_capture"
-                        }, 1500)
-                    }
-                    return@launch
-                }
-                
-                val screenshotJpeg = ScreenCaptureManager.captureScaledJpeg(800)
-                val startTime = System.currentTimeMillis()
-
-                try {
-                    val tokenBuf = StringBuilder()
-                    val comment = LlmClient.describeScreen(appName, uiText, screenshotJpeg, onToken = { t ->
-                        tokenBuf.append(t)
-                        setBubbleText(tokenBuf.toString())
-                    })
-                    if (comment != null) {
-                        finalizeBubble(comment)
-                        CommentDebugger.record(CommentDebugEntry(
-                            appName = appName, contextHint = "Manual Scan",
-                            promptSent = "screen_info request", response = comment,
-                            tier = if (screenshotJpeg != null) DebugTier.VISION else DebugTier.TEXT_AI,
-                            durationMs = System.currentTimeMillis() - startTime,
-                            screenshotUsed = screenshotJpeg != null,
-                            provider = LlmClient.activeProvider))
-                    } else {
-                        showBubble("Hmm, lagi nggak ada yang menarik sih.")
-                        CommentDebugger.record(CommentDebugEntry(
-                            appName = appName, contextHint = "Manual Scan",
-                            promptSent = "screen_info request", response = null,
-                            tier = DebugTier.ERROR, durationMs = System.currentTimeMillis() - startTime,
-                            errorMessage = "Describe screen null",
-                            provider = LlmClient.activeProvider))
-                    }
-                } catch (e: Exception) {
-                    showBubble("Hmm, lagi nggak bisa lihat layar sekarang.")
-                    CommentDebugger.record(CommentDebugEntry(
-                        appName = appName, contextHint = "Manual Scan",
-                        promptSent = "screen_info request", response = null,
-                        tier = DebugTier.ERROR, durationMs = System.currentTimeMillis() - startTime,
-                        errorMessage = e.message ?: "Unknown error",
-                        provider = LlmClient.activeProvider))
-                }
-            } finally {
-                isCommentPending = false
-            }
-        }
+        automationEngine.handleScreenInfo()
     }
 
     private fun generateAutoScreenComment() {
-        if (isCommentPending) return
-        if (!screenOn) return
         val now = System.currentTimeMillis()
         if (now - lastAutoScreenCommentTime < autoScreenCommentInterval) return
         lastAutoScreenCommentTime = now
-
-        isCommentPending = true
-        showBubble("Hmm... ( -_ -)", persistent = true)
-        activityScope.launch {
-            try {
-                val appName = lastDetectedApp?.let {
-                    GameModeManager.getAppName(this@OverlayService, it)
-                } ?: return@launch
-
-                val uiText = withContext(Dispatchers.Main) {
-                    OverlayEventBus.accessibilityService?.getScreenText() ?: ""
-                }
-
-                val startTime = System.currentTimeMillis()
-                val tokenBuf = StringBuilder()
-                val comment = LlmClient.generateScreenComment(appName, uiText, onToken = { t ->
-                    tokenBuf.append(t)
-                    setBubbleText(tokenBuf.toString())
-                })
-                if (comment != null) {
-                    finalizeBubble(comment)
-                    CommentDebugger.record(CommentDebugEntry(
-                        appName = appName, contextHint = "Auto Screen",
-                        promptSent = "screen_text: ${uiText.take(100)}", response = comment,
-                        tier = DebugTier.TEXT_AI, durationMs = System.currentTimeMillis() - startTime,
-                        provider = LlmClient.activeProvider))
-                } else {
-                    CommentDebugger.record(CommentDebugEntry(
-                        appName = appName, contextHint = "Auto Screen",
-                        promptSent = "screen_text: ${uiText.take(100)}", response = null,
-                        tier = DebugTier.ERROR, durationMs = System.currentTimeMillis() - startTime,
-                        errorMessage = "Auto screen comment null",
-                        provider = LlmClient.activeProvider))
-                }
-            } finally {
-                isCommentPending = false
-            }
-        }
+        automationEngine.generateAutoScreenComment(lastAutoScreenCommentTime, autoScreenCommentInterval, screenOn)
     }
 
     // =========================

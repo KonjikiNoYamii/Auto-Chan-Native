@@ -9,5 +9,6 @@ data class ChatMessage(
     val timestamp: Long = System.currentTimeMillis(),
     val emotion: String? = null,
     val isTyping: Boolean = false,
-    var displayedContent: String = content
+    var displayedContent: String = content,
+    val imageBase64: String? = null
 )

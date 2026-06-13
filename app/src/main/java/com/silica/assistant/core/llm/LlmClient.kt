@@ -52,6 +52,27 @@ object LlmClient : KoinComponent {
         return repository.chat(listOf(ChatMessage("user", "Konteks: $appName. Layar: $uiText. Beri reaksi natural."))).getOrNull()?.content
     }
 
+    suspend fun visionChat(messages: List<ChatMessage>, memoryContext: String = ""): Result<ChatMessage> {
+        return repository.visionChat(messages, memoryContext)
+    }
+
+    suspend fun visionChatStream(
+        messages: List<ChatMessage>,
+        memoryContext: String = "",
+        onToken: (String) -> Unit
+    ): Result<ChatMessage> {
+        val fullContent = StringBuilder()
+        try {
+            repository.visionChatStream(messages, memoryContext).collect { token ->
+                fullContent.append(token)
+                onToken(token)
+            }
+            return Result.success(ChatMessage(role = "assistant", content = fullContent.toString()))
+        } catch (e: Exception) {
+            return Result.failure(e)
+        }
+    }
+
     suspend fun describeScreen(appName: String, uiText: String, screenshotJpeg: ByteArray?, contextHint: String? = null, onToken: ((String) -> Unit)? = null): String? {
         return repository.describeScreen(appName, uiText, screenshotJpeg, contextHint, onToken)
     }

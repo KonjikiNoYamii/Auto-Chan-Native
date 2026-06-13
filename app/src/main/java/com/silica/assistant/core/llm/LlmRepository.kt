@@ -23,6 +23,16 @@ interface LlmRepository {
         contextHint: String? = null
     ): String?
 
+    suspend fun visionChat(
+        messages: List<ChatMessage>,
+        memoryContext: String = ""
+    ): Result<ChatMessage>
+
+    fun visionChatStream(
+        messages: List<ChatMessage>,
+        memoryContext: String = ""
+    ): Flow<String>
+
     suspend fun describeScreen(
         appName: String,
         uiText: String,

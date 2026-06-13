@@ -5,6 +5,9 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
+import com.silica.assistant.core.action.Action
+import com.silica.assistant.core.action.ActionExecutor
+import com.silica.assistant.core.action.ActionMapper
 import com.silica.assistant.core.config.AssistantConfig
 import com.silica.assistant.core.knowledge.KnowledgeEngine
 import com.silica.assistant.core.knowledge.KnowledgeParser
@@ -51,11 +54,11 @@ object CommandManager : KoinComponent {
 
         // Affinity Logic (Dynamic XP)
         if (lowerInput.contains("terima kasih") || lowerInput.contains("makasih") || lowerInput.contains("thank")) {
-            moodManager.addAffinity(5) // XP + Affinity
+            moodManager.addAffinity(5)
             moodManager.updateMood(0.05f)
             SoundManager.playChime()
         } else if (lowerInput.contains("bodoh") || lowerInput.contains("jelek") || lowerInput.contains("benci")) {
-            moodManager.addAffinity(-10) // Negative XP + Negative Affinity
+            moodManager.addAffinity(-10)
             moodManager.updateMood(-0.1f)
         }
 
@@ -63,7 +66,7 @@ object CommandManager : KoinComponent {
         if (lowerInput.startsWith("kasih hadiah ") || lowerInput.startsWith("give gift ")) {
             val item = lowerInput.removePrefix("kasih hadiah ").removePrefix("give gift ").trim()
             if (item.isNotEmpty()) {
-                kotlinx.coroutines.GlobalScope.launch {
+                GlobalScope.launch {
                     val (success, response) = moodManager.giveGift(item)
                     OverlayEventBus.onBubble?.invoke(response)
                 }
@@ -83,10 +86,10 @@ object CommandManager : KoinComponent {
                 }
                 val cleanTask = task.replace(Regex("[\\[\\(](hard|easy|medium)[\\]\\)]"), "").trim()
                 
-                kotlinx.coroutines.GlobalScope.launch {
+                GlobalScope.launch {
                     val finalDiff = explicitDifficulty ?: LlmClient.classifyQuestDifficulty(cleanTask) ?: "MEDIUM"
                     moodManager.addQuest(cleanTask, finalDiff)
-                    OverlayEventBus.onBubble?.invoke("Oke, aku sudah catat tugas: '$cleanTask' [$finalDiff]. Semangat kerjanya ya ♪ (^_^)")
+                    OverlayEventBus.onBubble?.invoke("Oke, aku sudah catat tugas: '$cleanTask' [$finalDiff]. Semangat kerjanya ya")
                 }
                 return
             }
@@ -95,7 +98,7 @@ object CommandManager : KoinComponent {
         if (lowerInput.startsWith("selesai quest ") || lowerInput.startsWith("done quest ")) {
             val task = lowerInput.removePrefix("selesai quest ").removePrefix("done quest ").trim()
             if (task.isNotEmpty()) {
-                kotlinx.coroutines.GlobalScope.launch {
+                GlobalScope.launch {
                     val result = moodManager.completeQuest(task)
                     SoundManager.playQuestComplete()
                     OverlayEventBus.onBubble?.invoke(result)
@@ -142,17 +145,17 @@ object CommandManager : KoinComponent {
 
         if (searchQuery != null) {
             if (GameModeManager.isGameMode) {
-                OverlayEventBus.onBubble?.invoke("🔇 Pencarian dinonaktifkan saat mode game (¬_¬)")
+                OverlayEventBus.onBubble?.invoke("Pencarian dinonaktifkan saat mode game")
                 return
             }
-            OverlayEventBus.onBubble?.invoke("🔎 Searching $searchQuery")
+            OverlayEventBus.onBubble?.invoke("Searching $searchQuery")
 
             IntentController.searchGoogle(context, searchQuery)
 
             return
         }
 
-        // dynamic app launcher: "buka discord", "buka whatsapp", "open whatsapp", etc.
+        // dynamic app launcher: "buka discord", "buka whatsapp", etc.
         val normalized = effectiveInput.lowercase().trim()
         if ((normalized.startsWith("buka ") || normalized.startsWith("open ")) &&
                 !normalized.matches(
@@ -164,9 +167,9 @@ object CommandManager : KoinComponent {
             val appName = normalized.removePrefix(prefix).trim()
 
             if (AppLauncher.open(context, appName)) {
-                OverlayEventBus.onBubble?.invoke("📱 Membuka $appName")
+                OverlayEventBus.onBubble?.invoke("Membuka $appName")
             } else {
-                OverlayEventBus.onBubble?.invoke("🔎 Searching $appName")
+                OverlayEventBus.onBubble?.invoke("Searching $appName")
                 IntentController.searchGoogle(context, appName)
             }
 
@@ -202,27 +205,22 @@ object CommandManager : KoinComponent {
 
                 val query = if (normalized == assistantName) "" else normalized.removePrefix("$assistantName ").trim()
                 if (query.isEmpty()) {
-                    // 1. Priority: User-defined custom greeting (Hardcoded)
                     val custom = AssistantConfig.customGreeting.trim()
                     if (custom.isNotEmpty()) {
                         OverlayEventBus.onBubble?.invoke(custom)
                         return
                     }
 
-                    // 2. Fallback: Smart Hardcoded Personality (Hardcoded)
                     val personality = LlmConfig.personalityPrompt.lowercase()
                     val reply = when {
-                        // Cool / Tsundere
                         personality.contains("dingin") || personality.contains("cool") || 
                         personality.contains("tsundere") || personality.contains("cuek") -> {
                             listOf("Hmph, berisik.", "Ada apa?", "Cepat katakan.", "Kenapa panggil-panggil?", "Apa?", "Jangan ganggu.").random()
                         }
-                        // Cheerful / Cute
                         personality.contains("ceria") || personality.contains("semangat") || 
                         personality.contains("ramah") || personality.contains("lucu") -> {
                             listOf("Iyaaa? Tuan panggil aku?", "Hadir! Ada yang bisa dibantu?", "Halo! Hehe, kangen ya?", "Tuan butuh sesuatu?", "Iya sayang? Eh.. maksudku iya?").random()
                         }
-                        // Polite / Formal
                         personality.contains("sopan") || personality.contains("formal") || 
                         personality.contains("pelayan") || personality.contains("maid") -> {
                             listOf("Saya mendengarkan, Tuan.", "Iya, ada yang bisa saya bantu?", "Menunggu perintah Anda.", "Saya di sini, Tuan.").random()
@@ -231,8 +229,7 @@ object CommandManager : KoinComponent {
                     }
                     OverlayEventBus.onBubble?.invoke(reply)
                 } else {
-                    // Chatting with her (use AI but very short)
-                    kotlinx.coroutines.GlobalScope.launch {
+                    GlobalScope.launch {
                         val reply = LlmClient.generateScreenComment("Chat", "User bilang: \"$query\". Beri respon SANGAT PENDEK MAKSIMAL 1 KALIMAT. ${LlmConfig.personalityPrompt} Langsung respon.")
                         OverlayEventBus.onBubble?.invoke(reply ?: "...")
                     }
@@ -241,7 +238,7 @@ object CommandManager : KoinComponent {
             }
 
             if (!AppLauncher.open(context, effectiveInput)) {
-                OverlayEventBus.onBubble?.invoke("😕 Maaf, saya tidak mengerti \"$effectiveInput\". Coba buka Panduan untuk lihat command yang tersedia. ( ._ .)")
+                OverlayEventBus.onBubble?.invoke("Maaf, saya tidak mengerti \"$effectiveInput\". Coba buka Panduan untuk lihat command yang tersedia.")
             }
             return
         }
@@ -256,242 +253,8 @@ object CommandManager : KoinComponent {
             return
         }
 
-        when (result.command) {
-            "open_spotify" -> {
-                IntentController.openSpotify(context)
-            }
-            "open_youtube" -> {
-                IntentController.openYoutube(context)
-            }
-            "open_browser" -> {
-                IntentController.openBrowser(context)
-            }
-            "open_settings" -> {
-                IntentController.openSettings(context)
-            }
-            "start_overlay" -> {
-
-                if (Settings.canDrawOverlays(context)) {
-                    val intent = Intent(context, OverlayService::class.java)
-                    context.startService(intent)
-                    OverlayEventBus.onBubble?.invoke("🌸 Waifu activated! (─‿─)")
-                } else {
-                    val intent =
-                            Intent(
-                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                    Uri.parse("package:${context.packageName}")
-                            )
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(intent)
-                }
-            }
-
-            "stop_overlay" -> {
-                val intent = Intent(context, OverlayService::class.java)
-                context.stopService(intent)
-                Toast.makeText(context, "Overlay closed", Toast.LENGTH_SHORT).show()
-            }
-            "media_play_pause" -> {
-                MediaController.playPause(context)
-                OverlayEventBus.onBubble?.invoke("🎵 Toggle Music")
-            }
-            "media_next" -> {
-                MediaController.next(context)
-                OverlayEventBus.onBubble?.invoke("⏭ Next Song")
-            }
-            "media_previous" -> {
-                MediaController.previous(context)
-                OverlayEventBus.onBubble?.invoke("⏮ Previous Song")
-            }
-            "open_app" -> {
-                OverlayEventBus.onBubble?.invoke("Aplikasi apa yang ingin dibuka?")
-            }
-            "volume_up" -> {
-                com.silica.assistant.core.system.VolumeController.volumeUp(context)
-                OverlayEventBus.onBubble?.invoke("🔊 Volume Naik")
-            }
-            "volume_down" -> {
-                com.silica.assistant.core.system.VolumeController.volumeDown(context)
-                OverlayEventBus.onBubble?.invoke("🔉 Volume Turun")
-            }
-            "mute_volume" -> {
-                com.silica.assistant.core.system.VolumeController.mute(context)
-                OverlayEventBus.onBubble?.invoke("🔇 Mute")
-            }
-            "max_volume" -> {
-                com.silica.assistant.core.system.VolumeController.maxVolume(context)
-                OverlayEventBus.onBubble?.invoke("📢 Volume Maksimal")
-            }
-            "brightness_up" -> {
-                BrightnessController.increase(context)
-                OverlayEventBus.onBubble?.invoke("☀️ Brightness Naik")
-            }
-            "brightness_down" -> {
-                BrightnessController.decrease(context)
-                OverlayEventBus.onBubble?.invoke("🌙 Brightness Turun")
-            }
-            "brightness_max" -> {
-                BrightnessController.max(context)
-                OverlayEventBus.onBubble?.invoke("🔆 Brightness Maksimal")
-            }
-            "brightness_min" -> {
-                BrightnessController.min(context)
-                OverlayEventBus.onBubble?.invoke("🌑 Brightness Minimum")
-            }
-            "ssh_status" -> {
-                val connected = SshManager.isConnected()
-                val msg = if (connected) {
-                    val conn = SshManager.getCurrentConnection()
-                    "✅ SSH terhubung ke ${conn?.name ?: "laptop"}"
-                } else {
-                    "❌ SSH tidak terhubung"
-                }
-                OverlayEventBus.onBubble?.invoke(msg)
-                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-            }
-            "ssh_connect" -> {
-                OverlayEventBus.navigateScreen.value = "ssh"
-                OverlayEventBus.onBubble?.invoke("🔌 Membuka SSH...")
-            }
-            "ssh_disconnect" -> {
-                SshManager.disconnect()
-                OverlayEventBus.onBubble?.invoke("🔌 SSH terputus")
-                Toast.makeText(context, "SSH disconnected", Toast.LENGTH_SHORT).show()
-            }
-            "chat" -> {
-                OverlayEventBus.navigateScreen.value = "chat"
-                OverlayEventBus.onBubble?.invoke("💬 Membuka Chat AI...")
-            }
-            "laptop_info" -> {
-                if (!SshManager.isConnected()) {
-                    OverlayEventBus.onBubble?.invoke("❌ SSH tidak terhubung")
-                    return
-                }
-                Thread {
-                    SshManager.executeCommand("uptime && echo '---' && free -h | head -3 && echo '---' && df -h / | tail -1")
-                        .onSuccess { result ->
-                            val lines = result.lines().take(8)
-                            OverlayEventBus.onBubble?.invoke("📊 " + lines.joinToString(" | "))
-                        }
-                        .onFailure { e ->
-                            OverlayEventBus.onBubble?.invoke("❌ Gagal: ${e.message}")
-                        }
-                }.start()
-            }
-            "game_mode" -> {
-                OverlayEventBus.gameModeRequest = true
-                OverlayEventBus.onBubble?.invoke("🎮 Mode game diaktifkan")
-            }
-            "stop_game_mode" -> {
-                OverlayEventBus.gameModeRequest = false
-                OverlayEventBus.onBubble?.invoke("🎮 Mode game dinonaktifkan")
-            }
-            "set_game_mode_app" -> {
-                val pkg = GameModeManager.currentAppPackage
-                if (pkg != null) {
-                    GameModeManager.gameModeAppPackage = pkg
-                    val name = GameModeManager.currentAppName ?: pkg
-                    OverlayEventBus.onBubble?.invoke("✅ Game mode terdeteksi dari $name")
-                } else {
-                    OverlayEventBus.onBubble?.invoke("❌ Tidak ada aplikasi terdeteksi. Coba buka game mode dulu.")
-                }
-            }
-            "clear_game_mode_app" -> {
-                GameModeManager.gameModeAppPackage = null
-                OverlayEventBus.onBubble?.invoke("✅ Game mode app direset")
-            }
-            "screen_info" -> {
-                moodManager.consumeStamina(0.1f)
-                OverlayEventBus.onBubble?.invoke("🔍...")
-                OverlayEventBus.screenCaptureCallback?.invoke()
-            }
-            "game_comment" -> {
-                moodManager.consumeStamina(0.05f)
-                val contextHint = extractContext(effectiveInput, "game_comment")
-                OverlayEventBus.gameCommentCallback?.invoke(contextHint)
-            }
-            "ai_task" -> {
-                moodManager.consumeStamina(0.2f)
-                val contextHint = extractContext(effectiveInput, "ai_task")
-                OverlayEventBus.aiTerminalPrompt = contextHint.ifBlank { effectiveInput }
-                OverlayEventBus.send("Sedang merencanakan...")
-                OverlayEventBus.navigateScreen.value = "ssh"
-            }
-            "ai_task_typing" -> {
-                OverlayEventBus.aiTerminalPrompt = ""
-                OverlayEventBus.navigateScreen.value = "ssh"
-            }
-            "open_debug" -> {
-                OverlayEventBus.navigateScreen.value = "debug"
-                OverlayEventBus.onBubble?.invoke("📊 Membuka debug AI...")
-            }
-            "click_element" -> {
-                val keyword = effectiveInput
-                    .removePrefix("klik ").removePrefix("tekan ").removePrefix("tap ")
-                    .trim()
-                if (keyword.isNotBlank()) {
-                    val tried = mutableSetOf<String>()
-                    val variants = keywordVariants(keyword)
-                    var clicked = false
-                    for (v in variants) {
-                        if (!tried.add(v)) continue
-                        if (OverlayEventBus.accessibilityService?.findAndClick(v) == true) {
-                            clicked = true
-                            break
-                        }
-                    }
-                    if (clicked) {
-                        OverlayEventBus.onBubble?.invoke("✅ Udah diklik~")
-                    } else {
-                        var launched = false
-                        for (v in variants) {
-                            if (AppLauncher.open(context, v)) {
-                                OverlayEventBus.onBubble?.invoke("📱 Membuka $v")
-                                launched = true
-                                break
-                            }
-                        }
-                        if (!launched) {
-                            OverlayEventBus.onBubble?.invoke("❌ Nggak nemu \"$keyword\"")
-                        }
-                    }
-                }
-            }
-            "scroll_down" -> {
-                if (OverlayEventBus.accessibilityService?.performScrollDown() == true) {
-                    OverlayEventBus.onBubble?.invoke("📜 Scroll ke bawah")
-                } else {
-                    OverlayEventBus.onBubble?.invoke("❌ Gagal scroll")
-                }
-            }
-            "scroll_up" -> {
-                if (OverlayEventBus.accessibilityService?.performScrollUp() == true) {
-                    OverlayEventBus.onBubble?.invoke("📜 Scroll ke atas")
-                } else {
-                    OverlayEventBus.onBubble?.invoke("❌ Gagal scroll")
-                }
-            }
-            "go_back" -> {
-                if (OverlayEventBus.accessibilityService?.performGlobalBack() == true) {
-                    OverlayEventBus.onBubble?.invoke("⬅ Kembali")
-                } else {
-                    OverlayEventBus.onBubble?.invoke("❌ Gagal kembali")
-                }
-            }
-            else -> {
-                OverlayEventBus.onBubble?.invoke("😕 Maaf, saya tidak mengerti command \"${result.command}\"")
-            }
-        }
-    }
-
-    private fun extractContext(input: String, commandKey: String): String {
-        val lower = input.lowercase().trim()
-        val aliases = CommandAliases.aliases[commandKey] ?: return ""
-        for (alias in aliases.sortedByDescending { it.length }) {
-            if (lower.startsWith(alias)) {
-                return lower.removePrefix(alias).trim()
-            }
-        }
-        return ""
+        // Delegate to Action pipeline
+        val action = ActionMapper.map(result)
+        ActionExecutor.execute(context, action)
     }
 }

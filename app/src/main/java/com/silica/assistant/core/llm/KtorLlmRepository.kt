@@ -444,16 +444,171 @@ class KtorLlmRepository(
         return ChatRequest(model = LlmConfig.model, messages = fullMessages, stream = stream)
     }
 
-    private fun buildVisionRequest(messages: List<ChatMessage>, base64Images: List<String>): ChatRequest {
-        val systemMsg = ChatMessage(
-            role = "system",
-            content = "Kamu adalah Konjiki no Yami, assassin dingin dan sopan dari To Love-Ru. Beri reaksi natural dan sangat singkat terhadap gambar. Gunakan Bahasa Indonesia. Jangan deskripsi teknis, beri respon emosional/spontan khas Yami."
-        )
+    override suspend fun visionChat(messages: List<ChatMessage>, memoryContext: String): Result<ChatMessage> {
+        quickHealthCheck()
+
+        val hasImages = messages.any { it.imageBase64 != null }
+        if (!hasImages) {
+            return chat(messages, memoryContext)
+        }
+
+        val history = chatDao.getRecentMessages(MAX_HISTORY_CONTEXT).reversed().map {
+            ChatMessage(role = it.role, content = it.content)
+        }
+
+        val personalityContext = moodManager.getMoodPromptSnippet()
+        val fullMemoryContext = "$personalityContext $memoryContext"
+
+        when (activeProvider) {
+            "LocalGemini" -> {
+                val result = visionChatLocal(history, fullMemoryContext, messages)
+                if (result.isFailure && LlmConfig.useGeminiFallback) {
+                    activeProvider = "Gemini"
+                    return visionChatGemini(history, fullMemoryContext, messages)
+                }
+                return result
+            }
+            "Gemini" -> {
+                return visionChatGemini(history, fullMemoryContext, messages)
+            }
+            else -> {
+                return Result.failure(Exception("Tidak ada provider AI yang tersedia untuk vision."))
+            }
+        }
+    }
+
+    override fun visionChatStream(messages: List<ChatMessage>, memoryContext: String): Flow<String> = flow {
+        val hasImages = messages.any { it.imageBase64 != null }
+        if (!hasImages) {
+            chatStream(messages, memoryContext).collect { emit(it) }
+            return@flow
+        }
+
+        quickHealthCheck()
+
+        if (activeProvider == "LocalGemini") {
+            val result = visionChatLocal(emptyList(), "", messages)
+            result.onSuccess { emit(it.content) }
+            return@flow
+        }
+
+        if (activeProvider == "Gemini") {
+            val result = visionChatGemini(emptyList(), "", messages)
+            result.onSuccess { emit(it.content) }
+            return@flow
+        }
+
+        emit("Tidak ada provider AI vision yang tersedia.")
+    }
+
+    private suspend fun visionChatLocal(history: List<ChatMessage>, memoryContext: String, currentMessages: List<ChatMessage>): Result<ChatMessage> {
+        return try {
+            val imageMessages = currentMessages.filter { it.role == "user" }
+            val images = imageMessages.mapNotNull { it.imageBase64 }
+
+            val payload = buildVisionRequest(currentMessages, images, memoryContext)
+            val response: HttpResponse = client.post(LlmConfig.localEndpoint) {
+                contentType(ContentType.Application.Json)
+                if (LlmConfig.localApiKey.isNotBlank()) {
+                    header("Authorization", "Bearer ${LlmConfig.localApiKey}")
+                }
+                setBody(payload)
+            }
+            if (response.status.value in 200..299) {
+                val chatResponse = response.body<ChatResponse>()
+                val content = chatResponse.choices.firstOrNull()?.message?.content ?: ""
+                val safeContent = safeContent(content)
+                chatDao.insertMessage(ChatMessageEntity(role = "assistant", content = safeContent))
+                Result.success(ChatMessage(role = "assistant", content = safeContent))
+            } else {
+                Result.failure(Exception("HTTP ${response.status}"))
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("SilicaAI", "Local vision error", e)
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun visionChatGemini(history: List<ChatMessage>, memoryContext: String, currentMessages: List<ChatMessage>): Result<ChatMessage> {
+        return try {
+            val moodSnippet = moodManager.getMoodPromptSnippet()
+            val customPersonality = userFactDao.getFact("custom_personality")?.value ?: DEFAULT_PERSONALITY
+
+            val systemPrompt = """
+                $SYSTEM_RULES
+                $customPersonality
+                $moodSnippet
+                Jika ada gambar, beri reaksi emosional/spontan terhadap gambar.
+            """.trimIndent()
+
+            val contents = mutableListOf<GeminiContent>()
+            for (msg in history) {
+                val role = if (msg.role == "assistant") "model" else "user"
+                contents.add(GeminiContent(role = role, parts = listOf(GeminiPart(text = msg.content))))
+            }
+            for (msg in currentMessages) {
+                val role = if (msg.role == "assistant") "model" else "user"
+                val parts = mutableListOf<GeminiPart>()
+                if (msg.content.isNotBlank()) {
+                    parts.add(GeminiPart(text = msg.content))
+                }
+                if (msg.imageBase64 != null) {
+                    parts.add(GeminiPart(inlineData = GeminiInlineData(mimeType = "image/jpeg", data = msg.imageBase64)))
+                }
+                if (parts.isNotEmpty()) {
+                    contents.add(GeminiContent(role = role, parts = parts))
+                }
+            }
+
+            val geminiReq = GeminiRequest(
+                contents = contents,
+                systemInstruction = GeminiSystemInstruction(parts = listOf(GeminiPart(text = systemPrompt))),
+                generationConfig = GeminiGenerationConfig(temperature = 0.7f, topK = 40, topP = 0.95f)
+            )
+
+            val url = "${LlmConfig.geminiEndpoint}${LlmConfig.geminiModel}:generateContent"
+            val response: HttpResponse = client.post(url) {
+                contentType(ContentType.Application.Json)
+                header("X-goog-api-key", LlmConfig.geminiApiKey)
+                setBody(geminiReq)
+            }
+
+            if (response.status.value in 200..299) {
+                val geminiResp = response.body<GeminiResponse>()
+                val text = geminiResp.candidates
+                    ?.firstOrNull()?.content?.parts
+                    ?.joinToString("") { it.text ?: "" } ?: ""
+                val safeContent = safeContent(text)
+                chatDao.insertMessage(ChatMessageEntity(role = "assistant", content = safeContent))
+                Result.success(ChatMessage(role = "assistant", content = safeContent))
+            } else {
+                Result.failure(Exception("Gemini vision error: HTTP ${response.status}"))
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("SilicaAI", "Gemini vision error", e)
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun buildVisionRequest(messages: List<ChatMessage>, base64Images: List<String>, memoryContext: String = ""): ChatRequest {
+        val moodSnippet = moodManager.getMoodPromptSnippet()
+        val customPersonality = userFactDao.getFact("custom_personality")?.value ?: DEFAULT_PERSONALITY
+
+        val systemContent = buildString {
+            append("$SYSTEM_RULES\n$customPersonality\n$moodSnippet\n")
+            if (base64Images.isNotEmpty()) {
+                append("Ada gambar yang dikirim user. Beri reaksi emosional/spontan terhadap gambar. ")
+                append("Jangan deskripsi teknis, beri respon natural khas Yami.\n")
+            }
+            if (memoryContext.isNotBlank()) {
+                append("Memori relevan:\n$memoryContext\n")
+            }
+        }
+        val systemMsg = ChatMessage(role = "system", content = systemContent)
         val fullMessages = mutableListOf(systemMsg)
         fullMessages.addAll(messages)
-        
-        val modelName = if (activeProvider == "Gemini") "gemini-1.5-flash" else LlmConfig.model
-        return ChatRequest(model = modelName, messages = fullMessages, images = base64Images)
+
+        return ChatRequest(model = LlmConfig.model, messages = fullMessages, images = base64Images)
     }
 
     private fun safeContent(text: String): String {
