@@ -55,6 +55,18 @@ object ActionMapper {
             "ssh_status" -> Action.SshStatus
             "ssh_connect" -> Action.SshConnect
             "ssh_disconnect" -> Action.SshDisconnect
+            "ssh_command" -> {
+                val cmd = rawInput
+                    .removePrefix("jalankan perintah ").removePrefix("jalankan ")
+                    .removePrefix("eksekusi perintah ").removePrefix("laksanakan ")
+                    .removePrefix("run ").removePrefix("exec ")
+                    .trim()
+                Action.SshCommand(cmd)
+            }
+            "ssh_quick_ram" -> Action.SshQuickCommand("ram")
+            "ssh_quick_disk" -> Action.SshQuickCommand("disk")
+            "ssh_quick_cpu" -> Action.SshQuickCommand("cpu")
+            "ssh_quick_ip" -> Action.SshQuickCommand("ip")
             "laptop_info" -> Action.LaptopInfo(rawInput)
 
             // AI

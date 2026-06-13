@@ -34,6 +34,8 @@ sealed class Action {
     object SshStatus : Action()
     object SshConnect : Action()
     object SshDisconnect : Action()
+    data class SshCommand(val command: String) : Action()
+    data class SshQuickCommand(val category: String) : Action()
     data class LaptopInfo(val rawInput: String) : Action()
 
     // AI

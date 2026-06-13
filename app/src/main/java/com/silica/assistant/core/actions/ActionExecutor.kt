@@ -141,6 +141,45 @@ object ActionExecutor : KoinComponent {
                         }
                 }.start()
             }
+            is Action.SshCommand -> {
+                if (!SshManager.isConnected()) {
+                    OverlayEventBus.onBubble?.invoke("SSH tidak terhubung")
+                    return
+                }
+                OverlayEventBus.onBubble?.invoke("Menjalankan: ${action.command}")
+                Thread {
+                    SshManager.executeCommand(action.command)
+                        .onSuccess { result ->
+                            val preview = result.lines().take(6).joinToString(" | ")
+                            OverlayEventBus.onBubble?.invoke("✓ ${preview.ifBlank { "Selesai" }}")
+                        }
+                        .onFailure { e ->
+                            OverlayEventBus.onBubble?.invoke("Gagal: ${e.message}")
+                        }
+                }.start()
+            }
+            is Action.SshQuickCommand -> {
+                if (!SshManager.isConnected()) {
+                    OverlayEventBus.onBubble?.invoke("SSH tidak terhubung")
+                    return
+                }
+                val command = when (action.category) {
+                    "ram" -> "free -h | awk 'NR==2{print \"RAM: \"\$3\"/\"\$2}'"
+                    "disk" -> "df -h / | awk 'NR==2{print \"Disk: \"\$3\"/\"\$2\" (\"\$5\")\"}'"
+                    "cpu" -> "top -bn1 | head -5 | tail -3"
+                    "ip" -> "hostname -I | awk '{print \$1}'"
+                    else -> "uptime"
+                }
+                Thread {
+                    SshManager.executeCommand(command)
+                        .onSuccess { result ->
+                            OverlayEventBus.onBubble?.invoke(result.lines().firstOrNull { it.isNotBlank() } ?: result.trim())
+                        }
+                        .onFailure { e ->
+                            OverlayEventBus.onBubble?.invoke("Gagal: ${e.message}")
+                        }
+                }.start()
+            }
 
             // ── AI ──
             is Action.Chat -> {

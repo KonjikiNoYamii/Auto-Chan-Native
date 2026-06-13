@@ -170,6 +170,43 @@ object CommandAliases {
             "kondisi laptop"
         ),
 
+        "ssh_command" to listOf(
+            "jalankan",
+            "jalankan perintah",
+            "run",
+            "exec",
+            "laksanakan",
+            "eksekusi perintah"
+        ),
+
+        "ssh_quick_ram" to listOf(
+            "cek ram laptop",
+            "ram laptop",
+            "cek memory laptop",
+            "memory laptop"
+        ),
+
+        "ssh_quick_disk" to listOf(
+            "cek disk laptop",
+            "cek hardisk",
+            "cek penyimpanan",
+            "disk laptop",
+            "cek storage"
+        ),
+
+        "ssh_quick_cpu" to listOf(
+            "cek cpu laptop",
+            "cpu laptop",
+            "cek processor",
+            "prosesor laptop"
+        ),
+
+        "ssh_quick_ip" to listOf(
+            "cek ip laptop",
+            "ip laptop",
+            "cek alamat ip"
+        ),
+
         "chat" to listOf(
             "chat",
             "chat ai",
