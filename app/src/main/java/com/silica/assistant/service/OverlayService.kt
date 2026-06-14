@@ -54,6 +54,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
+import com.silica.assistant.core.system.SoundManager
 import com.silica.assistant.core.llm.MoodManager
 import org.koin.android.ext.android.inject
 
@@ -293,6 +294,7 @@ class OverlayService : Service() {
 
         // 🧠 VOICE SYSTEM (ONLY ONE SOURCE)
         VoiceManager.init(this)
+        SoundManager.init(this)
         val chatDao = org.koin.core.context.GlobalContext.get().get<com.silica.assistant.core.llm.db.ChatDao>()
         WaifuNotifier.init(this, chatDao)
 
@@ -999,6 +1001,7 @@ class OverlayService : Service() {
             bubbleText.gravity = if (onRightSide) Gravity.END else Gravity.START
 
             playPopSound()
+            playVoiceForText(text)
 
             // Typing effect
             var charIndex = 0
@@ -1079,6 +1082,35 @@ class OverlayService : Service() {
         popPlayer = null
 
         windowManager.removeView(overlayView)
+    }
+
+    private fun playVoiceForText(text: String) {
+        val lower = text.lowercase()
+        val type = when {
+            lower.contains("pagi") -> CustomAssetManager.AssetType.VOICE_MORNING
+            lower.contains("siang") -> CustomAssetManager.AssetType.VOICE_AFTERNOON
+            lower.contains("sore") -> CustomAssetManager.AssetType.VOICE_EVENING
+            lower.contains("malam") -> CustomAssetManager.AssetType.VOICE_NIGHT
+            lower.contains("terima kasih") || lower.contains("makasih") -> CustomAssetManager.AssetType.VOICE_THANKS
+            lower.contains("selamat datang") || lower.contains("pulang") -> CustomAssetManager.AssetType.VOICE_WELCOME_BACK
+            lower.contains("ecchi") || lower.contains("mesum") -> CustomAssetManager.AssetType.VOICE_ECCHI
+            lower.contains("yamete") || lower.contains("berhenti") -> CustomAssetManager.AssetType.VOICE_YAMETE
+            lower.contains("hebat") || lower.contains("luar biasa") -> CustomAssetManager.AssetType.VOICE_GREAT
+            lower.contains(" haha") || lower.contains(" hehe") || lower.contains("fufu") -> CustomAssetManager.AssetType.VOICE_LAUGH
+            lower.contains("naik level") || lower.contains("rank up") -> CustomAssetManager.AssetType.VOICE_RANKUP
+            lower.contains("selesai") || lower.contains("tugas") -> CustomAssetManager.AssetType.VOICE_MISSION_DONE
+            lower.contains("mengerti") || lower.contains("paham") -> {
+                if (lower.contains("!")) CustomAssetManager.AssetType.VOICE_UNDERSTOOD
+                else CustomAssetManager.AssetType.VOICE_UNDERSTOOD_COLD
+            }
+            lower.contains("ya") || lower.contains("baik") || lower.contains("oke") -> {
+                if (lower.contains("!") || lower.contains("~")) CustomAssetManager.AssetType.VOICE_YES_HAPPY
+                else CustomAssetManager.AssetType.VOICE_YES
+            }
+            else -> null
+        }
+        
+        type?.let { SoundManager.playVoice(this, it) }
     }
 
     private fun createNotification(): Notification {
