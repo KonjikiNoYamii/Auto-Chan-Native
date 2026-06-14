@@ -38,7 +38,7 @@ object LlmClient : KoinComponent {
     suspend fun generateActivityComment(appName: String, isGame: Boolean, contextHint: String? = null, onToken: ((String) -> Unit)? = null): String? {
         if (onToken != null) {
             val fullContent = StringBuilder()
-            repository.chatStream(listOf(ChatMessage("user", "User buka $appName. Beri komentar singkat.")), "").collect { token ->
+            repository.chatStream(listOf(ChatMessage("user", "${LlmConfig.personalityPrompt}\n\nUser buka $appName. Komentar singkat natural.")), "").collect { token ->
                 fullContent.append(token)
                 onToken(token)
             }
@@ -48,8 +48,9 @@ object LlmClient : KoinComponent {
     }
 
     suspend fun generateScreenComment(appName: String, uiText: String, contextHint: String? = null, onToken: ((String) -> Unit)? = null): String? {
-        // For simplicity, using non-streaming for now or adapting as needed
-        return repository.chat(listOf(ChatMessage("user", "Konteks: $appName. Layar: $uiText. Beri reaksi natural."))).getOrNull()?.content
+        val hint = if (contextHint != null) " User: \"$contextHint\"." else ""
+        val prompt = "${LlmConfig.personalityPrompt}\n\nUser lagi di $appName. Layar: $uiText$hint. Reaksi natural sebagai Yami yang ngintip — bisa penasaran, geli, atau heran."
+        return repository.chat(listOf(ChatMessage("user", prompt))).getOrNull()?.content
     }
 
     suspend fun visionChat(messages: List<ChatMessage>, memoryContext: String = ""): Result<ChatMessage> {
