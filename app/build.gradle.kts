@@ -22,8 +22,8 @@ android {
         applicationId = "com.silica.assistant"
         minSdk = 24
         targetSdk = 34
-        versionCode = 7
-        versionName = "1.4"
+        versionCode = 8
+        versionName = "2.3"
         
         val localProperties = Properties()
         val localPropertiesFile = rootProject.file("local.properties")
