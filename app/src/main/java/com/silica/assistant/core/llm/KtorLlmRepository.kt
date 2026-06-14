@@ -264,11 +264,11 @@ class KtorLlmRepository(
     }
 
     override suspend fun generateActivityComment(appName: String, isGame: Boolean, contextHint: String?): String? {
-        val userReq = if (contextHint != null) " User bertanya: \"$contextHint\"." else ""
+        val userReq = if (contextHint != null) ". User baru saja bilang: \"$contextHint\"" else ""
         val prompt = if (isGame) {
-            "User main $appName.$userReq Beri REAKSI spontan SANGAT SINGKAT (maks 1 kalimat, <10 kata). ${LlmConfig.personalityPrompt}"
+            "${LlmConfig.personalityPrompt}\n\nUser sedang main $appName$userReq. Kamu lagi nontonin dia main dari balik bahu. Reaksi alami — ledekin dikit kalau ada yang lucu, atau komentarin momen yang menarik. Jangan lebay, cukup kayak teman yang ngeliatin sambil senyum."
         } else {
-            "User buka $appName.$userReq Beri komentar singkat (1-2 kalimat). ${LlmConfig.personalityPrompt}"
+            "${LlmConfig.personalityPrompt}\n\nUser lagi buka $appName$userReq. Komentari seperlunya — bisa penasaran, bisa ledekan ringan, bisa observasi random. Yang penting natural dan singkat."
         }
         val msg = listOf(ChatMessage("user", prompt))
         return chat(msg).getOrNull()?.content?.let { if (isGame) limitSentence(it) else it.take(300) }
@@ -276,9 +276,9 @@ class KtorLlmRepository(
 
     override suspend fun describeScreen(appName: String, uiText: String, screenshotJpeg: ByteArray?, contextHint: String?, onToken: ((String) -> Unit)?): String? {
         quickHealthCheck()
-        val textHint = if (uiText.isBlank()) "" else "\nTeks layar: ${uiText.take(200)}"
-        val focus = if (contextHint != null) "\nUser bertanya: \"$contextHint\"." else ""
-        val prompt = "App: $appName.$textHint$focus\nLihat screenshot, beri REAKSI spontan 1 kalimat (maks 12 kata). Fokus emosional, bukan deskripsi teknis. ${LlmConfig.personalityPrompt} Langsung respon."
+        val textHint = if (uiText.isBlank()) "" else "\nTeks di layar: \"${uiText.take(200)}\""
+        val focus = if (contextHint != null) "\nUser bilang: \"$contextHint\"." else ""
+        val prompt = "${LlmConfig.personalityPrompt}\n\nKamu lihat layar $appName.$textHint$focus\nApa yang menarik? Komentari detail spesifik yang kamu lihat — bukan deskripsi teknis, tapi reaksi alamimu sebagai Yami yang jeli. Misal: timingnya, ekspresi karakter, UI yang aneh, loading lama, atau momen lucu. Cukup 1-2 kalimat, kayak bisikan ke teman."
 
         if (activeProvider == "LocalGemini" && screenshotJpeg != null) {
             try {
