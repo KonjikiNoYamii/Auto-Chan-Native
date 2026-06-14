@@ -53,6 +53,8 @@ Silica sekarang memiliki sistem pencapaian yang luas untuk menemani perjalanan A
 - Connect via SSH password
 - Terminal: execute any Linux command, `cd` navigation with local path resolution
 - File Manager: browse, upload, download files via SFTP
+- File downloads saved to **`Downloads/SilicaAssistant/`** — visible in Downloads app, deletable like any normal file
+- File detection accurately reflects device state — deleted files no longer show as "downloaded"
 - Quick folders: Home, Documents, Downloads, Pictures, Music, Videos, Desktop
 - Laptop Info: real-time monitoring (uptime, RAM, disk) with 3s polling
 - Session health check — auto-detect connection drops
@@ -66,7 +68,11 @@ Silica sekarang memiliki sistem pencapaian yang luas untuk menemani perjalanan A
 ## Build
 
 ```sh
+# Debug build
 ./gradlew :app:assembleDebug
+
+# Release build & install
+./gradlew :app:installRelease
 ```
 
 Requires:
@@ -76,9 +82,11 @@ Requires:
 - JSch 0.1.55 for SSH
 
 ### APK Location
-```
-app/build/outputs/apk/debug/app-debug.apk
-```
+
+| Variant | Path |
+|---|---|
+| Debug | `app/build/outputs/apk/debug/app-debug.apk` |
+| Release | `app/build/outputs/apk/release/app-release.apk` |
 
 ## Permissions Required
 - `SYSTEM_ALERT_WINDOW` — overlay waifu
