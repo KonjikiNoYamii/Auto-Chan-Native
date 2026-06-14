@@ -33,7 +33,25 @@ object CustomAssetManager : KoinComponent {
         WAIFU_LISTENING("waifu_listening", "mybinikmendengarkan"),
         WAIFU_GAME("waifu_game", "icongamemode"),
         CHAT_ICON("chat_icon", "iconchat"),
-        POP_SOUND("pop_sound", "pop")
+        POP_SOUND("pop_sound", "pop"),
+        
+        // Voice Assets
+        VOICE_MORNING("voice_morning", "ohayougozaimasu"),
+        VOICE_AFTERNOON("voice_afternoon", "konnichiwa"),
+        VOICE_EVENING("voice_evening", "konbawa"),
+        VOICE_NIGHT("voice_night", "konbawa"),
+        VOICE_THANKS("voice_thanks", "arigatogozaimasu"),
+        VOICE_WELCOME_BACK("voice_welcome_back", "okairinasai"),
+        VOICE_YES("voice_yes", "haik"),
+        VOICE_YES_HAPPY("voice_yes_happy", "haik_sedikit_senang"),
+        VOICE_UNDERSTOOD("voice_understood", "kyoukaishimashita"),
+        VOICE_UNDERSTOOD_COLD("voice_understood_cold", "wakarimashita_sedikit_dingin"),
+        VOICE_YAMETE("voice_yamete", "bicara_yamete_kudasai_dengancepat_dan_sedikit_dingin"),
+        VOICE_ECCHI("voice_ecchi", "ecchinowakiraidesu"),
+        VOICE_LAUGH("voice_laugh", "tertawa_kecil"),
+        VOICE_GREAT("voice_great", "subarashiidesune"),
+        VOICE_RANKUP("voice_rankup", "rankup"),
+        VOICE_MISSION_DONE("voice_mission_done", "nozokumade_gokurousamadesu")
     }
 
     private fun prefs(context: Context) =
@@ -87,6 +105,15 @@ object CustomAssetManager : KoinComponent {
         if (custom != null) {
             imageView.setImageBitmap(custom)
         }
+    }
+
+    // Asset Labels
+    fun saveAssetLabel(context: Context, type: AssetType, label: String) {
+        prefs(context).edit().putString("label_${type.key}", label).apply()
+    }
+
+    fun getAssetLabel(context: Context, type: AssetType): String {
+        return prefs(context).getString("label_${type.key}", null) ?: ""
     }
 
     // greeting customization
