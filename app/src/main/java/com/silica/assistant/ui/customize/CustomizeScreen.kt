@@ -17,11 +17,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.silica.assistant.core.CustomAssetManager
+import com.silica.assistant.core.system.SoundManager
 import com.silica.assistant.ui.theme.DeepRose
 import com.yalantis.ucrop.UCrop
 import java.io.File
@@ -43,11 +45,9 @@ fun CustomizeScreen(onBack: () -> Unit) {
             val ok = CustomAssetManager.saveCustom(context, type, croppedUri)
             Toast.makeText(
                 context,
-                if (ok) "${type.key} diganti" else "Gagal menyimpan",
+                if (ok) "Gambar berhasil diganti" else "Gagal menyimpan",
                 Toast.LENGTH_SHORT
             ).show()
-        } else {
-            Toast.makeText(context, "Crop dibatalkan", Toast.LENGTH_SHORT).show()
         }
         refreshKey++
     }
@@ -56,7 +56,7 @@ fun CustomizeScreen(onBack: () -> Unit) {
         val ok = CustomAssetManager.saveCustom(context, type, uri)
         Toast.makeText(
             context,
-            if (ok) "${type.key} diganti" else "Gagal",
+            if (ok) "Audio berhasil diganti" else "Gagal menyimpan audio",
             Toast.LENGTH_SHORT
         ).show()
         refreshKey++
@@ -67,9 +67,8 @@ fun CustomizeScreen(onBack: () -> Unit) {
     ) { uri ->
         uri?.let { uri ->
             val type = pendingType ?: return@let
-            pendingType = type
-
-            if (type == CustomAssetManager.AssetType.POP_SOUND) {
+            
+            if (type.key.startsWith("voice_") || type == CustomAssetManager.AssetType.POP_SOUND) {
                 saveDirect(type, uri)
                 return@let
             }
@@ -103,7 +102,7 @@ fun CustomizeScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Customize") },
+                title = { Text("Customize Assistant", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -123,171 +122,36 @@ fun CustomizeScreen(onBack: () -> Unit) {
                 .verticalScroll(scroll)
                 .padding(16.dp)
         ) {
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                "Kepribadian & Nama",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "Tentukan nama panggilan dan sifat waifu Anda.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            var assistantName by remember { mutableStateOf(com.silica.assistant.core.config.AssistantConfig.assistantName) }
-            var personalityPrompt by remember { mutableStateOf(com.silica.assistant.core.llm.LlmConfig.personalityPrompt) }
-
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text("Nama Panggilan", fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = assistantName,
-                        onValueChange = { 
-                            assistantName = it
-                            com.silica.assistant.core.config.AssistantConfig.assistantName = it
-                            com.silica.assistant.core.config.AssistantConfig.save()
-                        },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    var customGreeting by remember { mutableStateOf(com.silica.assistant.core.config.AssistantConfig.customGreeting) }
-                    Text("Sapaan Balik (Jika nama dipanggil)", fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = customGreeting,
-                        onValueChange = { 
-                            customGreeting = it
-                            com.silica.assistant.core.config.AssistantConfig.customGreeting = it
-                            com.silica.assistant.core.config.AssistantConfig.save()
-                        },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
-                        placeholder = { Text("Kosongkan untuk otomatis...") }
-                    )
-                    
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    Text("System Prompt (Kepribadian)", fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedTextField(
-                        value = personalityPrompt,
-                        onValueChange = { 
-                            personalityPrompt = it
-                            com.silica.assistant.core.llm.LlmConfig.personalityPrompt = it
-                            com.silica.assistant.core.llm.LlmConfig.save()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
-                        placeholder = { Text("Contoh: Tsundere, galak tapi baik...") }
-                    )
-                }
-            }
+            SectionHeader("Kepribadian & Identitas", Icons.Default.Face, "Sesuaikan nama dan sifat waifu Anda.")
+            IdentitasCard()
 
             Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                "Ukuran Overlay",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "Sesuaikan ukuran tampilan waifu di layar.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    var defaultSize by remember { mutableFloatStateOf(com.silica.assistant.core.config.AssistantConfig.overlaySizeDefault.toFloat()) }
-                    Text("Ukuran Default: ${defaultSize.toInt()}dp", fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                    Slider(
-                        value = defaultSize,
-                        onValueChange = { 
-                            defaultSize = it
-                            com.silica.assistant.core.config.AssistantConfig.overlaySizeDefault = it.toInt()
-                            com.silica.assistant.core.config.AssistantConfig.save()
-                        },
-                        valueRange = 60f..200f,
-                        steps = 14
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    var gameSize by remember { mutableFloatStateOf(com.silica.assistant.core.config.AssistantConfig.overlaySizeGameMode.toFloat()) }
-                    Text("Ukuran Game Mode: ${gameSize.toInt()}dp", fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                    Slider(
-                        value = gameSize,
-                        onValueChange = { 
-                            gameSize = it
-                            com.silica.assistant.core.config.AssistantConfig.overlaySizeGameMode = it.toInt()
-                            com.silica.assistant.core.config.AssistantConfig.save()
-                        },
-                        valueRange = 40f..150f,
-                        steps = 11
-                    )
-                }
-            }
+            SectionHeader("Ukuran Overlay", Icons.Default.AspectRatio, "Sesuaikan ukuran tampilan waifu di layar.")
+            SizeControlCard()
 
             Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                "Ganti Tampilan",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "Pilih gambar atau suara dari galeri/storage Anda.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
+            SectionHeader("Tampilan Visual", Icons.Default.Palette, "Ganti gambar header, icon, dan ekspresi.")
+            
             AssetItem(
-                label = "Header",
+                label = "Header Menu",
                 type = CustomAssetManager.AssetType.HEADER,
                 isCustom = CustomAssetManager.hasCustom(context, CustomAssetManager.AssetType.HEADER),
                 onPick = { pickImage(CustomAssetManager.AssetType.HEADER) },
                 onReset = {
                     CustomAssetManager.resetCustom(context, CustomAssetManager.AssetType.HEADER)
                     refreshKey++
-                    Toast.makeText(context, "Header reset ke default", Toast.LENGTH_SHORT).show()
                 },
                 refreshKey = refreshKey
             )
 
             AssetItem(
-                label = "Icon",
+                label = "Icon Aplikasi",
                 type = CustomAssetManager.AssetType.ICON,
                 isCustom = CustomAssetManager.hasCustom(context, CustomAssetManager.AssetType.ICON),
                 onPick = { pickImage(CustomAssetManager.AssetType.ICON) },
                 onReset = {
                     CustomAssetManager.resetCustom(context, CustomAssetManager.AssetType.ICON)
                     refreshKey++
-                    Toast.makeText(context, "Icon reset ke default", Toast.LENGTH_SHORT).show()
                 },
                 refreshKey = refreshKey
             )
@@ -300,177 +164,51 @@ fun CustomizeScreen(onBack: () -> Unit) {
                 onReset = {
                     CustomAssetManager.resetCustom(context, CustomAssetManager.AssetType.CHAT_ICON)
                     refreshKey++
-                    Toast.makeText(context, "Chat Icon reset ke default", Toast.LENGTH_SHORT).show()
                 },
                 refreshKey = refreshKey
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Ekspresi Karakter", style = MaterialTheme.typography.labelLarge, color = DeepRose, modifier = Modifier.padding(start = 4.dp))
+            
+            AssetItem("IDLE (Diam)", CustomAssetManager.AssetType.WAIFU_IDLE, 
+                CustomAssetManager.hasCustom(context, CustomAssetManager.AssetType.WAIFU_IDLE), 
+                { pickImage(CustomAssetManager.AssetType.WAIFU_IDLE) }, 
+                { CustomAssetManager.resetCustom(context, CustomAssetManager.AssetType.WAIFU_IDLE); refreshKey++ }, refreshKey)
+            
+            AssetItem("HAPPY (Senang)", CustomAssetManager.AssetType.WAIFU_HAPPY, 
+                CustomAssetManager.hasCustom(context, CustomAssetManager.AssetType.WAIFU_HAPPY), 
+                { pickImage(CustomAssetManager.AssetType.WAIFU_HAPPY) }, 
+                { CustomAssetManager.resetCustom(context, CustomAssetManager.AssetType.WAIFU_HAPPY); refreshKey++ }, refreshKey)
+            
+            AssetItem("LISTENING (Mendengar)", CustomAssetManager.AssetType.WAIFU_LISTENING, 
+                CustomAssetManager.hasCustom(context, CustomAssetManager.AssetType.WAIFU_LISTENING), 
+                { pickImage(CustomAssetManager.AssetType.WAIFU_LISTENING) }, 
+                { CustomAssetManager.resetCustom(context, CustomAssetManager.AssetType.WAIFU_LISTENING); refreshKey++ }, refreshKey)
+
+            Spacer(modifier = Modifier.height(24.dp))
+            SectionHeader("Suara & Audio", Icons.Default.VolumeUp, "Atur suara bubble dan voice lines waifu.")
+            
+            AssetItem("Sound Pop (Bubble)", CustomAssetManager.AssetType.POP_SOUND, 
+                CustomAssetManager.hasCustom(context, CustomAssetManager.AssetType.POP_SOUND), 
+                { pickAudio(CustomAssetManager.AssetType.POP_SOUND) }, 
+                { CustomAssetManager.resetCustom(context, CustomAssetManager.AssetType.POP_SOUND); refreshKey++ }, refreshKey, isAudio = true)
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Voice Lines (Otomatis)", style = MaterialTheme.typography.labelLarge, color = DeepRose, modifier = Modifier.padding(start = 4.dp))
+            
+            VoiceList(
+                refreshKey = refreshKey,
+                onPick = { pickAudio(it) },
+                onReset = { CustomAssetManager.resetCustom(context, it); refreshKey++ },
+                onLabelChange = { type, label -> CustomAssetManager.saveAssetLabel(context, type, label); refreshKey++ }
             )
 
             Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                "Ganti Karakter Overlay",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "3 ekspresi waifu (IDLE, HAPPY, LISTENING).",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            AssetItem(
-                label = "IDLE",
-                type = CustomAssetManager.AssetType.WAIFU_IDLE,
-                isCustom = CustomAssetManager.hasCustom(context, CustomAssetManager.AssetType.WAIFU_IDLE),
-                onPick = { pickImage(CustomAssetManager.AssetType.WAIFU_IDLE) },
-                onReset = {
-                    CustomAssetManager.resetCustom(context, CustomAssetManager.AssetType.WAIFU_IDLE)
-                    refreshKey++
-                    Toast.makeText(context, "IDLE reset ke default", Toast.LENGTH_SHORT).show()
-                },
-                refreshKey = refreshKey
-            )
-
-            AssetItem(
-                label = "HAPPY",
-                type = CustomAssetManager.AssetType.WAIFU_HAPPY,
-                isCustom = CustomAssetManager.hasCustom(context, CustomAssetManager.AssetType.WAIFU_HAPPY),
-                onPick = { pickImage(CustomAssetManager.AssetType.WAIFU_HAPPY) },
-                onReset = {
-                    CustomAssetManager.resetCustom(context, CustomAssetManager.AssetType.WAIFU_HAPPY)
-                    refreshKey++
-                    Toast.makeText(context, "HAPPY reset ke default", Toast.LENGTH_SHORT).show()
-                },
-                refreshKey = refreshKey
-            )
-
-            AssetItem(
-                label = "LISTENING",
-                type = CustomAssetManager.AssetType.WAIFU_LISTENING,
-                isCustom = CustomAssetManager.hasCustom(context, CustomAssetManager.AssetType.WAIFU_LISTENING),
-                onPick = { pickImage(CustomAssetManager.AssetType.WAIFU_LISTENING) },
-                onReset = {
-                    CustomAssetManager.resetCustom(context, CustomAssetManager.AssetType.WAIFU_LISTENING)
-                    refreshKey++
-                    Toast.makeText(context, "LISTENING reset ke default", Toast.LENGTH_SHORT).show()
-                },
-                refreshKey = refreshKey
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                "Ganti Suara Bubble",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "Suara \"pop\" saat bubble muncul.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            AssetItem(
-                label = "Pop Sound",
-                type = CustomAssetManager.AssetType.POP_SOUND,
-                isCustom = CustomAssetManager.hasCustom(context, CustomAssetManager.AssetType.POP_SOUND),
-                onPick = { pickAudio(CustomAssetManager.AssetType.POP_SOUND) },
-                onReset = {
-                    CustomAssetManager.resetCustom(context, CustomAssetManager.AssetType.POP_SOUND)
-                    refreshKey++
-                    Toast.makeText(context, "Pop sound reset ke default", Toast.LENGTH_SHORT).show()
-                },
-                refreshKey = refreshKey
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                "Ubah Ucapan Selamat",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "Custom teks yang muncul di halaman utama sesuai waktu.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            val greetings = remember(refreshKey) {
-                CustomAssetManager.getAllCustomGreetings(context)
-            }
-
-            GreetingField(
-                label = "Pagi (00:00 - 11:59)",
-                key = "greeting_morning",
-                currentText = greetings["greeting_morning"] ?: "Selamat pagi",
-                onSave = { text ->
-                    CustomAssetManager.saveGreeting(context, "greeting_morning", text)
-                    refreshKey++
-                    Toast.makeText(context, "Ucapan pagi disimpan", Toast.LENGTH_SHORT).show()
-                },
-                onReset = {
-                    CustomAssetManager.resetGreeting(context, "greeting_morning")
-                    refreshKey++
-                }
-            )
-
-            GreetingField(
-                label = "Siang (12:00 - 14:59)",
-                key = "greeting_afternoon",
-                currentText = greetings["greeting_afternoon"] ?: "Selamat siang",
-                onSave = { text ->
-                    CustomAssetManager.saveGreeting(context, "greeting_afternoon", text)
-                    refreshKey++
-                    Toast.makeText(context, "Ucapan siang disimpan", Toast.LENGTH_SHORT).show()
-                },
-                onReset = {
-                    CustomAssetManager.resetGreeting(context, "greeting_afternoon")
-                    refreshKey++
-                }
-            )
-
-            GreetingField(
-                label = "Sore (15:00 - 17:59)",
-                key = "greeting_evening",
-                currentText = greetings["greeting_evening"] ?: "Selamat sore",
-                onSave = { text ->
-                    CustomAssetManager.saveGreeting(context, "greeting_evening", text)
-                    refreshKey++
-                    Toast.makeText(context, "Ucapan sore disimpan", Toast.LENGTH_SHORT).show()
-                },
-                onReset = {
-                    CustomAssetManager.resetGreeting(context, "greeting_evening")
-                    refreshKey++
-                }
-            )
-
-            GreetingField(
-                label = "Malam (18:00 - 23:59)",
-                key = "greeting_night",
-                currentText = greetings["greeting_night"] ?: "Selamat malam",
-                onSave = { text ->
-                    CustomAssetManager.saveGreeting(context, "greeting_night", text)
-                    refreshKey++
-                    Toast.makeText(context, "Ucapan malam disimpan", Toast.LENGTH_SHORT).show()
-                },
-                onReset = {
-                    CustomAssetManager.resetGreeting(context, "greeting_night")
-                    refreshKey++
-                }
-            )
+            SectionHeader("Ucapan Selamat", Icons.Default.AccessTime, "Teks sapaan di menu utama sesuai waktu.")
+            GreetingsSection(refreshKey, onUpdate = { refreshKey++ })
 
             Spacer(modifier = Modifier.height(32.dp))
-
             OutlinedButton(
                 onClick = {
                     CustomAssetManager.resetAll(context)
@@ -485,9 +223,160 @@ fun CustomizeScreen(onBack: () -> Unit) {
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Reset Semua ke Default")
             }
-
             Spacer(modifier = Modifier.height(48.dp))
         }
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String, icon: ImageVector, subtitle: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = DeepRose, modifier = Modifier.size(20.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    }
+    Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Spacer(modifier = Modifier.height(12.dp))
+}
+
+@Composable
+private fun IdentitasCard() {
+    var assistantName by remember { mutableStateOf(com.silica.assistant.core.config.AssistantConfig.assistantName) }
+    var personalityPrompt by remember { mutableStateOf(com.silica.assistant.core.llm.LlmConfig.personalityPrompt) }
+    var customGreeting by remember { mutableStateOf(com.silica.assistant.core.config.AssistantConfig.customGreeting) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Nama Panggilan", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = DeepRose)
+            OutlinedTextField(
+                value = assistantName,
+                onValueChange = { assistantName = it; com.silica.assistant.core.config.AssistantConfig.assistantName = it; com.silica.assistant.core.config.AssistantConfig.save() },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                textStyle = MaterialTheme.typography.bodyMedium
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Sapaan Balik", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = DeepRose)
+            OutlinedTextField(
+                value = customGreeting,
+                onValueChange = { customGreeting = it; com.silica.assistant.core.config.AssistantConfig.customGreeting = it; com.silica.assistant.core.config.AssistantConfig.save() },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                placeholder = { Text("Otomatis...", fontSize = 14.sp) },
+                textStyle = MaterialTheme.typography.bodyMedium
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("System Prompt (Sifat)", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = DeepRose)
+            OutlinedTextField(
+                value = personalityPrompt,
+                onValueChange = { personalityPrompt = it; com.silica.assistant.core.llm.LlmConfig.personalityPrompt = it; com.silica.assistant.core.llm.LlmConfig.save() },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                placeholder = { Text("Contoh: Tsundere, galak tapi penyayang...", fontSize = 14.sp) },
+                textStyle = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+}
+
+@Composable
+private fun SizeControlCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            var defaultSize by remember { mutableFloatStateOf(com.silica.assistant.core.config.AssistantConfig.overlaySizeDefault.toFloat()) }
+            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Text("Ukuran Normal", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                Text("${defaultSize.toInt()}dp", color = DeepRose, fontWeight = FontWeight.Bold)
+            }
+            Slider(value = defaultSize, onValueChange = { defaultSize = it; com.silica.assistant.core.config.AssistantConfig.overlaySizeDefault = it.toInt(); com.silica.assistant.core.config.AssistantConfig.save() }, valueRange = 60f..200f)
+
+            Spacer(modifier = Modifier.height(8.dp))
+            var gameSize by remember { mutableFloatStateOf(com.silica.assistant.core.config.AssistantConfig.overlaySizeGameMode.toFloat()) }
+            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Text("Ukuran Game Mode", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                Text("${gameSize.toInt()}dp", color = DeepRose, fontWeight = FontWeight.Bold)
+            }
+            Slider(value = gameSize, onValueChange = { gameSize = it; com.silica.assistant.core.config.AssistantConfig.overlaySizeGameMode = it.toInt(); com.silica.assistant.core.config.AssistantConfig.save() }, valueRange = 40f..150f)
+        }
+    }
+}
+
+@Composable
+private fun VoiceList(
+    refreshKey: Int, 
+    onPick: (CustomAssetManager.AssetType) -> Unit, 
+    onReset: (CustomAssetManager.AssetType) -> Unit,
+    onLabelChange: (CustomAssetManager.AssetType, String) -> Unit
+) {
+    val context = LocalContext.current
+    val voices = listOf(
+        "Pagi (Ohayou)" to CustomAssetManager.AssetType.VOICE_MORNING,
+        "Siang (Konnichiwa)" to CustomAssetManager.AssetType.VOICE_AFTERNOON,
+        "Malam (Konbanwa)" to CustomAssetManager.AssetType.VOICE_NIGHT,
+        "Terima Kasih (Arigato)" to CustomAssetManager.AssetType.VOICE_THANKS,
+        "Sapa Balik (Okairi)" to CustomAssetManager.AssetType.VOICE_WELCOME_BACK,
+        "Ya/Baik (Haik)" to CustomAssetManager.AssetType.VOICE_YES,
+        "Ya (Haik Happy)" to CustomAssetManager.AssetType.VOICE_YES_HAPPY,
+        "Mengerti (Kyoka)" to CustomAssetManager.AssetType.VOICE_UNDERSTOOD,
+        "Mengerti (Wakarimashita)" to CustomAssetManager.AssetType.VOICE_UNDERSTOOD_COLD,
+        "Yamete!" to CustomAssetManager.AssetType.VOICE_YAMETE,
+        "Mesum (Ecchi!)" to CustomAssetManager.AssetType.VOICE_ECCHI,
+        "Ketawa (Fufu)" to CustomAssetManager.AssetType.VOICE_LAUGH,
+        "Hebat (Subarashii)" to CustomAssetManager.AssetType.VOICE_GREAT,
+        "Rank Up!" to CustomAssetManager.AssetType.VOICE_RANKUP,
+        "Misi Selesai (Gokurousama)" to CustomAssetManager.AssetType.VOICE_MISSION_DONE,
+    )
+
+    voices.forEach { (defaultLabel, type) ->
+        val customLabel = remember(refreshKey) { CustomAssetManager.getAssetLabel(context, type) }
+        val displayLabel = if (customLabel.isNotEmpty()) customLabel else defaultLabel
+        
+        AssetItem(
+            label = displayLabel,
+            type = type,
+            isCustom = CustomAssetManager.hasCustom(context, type),
+            onPick = { onPick(type) },
+            onReset = { onReset(type) },
+            refreshKey = refreshKey,
+            isAudio = true,
+            onLabelEdit = { newLabel -> onLabelChange(type, newLabel) }
+        )
+    }
+}
+
+@Composable
+private fun GreetingsSection(refreshKey: Int, onUpdate: () -> Unit) {
+    val context = LocalContext.current
+    val greetings = remember(refreshKey) { CustomAssetManager.getAllCustomGreetings(context) }
+    
+    val fields = listOf(
+        Triple("Pagi (00:00 - 11:59)", "greeting_morning", "Selamat pagi"),
+        Triple("Siang (12:00 - 14:59)", "greeting_afternoon", "Selamat siang"),
+        Triple("Sore (15:00 - 17:59)", "greeting_evening", "Selamat sore"),
+        Triple("Malam (18:00 - 23:59)", "greeting_night", "Selamat malam")
+    )
+
+    fields.forEach { (label, key, default) ->
+        GreetingField(label, key, greetings[key] ?: default, { text ->
+            CustomAssetManager.saveGreeting(context, key, text)
+            onUpdate()
+            Toast.makeText(context, "Disimpan", Toast.LENGTH_SHORT).show()
+        }, {
+            CustomAssetManager.resetGreeting(context, key)
+            onUpdate()
+        })
     }
 }
 
@@ -498,67 +387,91 @@ private fun AssetItem(
     isCustom: Boolean,
     onPick: () -> Unit,
     onReset: () -> Unit,
-    refreshKey: Int
+    refreshKey: Int,
+    isAudio: Boolean = false,
+    onLabelEdit: ((String) -> Unit)? = null
 ) {
+    val context = LocalContext.current
+    var isEditingLabel by remember { mutableStateOf(false) }
+    var editedLabel by remember { mutableStateOf(label) }
+
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-        )
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                if (isCustom) Icons.Filled.CheckCircle else Icons.Filled.Image,
-                contentDescription = null,
-                tint = if (isCustom) Color(0xFF00FF88) else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(label, fontWeight = FontWeight.Medium, fontSize = 14.sp)
-                Text(
-                    if (isCustom) "Custom" else "Default",
-                    fontSize = 11.sp,
-                    color = if (isCustom) Color(0xFF00FF88) else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            TextButton(onClick = onPick) { Text("Ganti") }
-            if (isCustom) {
-                TextButton(onClick = onReset) { Text("Reset", color = DeepRose) }
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier.size(40.dp).background(if (isCustom) Color(0xFF00FF88).copy(alpha = 0.1f) else Color.Gray.copy(alpha = 0.1f), RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        if (isAudio) Icons.Default.Audiotrack else Icons.Default.Image,
+                        contentDescription = null,
+                        tint = if (isCustom) Color(0xFF00FF88) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    if (isEditingLabel && onLabelEdit != null) {
+                        OutlinedTextField(
+                            value = editedLabel,
+                            onValueChange = { editedLabel = it },
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodySmall,
+                            shape = RoundedCornerShape(8.dp),
+                            trailingIcon = {
+                                IconButton(onClick = { 
+                                    onLabelEdit(editedLabel)
+                                    isEditingLabel = false 
+                                }) {
+                                    Icon(Icons.Default.Check, contentDescription = "Done", tint = Color(0xFF4CAF50), modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        )
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(label, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            if (onLabelEdit != null) {
+                                IconButton(onClick = { isEditingLabel = true }, modifier = Modifier.size(24.dp)) {
+                                    Icon(Icons.Default.Edit, contentDescription = "Edit Label", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(12.dp))
+                                }
+                            }
+                        }
+                        Text(if (isCustom) "Custom Asset" else "Default Asset", fontSize = 11.sp, color = if (isCustom) Color(0xFF00FF88) else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                
+                if (isAudio) {
+                    IconButton(onClick = { SoundManager.playVoice(context, type) }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = "Test", tint = DeepRose, modifier = Modifier.size(20.dp))
+                    }
+                }
+                
+                TextButton(onClick = onPick) { Text("Ganti", fontSize = 13.sp) }
+                if (isCustom) {
+                    IconButton(onClick = onReset, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Reset", tint = DeepRose, modifier = Modifier.size(18.dp))
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun GreetingField(
-    label: String,
-    key: String,
-    currentText: String,
-    onSave: (String) -> Unit,
-    onReset: () -> Unit
-) {
+private fun GreetingField(label: String, key: String, currentText: String, onSave: (String) -> Unit, onReset: () -> Unit) {
     var text by remember(key) { mutableStateOf(currentText) }
-
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-        )
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text(label, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+            Text(label, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = DeepRose)
             Spacer(modifier = Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
@@ -570,16 +483,12 @@ private fun GreetingField(
                     shape = RoundedCornerShape(8.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                FilledIconButton(
-                    onClick = { onSave(text) },
-                    modifier = Modifier.size(40.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color(0xFF4CAF50))
-                ) {
+                FilledIconButton(onClick = { onSave(text) }, modifier = Modifier.size(40.dp), colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color(0xFF4CAF50))) {
                     Icon(Icons.Filled.Check, contentDescription = "Simpan", modifier = Modifier.size(18.dp))
                 }
             }
             if (text != currentText) {
-                TextButton(onClick = onReset) {
+                TextButton(onClick = onReset, modifier = Modifier.height(30.dp)) {
                     Text("Reset ke default", fontSize = 11.sp, color = DeepRose)
                 }
             }
