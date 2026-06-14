@@ -1,9 +1,14 @@
 package com.silica.assistant.ui.ssh
 
+import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -1198,7 +1203,7 @@ private fun FilesTab(
                     }
                 }
                 items(files) { file ->
-                    val isDownloaded = File(downloadDir, file.name).exists()
+                    val isDownloaded = fileExistsInPublicStorage(context, file.name)
                     
                     FileRow(
                         icon = if (file.isDirectory) Icons.Filled.Folder else Icons.AutoMirrored.Filled.InsertDriveFile,
@@ -1219,6 +1224,7 @@ private fun FilesTab(
                                 Thread {
                                     SshManager.downloadFile(file.path, localFile.absolutePath)
                                         .onSuccess {
+                                            saveToDevicePublicDownloads(context, file.name, localFile)
                                             (context as? android.app.Activity)?.runOnUiThread {
                                                 Toast.makeText(context, "Saved to SilicaScripts", Toast.LENGTH_SHORT).show()
                                                 onRefresh()
@@ -1399,6 +1405,49 @@ private fun SudoPasswordDialog(
             TextButton(onClick = onDismiss) { Text("Batal") }
         }
     )
+}
+
+private fun saveToDevicePublicDownloads(context: Context, fileName: String, sourceFile: File) {
+    try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val contentValues = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
+                put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/SilicaAssistant")
+            }
+            val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+            if (uri != null) {
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    sourceFile.inputStream().use { input -> input.copyTo(output) }
+                }
+            }
+        } else {
+            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            val destDir = File(downloadsDir, "SilicaAssistant").apply { if (!exists()) mkdirs() }
+            sourceFile.copyTo(File(destDir, fileName), overwrite = true)
+        }
+    } catch (_: Exception) {
+    }
+}
+
+private fun fileExistsInPublicStorage(context: Context, fileName: String): Boolean {
+    return try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val selection = "${MediaStore.Downloads.DISPLAY_NAME} = ?"
+            val selectionArgs = arrayOf(fileName)
+            val cursor = context.contentResolver.query(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                arrayOf(MediaStore.Downloads._ID),
+                selection, selectionArgs, null
+            )
+            cursor?.use { it.count > 0 } ?: false
+        } else {
+            val file = File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "SilicaAssistant"), fileName)
+            file.exists()
+        }
+    } catch (_: Exception) {
+        false
+    }
 }
 
 private fun refreshFiles(
