@@ -618,8 +618,12 @@ class OverlayService : Service() {
                         longPressHandler.removeCallbacksAndMessages(null)
                     }
 
-                    params.x = initialX + dx
-                    params.y = initialY + dy
+                    val vh = overlayView.height.coerceAtLeast(waifuHeight)
+                    val topBound = -(16 * resources.displayMetrics.density).toInt()
+                    val maxX = (displayWidth - waifuWidth).coerceAtLeast(0)
+                    val maxY = (displayHeight - vh).coerceAtLeast(0)
+                    params.x = (initialX + dx).coerceIn(0, maxX)
+                    params.y = (initialY + dy).coerceIn(topBound, maxY)
 
                     if (!GameModeManager.isGameMode) {
                         WaifuStateManager.currentState = WaifuState.RELAX
@@ -638,10 +642,11 @@ class OverlayService : Service() {
                     } else if (isMoving) {
                         // 🧲 snap to nearest edge
                         val density = resources.displayMetrics.density
+                        val vh = overlayView.height.coerceAtLeast(waifuHeight)
                         val snapThreshold = (80 * density).toInt()
                         val edgeMargin = (2 * density).toInt()
                         val cx = params.x + waifuWidth / 2
-                        val cy = params.y + waifuHeight / 2
+                        val cy = params.y + vh / 2
                         val distLeft = cx
                         val distRight = displayWidth - cx
                         val distTop = cy
@@ -652,7 +657,7 @@ class OverlayService : Service() {
                                 distLeft -> params.x = edgeMargin
                                 distRight -> params.x = displayWidth - waifuWidth - edgeMargin
                                 distTop -> params.y = edgeMargin
-                                distBottom -> params.y = displayHeight - waifuHeight - edgeMargin
+                                distBottom -> params.y = displayHeight - vh - edgeMargin
                             }
                             windowManager.updateViewLayout(overlayView, params)
                         }
