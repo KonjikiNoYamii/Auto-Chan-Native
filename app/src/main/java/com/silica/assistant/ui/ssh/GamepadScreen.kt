@@ -11,8 +11,11 @@ import android.net.Uri
 import android.view.MotionEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -323,6 +326,19 @@ fun GamepadScreen(onBack: () -> Unit) {
     var mouseSensitivity by remember { mutableFloatStateOf(gamepadPrefs.getFloat("mouse_sensitivity", 8f)) }
     var lookSensitivity by remember { mutableFloatStateOf(gamepadPrefs.getFloat("look_sensitivity", 12f)) }
 
+    var gestureLeft by remember { mutableStateOf(gamepadPrefs.getString("gesture_left", "space") ?: "space") }
+    var gestureRight by remember { mutableStateOf(gamepadPrefs.getString("gesture_right", "Escape") ?: "Escape") }
+    var gestureUp by remember { mutableStateOf(gamepadPrefs.getString("gesture_up", "f") ?: "f") }
+    var gestureDown by remember { mutableStateOf(gamepadPrefs.getString("gesture_down", "Tab") ?: "Tab") }
+    var gestureToast by remember { mutableStateOf("") }
+
+    LaunchedEffect(gestureToast) {
+        if (gestureToast.isNotEmpty()) {
+            delay(1200)
+            gestureToast = ""
+        }
+    }
+
     var batchDx by remember { mutableFloatStateOf(0f) }
     var batchDy by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(Unit) {
@@ -425,6 +441,24 @@ fun GamepadScreen(onBack: () -> Unit) {
             }
 
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+                GestureOverlay(
+                    gestureLeft = gestureLeft,
+                    gestureRight = gestureRight,
+                    gestureUp = gestureUp,
+                    gestureDown = gestureDown,
+                    onTrigger = { key, dir ->
+                        hapticClick(context)
+                        sendKeyTap(key, scope)
+                        gestureToast = when (dir) {
+                            "left" -> "← $key"
+                            "right" -> "→ $key"
+                            "up" -> "↑ $key"
+                            "down" -> "↓ $key"
+                            else -> key
+                        }
+                    }
+                )
+
                 layouts.forEachIndexed { index, layout ->
                     DraggableComponent(
                         layout = layout,
@@ -494,6 +528,14 @@ fun GamepadScreen(onBack: () -> Unit) {
                         color = Color.Yellow, fontSize = 10.sp
                     )
                 }
+
+                if (gestureToast.isNotEmpty()) {
+                    Text(
+                        gestureToast,
+                        modifier = Modifier.align(Alignment.Center).background(Color.Black.copy(0.7f), RoundedCornerShape(8.dp)).padding(horizontal = 20.dp, vertical = 10.dp),
+                        color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
@@ -511,39 +553,57 @@ fun GamepadScreen(onBack: () -> Unit) {
     if (showSettingsDialog) {
         var tempMouse by remember { mutableFloatStateOf(mouseSensitivity) }
         var tempLook by remember { mutableFloatStateOf(lookSensitivity) }
+        var tempGL by remember { mutableStateOf(gestureLeft) }
+        var tempGR by remember { mutableStateOf(gestureRight) }
+        var tempGU by remember { mutableStateOf(gestureUp) }
+        var tempGD by remember { mutableStateOf(gestureDown) }
+        var showGestureHelp by remember { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { showSettingsDialog = false },
-            title = { Text("Sensitivity", fontWeight = FontWeight.Bold) },
+            title = { Text("Settings", fontWeight = FontWeight.Bold) },
             text = {
-                Column {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
                     Text("Touchpad / Mouse", fontSize = 13.sp, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(4.dp))
-                    Slider(
-                        value = tempMouse,
-                        onValueChange = { tempMouse = it },
-                        valueRange = 1f..25f,
-                        steps = 23
-                    )
+                    Slider(value = tempMouse, onValueChange = { tempMouse = it }, valueRange = 1f..25f, steps = 23)
                     Text("${tempMouse.toInt()}x", fontSize = 11.sp, color = Color.Gray)
                     Spacer(Modifier.height(12.dp))
                     Text("Right Joystick (Look)", fontSize = 13.sp, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(4.dp))
-                    Slider(
-                        value = tempLook,
-                        onValueChange = { tempLook = it },
-                        valueRange = 1f..30f,
-                        steps = 28
-                    )
+                    Slider(value = tempLook, onValueChange = { tempLook = it }, valueRange = 1f..30f, steps = 28)
                     Text("${tempLook.toInt()}x", fontSize = 11.sp, color = Color.Gray)
+                    Spacer(Modifier.height(16.dp))
+                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.Gray.copy(alpha = 0.3f)))
                     Spacer(Modifier.height(12.dp))
-                    Text("Touchpad: drag=mouse, tap=click, 2-finger=right click, ↑↓=scroll", fontSize = 10.sp, color = Color.Gray)
+                    Text("Quick Gestures", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Text("Gesek cepat (>80px, <500ms) di area kosong untuk trigger SSH key", fontSize = 10.sp, color = Color.Gray)
+                    Spacer(Modifier.height(8.dp))
+                    GestureField("← Gesek Kiri", tempGL, { tempGL = it })
+                    GestureField("→ Gesek Kanan", tempGR, { tempGR = it })
+                    GestureField("↑ Gesek Atas", tempGU, { tempGU = it })
+                    GestureField("↓ Gesek Bawah", tempGD, { tempGD = it })
+                    Spacer(Modifier.height(4.dp))
+                    TextButton(onClick = { showGestureHelp = true }) { Text("Keyboard key names?", fontSize = 10.sp) }
+                    if (showGestureHelp) {
+                        Text("Gunakan nama key xdotool: space, Return, Escape, Tab, F1-F12, a-z, 0-9, Shift_L, Control_L, Alt_L, BackSpace, Delete, comma, period, slash, bracketleft, bracketright", fontSize = 9.sp, color = Color.Gray, lineHeight = 14.sp)
+                    }
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
                     mouseSensitivity = tempMouse
                     lookSensitivity = tempLook
-                    gamepadPrefs.edit().putFloat("mouse_sensitivity", tempMouse).putFloat("look_sensitivity", tempLook).apply()
+                    gestureLeft = tempGL; gestureRight = tempGR; gestureUp = tempGU; gestureDown = tempGD
+                    gamepadPrefs.edit().run {
+                        putFloat("mouse_sensitivity", tempMouse)
+                        putFloat("look_sensitivity", tempLook)
+                        putString("gesture_left", tempGL)
+                        putString("gesture_right", tempGR)
+                        putString("gesture_up", tempGU)
+                        putString("gesture_down", tempGD)
+                        apply()
+                    }
                     showSettingsDialog = false
                 }) { Text("Save") }
             },
@@ -562,6 +622,76 @@ private data class ComponentSizes(
     val triggerW: Float,
     val triggerH: Float,
 )
+
+@Composable
+private fun GestureField(label: String, value: String, onValueChange: (String) -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, fontSize = 12.sp, modifier = Modifier.width(110.dp))
+        OutlinedTextField(
+            value = value,
+            onValueChange = { onValueChange(it.take(20)) },
+            modifier = Modifier.width(120.dp),
+            singleLine = true,
+            textStyle = LocalTextStyle.current.copy(fontSize = 12.sp),
+            shape = RoundedCornerShape(8.dp)
+        )
+    }
+}
+
+@Composable
+private fun GestureOverlay(
+    gestureLeft: String,
+    gestureRight: String,
+    gestureUp: String,
+    gestureDown: String,
+    onTrigger: (key: String, dir: String) -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(gestureLeft, gestureRight, gestureUp, gestureDown) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val down = awaitFirstDown()
+                        val startX = down.position.x
+                        val startY = down.position.y
+                        val startNs = System.nanoTime()
+                        var lastX = startX
+                        var lastY = startY
+                        var wasSwipe = false
+
+                        do {
+                            val event = awaitPointerEvent(PointerEventPass.Final)
+                            val change = event.changes.firstOrNull() ?: break
+                            if (change.pressed) {
+                                lastX = change.position.x
+                                lastY = change.position.y
+                            } else {
+                                val elapsedMs = (System.nanoTime() - startNs) / 1_000_000L
+                                val dx = lastX - startX
+                                val dy = lastY - startY
+                                val adx = if (dx > 0) dx else -dx
+                                val ady = if (dy > 0) dy else -dy
+                                if (elapsedMs < 500 && maxOf(adx, ady) > 80f) {
+                                    if (adx > ady) {
+                                        onTrigger(if (dx < 0) gestureLeft else gestureRight, if (dx < 0) "left" else "right")
+                                    } else {
+                                        onTrigger(if (dy < 0) gestureUp else gestureDown, if (dy < 0) "up" else "down")
+                                    }
+                                    wasSwipe = true
+                                }
+                                break
+                            }
+                        } while (true)
+
+                        if (!wasSwipe) {
+                            down.consume()
+                        }
+                    }
+                }
+            }
+    )
+}
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
