@@ -61,7 +61,7 @@ import com.silica.assistant.ui.components.*
 import com.silica.assistant.ui.components.UpdateDialog
 import com.silica.assistant.ui.customize.CustomizeScreen
 import com.silica.assistant.ui.guide.GuideScreen
-import com.silica.assistant.ui.tutorial.OverlayTutorialScreen
+import com.silica.assistant.ui.tutorial.OnboardingScreen
 import com.silica.assistant.ui.chat.ChatScreen
 import com.silica.assistant.ui.debug.DebugScreen
 import com.silica.assistant.ui.ssh.LaptopInfoScreen
@@ -93,7 +93,7 @@ private sealed class Screen {
     data object Info : Screen()
     data object Guide : Screen()
     data object Customize : Screen()
-    data object OverlayTutorial : Screen()
+    data object Onboarding : Screen()
     data object Chat : Screen()
     data object Debug : Screen()
     data object AiTaskInput : Screen()
@@ -400,8 +400,8 @@ fun MainScreen(initialScreen: com.silica.assistant.ui.state.Screen = com.silica.
     }
 
     LaunchedEffect(Unit) {
-        if (!TutorialManager.isOverlayTutorialDone(context)) {
-            currentScreen = Screen.OverlayTutorial
+        if (!TutorialManager.isOnboardingDone(context)) {
+            currentScreen = Screen.Onboarding
         }
     }
 
@@ -581,10 +581,10 @@ fun MainScreen(initialScreen: com.silica.assistant.ui.state.Screen = com.silica.
                 com.silica.assistant.ui.profile.AchievementGalleryScreen(viewModel = viewModel, onBack = { currentScreen = Screen.Profile })
             }
         }
-        is Screen.OverlayTutorial -> {
-            OverlayTutorialScreen(
+        is Screen.Onboarding -> {
+            OnboardingScreen(
                 onDone = {
-                    TutorialManager.markOverlayTutorialDone(context)
+                    TutorialManager.markOnboardingDone(context)
                     currentScreen = Screen.Main
                 }
             )

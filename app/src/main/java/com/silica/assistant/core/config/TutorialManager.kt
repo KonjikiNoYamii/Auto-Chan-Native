@@ -5,17 +5,17 @@ import android.content.Context
 object TutorialManager {
 
     private const val PREFS_NAME = "tutorial_prefs"
-    private const val KEY_OVERLAY_TUTORIAL_DONE = "overlay_tutorial_done"
+    private const val KEY_ONBOARDING_DONE = "onboarding_done"
 
-    fun isOverlayTutorialDone(context: Context): Boolean {
+    fun isOnboardingDone(context: Context): Boolean {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getBoolean(KEY_OVERLAY_TUTORIAL_DONE, false)
+            .getBoolean(KEY_ONBOARDING_DONE, false)
     }
 
-    fun markOverlayTutorialDone(context: Context) {
+    fun markOnboardingDone(context: Context) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
-            .putBoolean(KEY_OVERLAY_TUTORIAL_DONE, true)
+            .putBoolean(KEY_ONBOARDING_DONE, true)
             .apply()
     }
 }
