@@ -298,6 +298,18 @@ class OverlayService : Service() {
         val chatDao = org.koin.core.context.GlobalContext.get().get<com.silica.assistant.core.llm.db.ChatDao>()
         WaifuNotifier.init(this, chatDao)
 
+        // Auto voice greeting on overlay start (delayed so views are ready)
+        handler.postDelayed({
+            val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+            val greet = when {
+                hour < 12 -> "Selamat pagi"
+                hour < 15 -> "Selamat siang"
+                hour < 18 -> "Selamat sore"
+                else -> "Selamat malam"
+            }
+            showBubble("$greet~ Ada yang bisa Yami bantu?")
+        }, 1500)
+
         // Instant check for Game Mode on start
         activityScope.launch {
             delay(1000) // Give accessibility service a moment to connect

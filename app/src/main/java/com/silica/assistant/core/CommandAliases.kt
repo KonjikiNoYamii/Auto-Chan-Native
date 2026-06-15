@@ -388,6 +388,48 @@ object CommandAliases {
             "wait for",
             "tunggu",
             "cari teks"
+        ),
+
+        "ssh_type" to listOf(
+            "laptop ketik",
+            "ketik di laptop",
+            "tulis di laptop",
+            "remote ketik",
+            "laptop type"
+        ),
+
+        "ssh_click_left" to listOf(
+            "laptop klik kiri",
+            "klik kiri laptop",
+            "remote klik kiri",
+            "laptop klik"
+        ),
+
+        "ssh_click_at" to listOf(
+            "laptop klik di",
+            "remote klik di",
+            "laptop klik koordinat",
+            "remote klik koordinat"
+        ),
+
+        "ssh_smart_click" to listOf(
+            "laptop klik tombol",
+            "remote klik tombol",
+            "laptop tekan tombol",
+            "remote tekan tombol"
+        ),
+
+        "ssh_click_right" to listOf(
+            "laptop klik kanan",
+            "klik kanan laptop",
+            "remote klik kanan"
+        ),
+
+        "ssh_key" to listOf(
+            "laptop tekan tombol",
+            "tekan tombol laptop",
+            "laptop tekan",
+            "remote tekan tombol"
         )
     )
 }

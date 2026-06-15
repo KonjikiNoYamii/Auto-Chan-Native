@@ -37,6 +37,12 @@ sealed class Action {
     data class SshCommand(val command: String) : Action()
     data class SshQuickCommand(val category: String) : Action()
     data class LaptopInfo(val rawInput: String) : Action()
+    data class SshType(val text: String) : Action()
+    object SshClickLeft : Action()
+    object SshClickRight : Action()
+    data class SshClickAt(val x: Int, val y: Int) : Action()
+    data class SshSmartClick(val label: String) : Action()
+    data class SshKey(val key: String) : Action()
 
     // AI
     object Chat : Action()

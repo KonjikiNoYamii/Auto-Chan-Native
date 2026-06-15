@@ -97,6 +97,7 @@ private sealed class Screen {
     data object Chat : Screen()
     data object Debug : Screen()
     data object AiTaskInput : Screen()
+    data object Gamepad : Screen()
     data object Affinity : Screen()
     data object Profile : Screen()
     data object QuestHistory : Screen()
@@ -118,8 +119,7 @@ fun MainScreen(initialScreen: com.silica.assistant.ui.state.Screen = com.silica.
                 com.silica.assistant.ui.state.Screen.Chat -> Screen.Chat
                 com.silica.assistant.ui.state.Screen.Social -> Screen.Social
                 else -> Screen.Main
-            }, 
-            referentialEqualityPolicy()
+            }
         ) 
     }
 
@@ -463,6 +463,13 @@ fun MainScreen(initialScreen: com.silica.assistant.ui.state.Screen = com.silica.
                                         "Profile" -> currentScreen = Screen.Profile
                                         "Guide" -> currentScreen = Screen.Guide
                                         "Customize" -> currentScreen = Screen.Customize
+                                        "Gamepad" -> {
+                                            if (!SshManager.isConnected()) {
+                                                Toast.makeText(context, "SSH not connected", Toast.LENGTH_SHORT).show()
+                                                return@QuickActionChips
+                                            }
+                                            currentScreen = Screen.Gamepad
+                                        }
                                         "Debug" -> currentScreen = Screen.Debug
                                     }
                                 }
@@ -591,6 +598,9 @@ fun MainScreen(initialScreen: com.silica.assistant.ui.state.Screen = com.silica.
             SwipeToDismissContainer(onDismiss = { currentScreen = Screen.Main }) {
                 DebugScreen(onBack = { currentScreen = Screen.Main })
             }
+        }
+        is Screen.Gamepad -> {
+            com.silica.assistant.ui.ssh.GamepadScreen(onBack = { currentScreen = Screen.Main })
         }
         is Screen.Auth -> {
             SwipeToDismissContainer(onDismiss = { currentScreen = Screen.Main }) {
@@ -831,6 +841,7 @@ private fun QuickActionChips(onChipClick: (String) -> Unit = {}) {
                     ChipData("Info", Icons.Filled.Info, DeepRose),
 
                     ChipData("Guide", Icons.AutoMirrored.Filled.MenuBook, DeepRose),
+                    ChipData("Gamepad", Icons.Filled.Gamepad, DeepRose),
             ChipData("Customize", Icons.Filled.Palette, DeepRose),
             ChipData("Debug", Icons.Filled.BugReport, DeepRose),
     )

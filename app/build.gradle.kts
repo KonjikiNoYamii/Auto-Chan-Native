@@ -22,8 +22,8 @@ android {
         applicationId = "com.silica.assistant"
         minSdk = 24
         targetSdk = 34
-        versionCode = 10
-        versionName = "2.3"
+        versionCode = 11
+        versionName = "2.4"
         
         val localProperties = Properties()
         val localPropertiesFile = rootProject.file("local.properties")
@@ -79,6 +79,7 @@ android {
 dependencies {
     implementation(libs.jsch)
     implementation(libs.ucrop)
+    implementation(libs.coil.compose)
     
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

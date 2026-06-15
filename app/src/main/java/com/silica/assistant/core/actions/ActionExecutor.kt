@@ -207,6 +207,127 @@ object ActionExecutor : KoinComponent {
                         }
                 }.start()
             }
+            is Action.SshType -> {
+                if (!SshManager.isConnected()) {
+                    OverlayEventBus.onBubble?.invoke("SSH tidak terhubung")
+                    return
+                }
+                Thread {
+                    SshManager.executeCommand("xdotool type '${action.text}'")
+                        .onSuccess { OverlayEventBus.onBubble?.invoke("Mengetik: ${action.text}") }
+                        .onFailure { e -> OverlayEventBus.onBubble?.invoke("Gagal mengetik: ${e.message}") }
+                }.start()
+            }
+            is Action.SshClickLeft -> {
+                if (!SshManager.isConnected()) {
+                    OverlayEventBus.onBubble?.invoke("SSH tidak terhubung")
+                    return
+                }
+                Thread {
+                    SshManager.executeCommand("xdotool click 1")
+                        .onSuccess { OverlayEventBus.onBubble?.invoke("Klik kiri laptop") }
+                        .onFailure { e -> OverlayEventBus.onBubble?.invoke("Gagal klik: ${e.message}") }
+                }.start()
+            }
+            is Action.SshClickRight -> {
+                if (!SshManager.isConnected()) {
+                    OverlayEventBus.onBubble?.invoke("SSH tidak terhubung")
+                    return
+                }
+                Thread {
+                    SshManager.executeCommand("xdotool click 3")
+                        .onSuccess { OverlayEventBus.onBubble?.invoke("Klik kanan laptop") }
+                        .onFailure { e -> OverlayEventBus.onBubble?.invoke("Gagal klik: ${e.message}") }
+                }.start()
+            }
+            is Action.SshClickAt -> {
+                if (!SshManager.isConnected()) {
+                    OverlayEventBus.onBubble?.invoke("SSH tidak terhubung")
+                    return
+                }
+                Thread {
+                    SshManager.executeCommand("xdotool mousemove ${action.x} ${action.y} click 1")
+                        .onSuccess { OverlayEventBus.onBubble?.invoke("Klik laptop di (${action.x}, ${action.y})") }
+                        .onFailure { e -> OverlayEventBus.onBubble?.invoke("Gagal klik koordinat: ${e.message}") }
+                }.start()
+            }
+            is Action.SshSmartClick -> {
+                if (!SshManager.isConnected()) {
+                    OverlayEventBus.onBubble?.invoke("SSH tidak terhubung")
+                    return
+                }
+                OverlayEventBus.onBubble?.invoke("Mencari tombol \"${action.label}\"...")
+                
+                Thread {
+                    try {
+                        // 1. Take screenshot on laptop
+                        val remotePath = "/tmp/silica_snap.jpg"
+                        SshManager.executeCommand("scrot $remotePath")
+                            .onFailure { SshManager.executeCommand("gnome-screenshot -f $remotePath") }
+                            .onFailure { throw Exception("Gagal screenshot laptop (scrot/gnome-screenshot tidak ditemukan?)") }
+
+                        // 2. Download screenshot
+                        val localFile = java.io.File(context.cacheDir, "ssh_snap.jpg")
+                        SshManager.downloadFile(remotePath, localFile.absolutePath).getOrThrow()
+
+                        // 3. Analyze with AI
+                        val bytes = localFile.readBytes()
+                        val prompt = """
+                            Temukan koordinat X dan Y dari tombol atau elemen berlabel "${action.label}" pada gambar ini.
+                            Format keluaran HANYA JSON seperti ini: {"x": 100, "y": 200}
+                            PENTING: Koordinat harus merujuk pada pusat elemen tersebut.
+                            Jika tidak ditemukan, balas {"error": "not found"}
+                        """.trimIndent()
+                        
+                        kotlinx.coroutines.runBlocking {
+                            val result = com.silica.assistant.core.llm.LlmClient.describeScreen("Remote Laptop", "", bytes, prompt)
+                            if (result != null) {
+                                try {
+                                    val json = org.json.JSONObject(result.substringAfter("{").substringBeforeLast("}") + "}")
+                                    if (json.has("x") && json.has("y")) {
+                                        val x = json.getInt("x")
+                                        val y = json.getInt("y")
+                                        SshManager.executeCommand("xdotool mousemove $x $y click 1")
+                                            .onSuccess { OverlayEventBus.onBubble?.invoke("Berhasil klik \"${action.label}\"!") }
+                                            .onFailure { OverlayEventBus.onBubble?.invoke("Gagal klik koordinat AI") }
+                                    } else {
+                                        OverlayEventBus.onBubble?.invoke("Aku nggak nemu tombol \"${action.label}\" di layar laptopmu.")
+                                    }
+                                } catch (e: Exception) {
+                                    OverlayEventBus.onBubble?.invoke("Gagal memproses jawaban AI.")
+                                }
+                            } else {
+                                OverlayEventBus.onBubble?.invoke("AI tidak memberikan jawaban.")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        OverlayEventBus.onBubble?.invoke("Error: ${e.message}")
+                    }
+                }.start()
+            }
+            is Action.SshKey -> {
+                if (!SshManager.isConnected()) {
+                    OverlayEventBus.onBubble?.invoke("SSH tidak terhubung")
+                    return
+                }
+                Thread {
+                    // Map common names to xdotool keys
+                    val key = when (action.key.lowercase()) {
+                        "enter", "masuk" -> "Return"
+                        "spasi", "space" -> "space"
+                        "hapus", "backspace" -> "BackSpace"
+                        "atas", "up" -> "Up"
+                        "bawah", "down" -> "Down"
+                        "kiri", "left" -> "Left"
+                        "kanan", "right" -> "Right"
+                        "esc", "escape" -> "Escape"
+                        else -> action.key
+                    }
+                    SshManager.executeCommand("xdotool key $key")
+                        .onSuccess { OverlayEventBus.onBubble?.invoke("Menekan tombol $key") }
+                        .onFailure { e -> OverlayEventBus.onBubble?.invoke("Gagal tekan tombol: ${e.message}") }
+                }.start()
+            }
 
             // ── AI ──
             is Action.Chat -> {

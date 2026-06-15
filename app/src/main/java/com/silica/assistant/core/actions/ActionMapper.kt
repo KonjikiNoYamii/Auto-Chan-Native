@@ -143,6 +143,38 @@ object ActionMapper {
                 Action.WaitForText(text)
             }
 
+            "ssh_type" -> {
+                val text = rawInput
+                    .removePrefix("laptop ketik ").removePrefix("ketik di laptop ")
+                    .removePrefix("tulis di laptop ").removePrefix("remote ketik ")
+                    .removePrefix("laptop type ").trim()
+                Action.SshType(text)
+            }
+            "ssh_click_left" -> Action.SshClickLeft
+            "ssh_click_right" -> Action.SshClickRight
+            "ssh_click_at" -> {
+                val coords = Regex("\\d+").findAll(rawInput).map { it.value.toInt() }.toList()
+                if (coords.size >= 2) {
+                    Action.SshClickAt(coords[0], coords[1])
+                } else {
+                    Action.SshClickLeft
+                }
+            }
+            "ssh_smart_click" -> {
+                val label = rawInput
+                    .removePrefix("laptop klik tombol ").removePrefix("remote klik tombol ")
+                    .removePrefix("laptop tekan tombol ").removePrefix("remote tekan tombol ")
+                    .trim()
+                Action.SshSmartClick(label)
+            }
+            "ssh_key" -> {
+                val key = rawInput
+                    .removePrefix("laptop tekan tombol ").removePrefix("tekan tombol laptop ")
+                    .removePrefix("laptop tekan ").removePrefix("remote tekan tombol ")
+                    .trim()
+                Action.SshKey(key)
+            }
+
             else -> Action.Unknown(rawInput)
         }
     }

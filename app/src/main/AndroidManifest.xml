@@ -15,6 +15,7 @@
         tools:ignore="ProtectedPermissions"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
     <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
 
     <queries>
 
@@ -38,6 +39,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
             <intent-filter>
@@ -64,8 +66,9 @@
 
         <activity
             android:name="com.yalantis.ucrop.UCropActivity"
-            android:screenOrientation="portrait"
-            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+            android:screenOrientation="sensor"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+            android:configChanges="orientation|screenSize" />
 
         <service
             android:name=".service.OverlayService"

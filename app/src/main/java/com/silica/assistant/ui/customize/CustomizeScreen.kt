@@ -4,6 +4,7 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -32,9 +33,9 @@ import java.io.File
 @Composable
 fun CustomizeScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val scroll = rememberScrollState()
     var refreshKey by remember { mutableIntStateOf(0) }
     var pendingType by remember { mutableStateOf<CustomAssetManager.AssetType?>(null) }
+    var selectedTab by remember { mutableIntStateOf(0) }
 
     val uCropLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -74,98 +75,120 @@ fun CustomizeScreen(onBack: () -> Unit) {
     fun pickImage(type: CustomAssetManager.AssetType) { pendingType = type; pickLauncher.launch("image/*") }
     fun pickAudio(type: CustomAssetManager.AssetType) { pendingType = type; pickLauncher.launch("audio/*") }
 
+    val tabs = listOf(
+        "Profil" to Icons.Default.Person,
+        "Visual" to Icons.Default.Palette,
+        "Suara" to Icons.Default.VolumeUp,
+        "Sapaan" to Icons.Default.AccessTime
+    )
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Customize Assistant", fontWeight = FontWeight.Bold) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } }
-            )
+            Column {
+                TopAppBar(
+                    title = { Text("Lemari Kustomisasi", fontWeight = FontWeight.Bold) },
+                    navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
+                    actions = {
+                        IconButton(onClick = { CustomAssetManager.resetAll(context); refreshKey++ }) {
+                            Icon(Icons.Default.DeleteSweep, "Reset All", tint = DeepRose)
+                        }
+                    }
+                )
+                ScrollableTabRow(
+                    selectedTabIndex = selectedTab,
+                    edgePadding = 16.dp,
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = DeepRose,
+                    divider = {}
+                ) {
+                    tabs.forEachIndexed { index, (label, icon) ->
+                        Tab(
+                            selected = selectedTab == index,
+                            onClick = { selectedTab = index },
+                            text = { Text(label, fontSize = 12.sp) },
+                            icon = { Icon(icon, null, modifier = Modifier.size(18.dp)) }
+                        )
+                    }
+                }
+            }
         }
     ) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .background(MaterialTheme.colorScheme.background)
-                .verticalScroll(scroll)
-                .padding(16.dp)
         ) {
-            // 👤 PROFIL & IDENTITAS
-            SettingsGroup("Profil Assistant", Icons.Default.Face) {
-                IdentitasFields()
+            Crossfade(targetState = selectedTab, label = "TabChange") { tabIndex ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp)
+                ) {
+                    when (tabIndex) {
+                        0 -> { // PROFIL
+                            SettingsGroup("Identitas Assistant", Icons.Default.Face) {
+                                IdentitasFields()
+                            }
+                        }
+                        1 -> { // VISUAL
+                            SettingsGroup("Ukuran Overlay", Icons.Default.AspectRatio) {
+                                SizeSliders()
+                            }
+                            SettingsGroup("Aset Gambar", Icons.Default.Image) {
+                                AssetRow("Header Menu", CustomAssetManager.AssetType.HEADER, refreshKey, onPick = { pickImage(it) }, onReset = { refreshKey++ })
+                                AssetRow("Icon Aplikasi", CustomAssetManager.AssetType.ICON, refreshKey, onPick = { pickImage(it) }, onReset = { refreshKey++ })
+                                AssetRow("Chat Icon (AI)", CustomAssetManager.AssetType.CHAT_ICON, refreshKey, onPick = { pickImage(it) }, onReset = { refreshKey++ })
+                            }
+                            SettingsGroup("Ekspresi Karakter", Icons.Default.EmojiEmotions) {
+                                AssetRow("IDLE (Diam)", CustomAssetManager.AssetType.WAIFU_IDLE, refreshKey, onPick = { pickImage(it) }, onReset = { refreshKey++ })
+                                AssetRow("HAPPY (Senang)", CustomAssetManager.AssetType.WAIFU_HAPPY, refreshKey, onPick = { pickImage(it) }, onReset = { refreshKey++ })
+                                AssetRow("LISTENING (Dengar)", CustomAssetManager.AssetType.WAIFU_LISTENING, refreshKey, onPick = { pickImage(it) }, onReset = { refreshKey++ })
+                            }
+                        }
+                        2 -> { // SUARA
+                            SettingsGroup("Efek & Suara Inti", Icons.Default.MusicNote) {
+                                AssetRow("Sound Pop (Bubble)", CustomAssetManager.AssetType.POP_SOUND, refreshKey, onPick = { pickAudio(it) }, onReset = { refreshKey++ }, isAudio = true)
+                            }
+                            SettingsGroup("Daftar Voice Lines", Icons.Default.RecordVoiceOver) {
+                                VoiceCategory("Sapaan & Waktu", listOf(
+                                    "Pagi (Ohayou)" to CustomAssetManager.AssetType.VOICE_MORNING,
+                                    "Siang (Konnichiwa)" to CustomAssetManager.AssetType.VOICE_AFTERNOON,
+                                    "Malam (Konbanwa)" to CustomAssetManager.AssetType.VOICE_NIGHT,
+                                    "Selamat Datang" to CustomAssetManager.AssetType.VOICE_WELCOME_BACK
+                                ), refreshKey, onPick = { pickAudio(it) }, onReset = { _ -> refreshKey++ }, onLabelChange = { _, _ -> refreshKey++ })
+
+                                VoiceCategory("Respon & Jawaban", listOf(
+                                    "Ya/Baik (Haik)" to CustomAssetManager.AssetType.VOICE_YES,
+                                    "Ya! (Ceria)" to CustomAssetManager.AssetType.VOICE_YES_HAPPY,
+                                    "Mengerti (Kyoka)" to CustomAssetManager.AssetType.VOICE_UNDERSTOOD,
+                                    "Paham (Wakarimashita)" to CustomAssetManager.AssetType.VOICE_UNDERSTOOD_COLD,
+                                    "Terima Kasih" to CustomAssetManager.AssetType.VOICE_THANKS
+                                ), refreshKey, onPick = { pickAudio(it) }, onReset = { _ -> refreshKey++ }, onLabelChange = { _, _ -> refreshKey++ })
+
+                                VoiceCategory("Reaksi & Kepribadian", listOf(
+                                    "Harenchi (Ecchi!)" to CustomAssetManager.AssetType.VOICE_ECCHI,
+                                    "Yamete!" to CustomAssetManager.AssetType.VOICE_YAMETE,
+                                    "Tertawa (Fufu)" to CustomAssetManager.AssetType.VOICE_LAUGH,
+                                    "Pujian (Subarashii)" to CustomAssetManager.AssetType.VOICE_GREAT
+                                ), refreshKey, onPick = { pickAudio(it) }, onReset = { _ -> refreshKey++ }, onLabelChange = { _, _ -> refreshKey++ })
+
+                                VoiceCategory("Sistem & Progres", listOf(
+                                    "Rank Up!" to CustomAssetManager.AssetType.VOICE_RANKUP,
+                                    "Misi Selesai" to CustomAssetManager.AssetType.VOICE_MISSION_DONE
+                                ), refreshKey, onPick = { pickAudio(it) }, onReset = { _ -> refreshKey++ }, onLabelChange = { _, _ -> refreshKey++ })
+                            }
+                        }
+                        3 -> { // SAPAAN TEKS
+                            SettingsGroup("Teks Sapaan Otomatis", Icons.Default.ChatBubble) {
+                                GreetingsSection(refreshKey, onUpdate = { refreshKey++ })
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(48.dp))
+                }
             }
-
-            // 📐 UKURAN OVERLAY
-            SettingsGroup("Ukuran Tampilan", Icons.Default.AspectRatio) {
-                SizeSliders()
-            }
-
-            // 🎨 VISUAL ASSETS
-            SettingsGroup("Tampilan Visual", Icons.Default.Palette) {
-                AssetRow("Header Menu", CustomAssetManager.AssetType.HEADER, refreshKey, onPick = { pickImage(it) }, onReset = { refreshKey++ })
-                AssetRow("Icon Aplikasi", CustomAssetManager.AssetType.ICON, refreshKey, onPick = { pickImage(it) }, onReset = { refreshKey++ })
-                AssetRow("Chat Icon (AI)", CustomAssetManager.AssetType.CHAT_ICON, refreshKey, onPick = { pickImage(it) }, onReset = { refreshKey++ })
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                Text("Ekspresi Karakter", style = MaterialTheme.typography.labelMedium, color = DeepRose)
-                AssetRow("IDLE (Diam)", CustomAssetManager.AssetType.WAIFU_IDLE, refreshKey, onPick = { pickImage(it) }, onReset = { refreshKey++ })
-                AssetRow("HAPPY (Senang)", CustomAssetManager.AssetType.WAIFU_HAPPY, refreshKey, onPick = { pickImage(it) }, onReset = { refreshKey++ })
-                AssetRow("LISTENING (Dengar)", CustomAssetManager.AssetType.WAIFU_LISTENING, refreshKey, onPick = { pickImage(it) }, onReset = { refreshKey++ })
-            }
-
-            // 🔊 SUARA & AUDIO
-            SettingsGroup("Suara & Audio", Icons.Default.VolumeUp) {
-                AssetRow("Sound Pop (Bubble)", CustomAssetManager.AssetType.POP_SOUND, refreshKey, onPick = { pickAudio(it) }, onReset = { refreshKey++ }, isAudio = true)
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(alpha = 0.2f)
-                
-                // Voice Lines dicitai berdasarkan kategori
-                VoiceCategory("Sapaan & Waktu", listOf(
-                    "Pagi (Ohayou)" to CustomAssetManager.AssetType.VOICE_MORNING,
-                    "Siang (Konnichiwa)" to CustomAssetManager.AssetType.VOICE_AFTERNOON,
-                    "Malam (Konbanwa)" to CustomAssetManager.AssetType.VOICE_NIGHT,
-                    "Selamat Datang" to CustomAssetManager.AssetType.VOICE_WELCOME_BACK
-                ), refreshKey, onPick = { pickAudio(it) }, onReset = { _ -> refreshKey++ }, onLabelChange = { _, _ -> refreshKey++ })
-
-                VoiceCategory("Respon & Jawaban", listOf(
-                    "Ya/Baik (Haik)" to CustomAssetManager.AssetType.VOICE_YES,
-                    "Ya! (Ceria)" to CustomAssetManager.AssetType.VOICE_YES_HAPPY,
-                    "Mengerti (Kyoka)" to CustomAssetManager.AssetType.VOICE_UNDERSTOOD,
-                    "Paham (Wakarimashita)" to CustomAssetManager.AssetType.VOICE_UNDERSTOOD_COLD,
-                    "Terima Kasih" to CustomAssetManager.AssetType.VOICE_THANKS
-                ), refreshKey, onPick = { pickAudio(it) }, onReset = { _ -> refreshKey++ }, onLabelChange = { _, _ -> refreshKey++ })
-
-                VoiceCategory("Reaksi & Kepribadian", listOf(
-                    "Harenchi (Ecchi!)" to CustomAssetManager.AssetType.VOICE_ECCHI,
-                    "Yamete!" to CustomAssetManager.AssetType.VOICE_YAMETE,
-                    "Tertawa (Fufu)" to CustomAssetManager.AssetType.VOICE_LAUGH,
-                    "Pujian (Subarashii)" to CustomAssetManager.AssetType.VOICE_GREAT
-                ), refreshKey, onPick = { pickAudio(it) }, onReset = { _ -> refreshKey++ }, onLabelChange = { _, _ -> refreshKey++ })
-
-                VoiceCategory("Sistem & Progres", listOf(
-                    "Rank Up!" to CustomAssetManager.AssetType.VOICE_RANKUP,
-                    "Misi Selesai" to CustomAssetManager.AssetType.VOICE_MISSION_DONE
-                ), refreshKey, onPick = { pickAudio(it) }, onReset = { _ -> refreshKey++ }, onLabelChange = { _, _ -> refreshKey++ })
-            }
-
-            // ⏰ SAPAAN TEKS
-            SettingsGroup("Sapaan Otomatis (Teks)", Icons.Default.AccessTime) {
-                GreetingsSection(refreshKey, onUpdate = { refreshKey++ })
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-            OutlinedButton(
-                onClick = { CustomAssetManager.resetAll(context); refreshKey++ },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = DeepRose),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Default.DeleteSweep, null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Reset Semua ke Default")
-            }
-            Spacer(modifier = Modifier.height(48.dp))
         }
     }
 }
@@ -174,12 +197,20 @@ fun CustomizeScreen(onBack: () -> Unit) {
 private fun SettingsGroup(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, null, tint = DeepRose, modifier = Modifier.size(20.dp))
+                Surface(
+                    color = DeepRose.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(icon, null, tint = DeepRose, modifier = Modifier.size(18.dp))
+                    }
+                }
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             }
@@ -205,15 +236,18 @@ private fun IdentitasFields() {
 @Composable
 private fun InputField(label: String, value: String, placeholder: String = "", onValueChange: (String) -> Unit) {
     Column {
-        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = DeepRose, modifier = Modifier.padding(start = 4.dp, bottom = 4.dp))
+        Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = DeepRose, modifier = Modifier.padding(start = 4.dp, bottom = 4.dp))
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(16.dp),
             placeholder = { Text(placeholder, fontSize = 14.sp) },
             textStyle = MaterialTheme.typography.bodyMedium,
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = DeepRose)
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = DeepRose,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+            )
         )
     }
 }
@@ -257,9 +291,15 @@ private fun AssetRow(label: String, type: CustomAssetManager.AssetType, refreshK
     var isEditing by remember { mutableStateOf(false) }
     var editedLabel by remember { mutableStateOf(label) }
 
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(modifier = Modifier.size(36.dp).background(if (isCustom) DeepRose.copy(alpha = 0.1f) else Color.Gray.copy(alpha = 0.1f), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
-            Icon(if (isAudio) Icons.Default.Audiotrack else Icons.Default.Image, null, tint = if (isCustom) DeepRose else Color.Gray, modifier = Modifier.size(18.dp))
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Surface(
+            color = if (isCustom) DeepRose.copy(alpha = 0.1f) else Color.Gray.copy(alpha = 0.05f),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.size(40.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(if (isAudio) Icons.Default.Audiotrack else Icons.Default.Image, null, tint = if (isCustom) DeepRose else Color.Gray, modifier = Modifier.size(20.dp))
+            }
         }
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -273,9 +313,9 @@ private fun AssetRow(label: String, type: CustomAssetManager.AssetType, refreshK
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(label, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                    if (onLabelEdit != null) { IconButton(onClick = { isEditing = true }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Edit, null, modifier = Modifier.size(10.dp)) } }
+                    if (onLabelEdit != null) { IconButton(onClick = { isEditing = true }, modifier = Modifier.size(24.dp)) { Icon(Icons.Default.Edit, null, modifier = Modifier.size(12.dp)) } }
                 }
-                Text(if (isCustom) "Kustom" else "Default", fontSize = 10.sp, color = if (isCustom) DeepRose else Color.Gray)
+                Text(if (isCustom) "Terpasang kustom" else "Aset bawaan", fontSize = 10.sp, color = if (isCustom) DeepRose else Color.Gray)
             }
         }
         if (isAudio) {
@@ -294,20 +334,16 @@ private fun GreetingsSection(refreshKey: Int, onUpdate: () -> Unit) {
     val greetings = remember(refreshKey) { CustomAssetManager.getAllCustomGreetings(context) }
     val fields = listOf(Triple("Pagi", "greeting_morning", "Selamat pagi"), Triple("Siang", "greeting_afternoon", "Selamat siang"), Triple("Sore", "greeting_evening", "Selamat sore"), Triple("Malam", "greeting_night", "Selamat malam"))
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         fields.forEach { (label, key, default) ->
             var text by remember(key, refreshKey) { mutableStateOf(greetings[key] ?: default) }
             OutlinedTextField(
                 value = text, onValueChange = { text = it },
-                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
                 label = { Text(label, fontSize = 12.sp) },
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = DeepRose),
                 trailingIcon = { IconButton(onClick = { CustomAssetManager.saveGreeting(context, key, text); onUpdate() }) { Icon(Icons.Default.Save, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp)) } }
             )
         }
     }
-}
-
-@Composable
-private fun HorizontalDivider(alpha: Float = 0.1f) {
-    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)))
 }

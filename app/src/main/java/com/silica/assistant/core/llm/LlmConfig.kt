@@ -23,6 +23,7 @@ object LlmConfig : KoinComponent {
     var localApiKey: String = ""
     var useLocalPrimary: Boolean = true
 
+    var model: String = "llama3-8b-8192"
     var personalityPrompt: String = """
         Nama kamu adalah Yami. Kamu adalah alien assassin dengan kepribadian 'Kuudere' yang kuat.
         
