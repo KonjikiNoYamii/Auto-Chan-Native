@@ -66,6 +66,51 @@ data class GamepadLayout(
     val y: Float
 )
 
+data class MacroStep(val x: Int, val y: Int, val delayMs: Long)
+
+private fun saveMacro(context: Context, steps: List<MacroStep>) {
+    val arr = JSONArray()
+    steps.forEach { s ->
+        arr.put(JSONObject().apply {
+            put("x", s.x); put("y", s.y); put("delay", s.delayMs)
+        })
+    }
+    context.getSharedPreferences("gamepad_prefs", Context.MODE_PRIVATE)
+        .edit().putString("skip_macro", arr.toString()).apply()
+}
+
+private fun loadMacro(context: Context): List<MacroStep> {
+    val json = context.getSharedPreferences("gamepad_prefs", Context.MODE_PRIVATE)
+        .getString("skip_macro", null) ?: return emptyList()
+    return try {
+        val arr = JSONArray(json)
+        (0 until arr.length()).map { i ->
+            val obj = arr.getJSONObject(i)
+            MacroStep(obj.getInt("x"), obj.getInt("y"), obj.getLong("delay"))
+        }
+    } catch (_: Exception) { emptyList() }
+}
+
+private fun playMacro(steps: List<MacroStep>, scope: CoroutineScope) {
+    if (steps.isEmpty()) return
+    scope.launch(Dispatchers.IO) {
+        steps.forEach { step ->
+            SshManager.executeCommand("export DISPLAY=:0 && xdotool mousemove ${step.x} ${step.y} && xdotool click 1")
+            if (step.delayMs > 0) delay(step.delayMs)
+        }
+    }
+}
+
+private fun recordStep(scope: CoroutineScope, onRecorded: (MacroStep) -> Unit) {
+    scope.launch(Dispatchers.IO) {
+        val result = SshManager.executeCommand("export DISPLAY=:0 && xdotool getmouselocation")
+        val out = result.getOrNull() ?: return@launch
+        val x = out.split(" ").getOrNull(0)?.removePrefix("x:")?.toIntOrNull() ?: return@launch
+        val y = out.split(" ").getOrNull(1)?.removePrefix("y:")?.toIntOrNull() ?: return@launch
+        onRecorded(MacroStep(x, y, 600L))
+    }
+}
+
 private fun hapticClick(context: Context) {
     try {
         val vib = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -326,11 +371,16 @@ fun GamepadScreen(onBack: () -> Unit) {
     var mouseSensitivity by remember { mutableFloatStateOf(gamepadPrefs.getFloat("mouse_sensitivity", 8f)) }
     var lookSensitivity by remember { mutableFloatStateOf(gamepadPrefs.getFloat("look_sensitivity", 12f)) }
 
-    var gestureLeft by remember { mutableStateOf(gamepadPrefs.getString("gesture_left", "space") ?: "space") }
+    var gestureLeft by remember { mutableStateOf(gamepadPrefs.getString("gesture_left", "click_1") ?: "click_1") }
     var gestureRight by remember { mutableStateOf(gamepadPrefs.getString("gesture_right", "Escape") ?: "Escape") }
     var gestureUp by remember { mutableStateOf(gamepadPrefs.getString("gesture_up", "f") ?: "f") }
     var gestureDown by remember { mutableStateOf(gamepadPrefs.getString("gesture_down", "Tab") ?: "Tab") }
     var gestureToast by remember { mutableStateOf("") }
+
+    var macroSteps by remember { mutableStateOf(loadMacro(context)) }
+    var isRecording by remember { mutableStateOf(false) }
+    var recordStepCount by remember { mutableIntStateOf(0) }
+    var lastRecordTime by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(gestureToast) {
         if (gestureToast.isNotEmpty()) {
@@ -409,6 +459,32 @@ fun GamepadScreen(onBack: () -> Unit) {
                             Icon(Icons.Default.Add, contentDescription = "Add Key", tint = Color.White)
                         }
                     } else {
+                        IconButton(onClick = {
+                            if (isRecording) {
+                                isRecording = false
+                                saveMacro(context, macroSteps)
+                                Toast.makeText(context, "Macro saved: ${macroSteps.size} steps", Toast.LENGTH_SHORT).show()
+                            } else {
+                                isRecording = true
+                                recordStepCount = 0
+                                lastRecordTime = System.currentTimeMillis()
+                                Toast.makeText(context, "Recording: place mouse & tap touchpad", Toast.LENGTH_LONG).show()
+                            }
+                        }) {
+                            Icon(
+                                if (isRecording) Icons.Default.Stop else Icons.Default.FiberManualRecord,
+                                contentDescription = if (isRecording) "Stop Record" else "Record Macro",
+                                tint = if (isRecording) Color.Red else Color.White
+                            )
+                        }
+                        if (macroSteps.isNotEmpty() && !isRecording) {
+                            IconButton(onClick = {
+                                playMacro(macroSteps, scope)
+                                gestureToast = "▶ MACRO (${macroSteps.size} steps)"
+                            }) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = "Play Macro", tint = Color.Green)
+                            }
+                        }
                         IconButton(onClick = { showSettingsDialog = true }) {
                             Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color.White)
                         }
@@ -442,19 +518,23 @@ fun GamepadScreen(onBack: () -> Unit) {
 
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                 GestureOverlay(
-                    gestureLeft = gestureLeft,
-                    gestureRight = gestureRight,
-                    gestureUp = gestureUp,
-                    gestureDown = gestureDown,
-                    onTrigger = { key, dir ->
+                    onTrigger = { dir ->
                         hapticClick(context)
-                        sendKeyTap(key, scope)
-                        gestureToast = when (dir) {
-                            "left" -> "← $key"
-                            "right" -> "→ $key"
-                            "up" -> "↑ $key"
-                            "down" -> "↓ $key"
-                            else -> key
+                        if (isRecording) {
+                            recordStep(scope) { step ->
+                                val now = System.currentTimeMillis()
+                                val adjusted = if (recordStepCount > 0) step.copy(delayMs = (now - lastRecordTime).coerceAtMost(5000)) else step
+                                macroSteps = macroSteps + adjusted
+                                recordStepCount++
+                                lastRecordTime = now
+                                gestureToast = "📌 Step $recordStepCount: (${step.x}, ${step.y})"
+                                Toast.makeText(context, "Step $recordStepCount recorded: (${step.x}, ${step.y})", Toast.LENGTH_SHORT).show()
+                            }
+                        } else if (dir == "left" && macroSteps.isNotEmpty()) {
+                            playMacro(macroSteps, scope)
+                            gestureToast = "▶ MACRO (${macroSteps.size} steps)"
+                        } else if (dir == "left") {
+                            gestureToast = "← CLICK"
                         }
                     }
                 )
@@ -493,7 +573,20 @@ fun GamepadScreen(onBack: () -> Unit) {
                                 widthDp = componentSizes.touchpadW,
                                 heightDp = componentSizes.touchpadH,
                                 onMove = { dx, dy -> batchDx += dx * mouseSensitivity; batchDy += dy * mouseSensitivity },
-                                onClick = { handleMouseClick(scope) },
+                                onClick = {
+                                    if (isRecording) {
+                                        recordStep(scope) { step ->
+                                            val now = System.currentTimeMillis()
+                                            val adjusted = if (recordStepCount > 0) step.copy(delayMs = (now - lastRecordTime).coerceAtMost(5000)) else step
+                                            macroSteps = macroSteps + adjusted
+                                            recordStepCount++
+                                            lastRecordTime = now
+                                            gestureToast = "📌 Step $recordStepCount: (${step.x}, ${step.y})"
+                                        }
+                                    } else {
+                                        handleMouseClick(scope)
+                                    }
+                                },
                                 onRightClick = { handleMouseRightClick(scope) },
                                 onScroll = { delta -> handleScroll(delta, scope) }
                             )
@@ -534,6 +627,25 @@ fun GamepadScreen(onBack: () -> Unit) {
                         gestureToast,
                         modifier = Modifier.align(Alignment.Center).background(Color.Black.copy(0.7f), RoundedCornerShape(8.dp)).padding(horizontal = 20.dp, vertical = 10.dp),
                         color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold
+                    )
+                }
+
+                if (isRecording) {
+                    Box(
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp)
+                            .background(Color.Red.copy(0.8f), RoundedCornerShape(20.dp)).padding(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.size(10.dp).background(Color.White, CircleShape))
+                            Spacer(Modifier.width(6.dp))
+                            Text("REC ${recordStepCount}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Text(
+                        "Tap touchpad or swipe ← to record step",
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp)
+                            .background(Color.Red.copy(0.6f), RoundedCornerShape(4.dp)).padding(6.dp),
+                        color = Color.White, fontSize = 10.sp
                     )
                 }
             }
@@ -586,7 +698,7 @@ fun GamepadScreen(onBack: () -> Unit) {
                     Spacer(Modifier.height(4.dp))
                     TextButton(onClick = { showGestureHelp = true }) { Text("Keyboard key names?", fontSize = 10.sp) }
                     if (showGestureHelp) {
-                        Text("Gunakan nama key xdotool: space, Return, Escape, Tab, F1-F12, a-z, 0-9, Shift_L, Control_L, Alt_L, BackSpace, Delete, comma, period, slash, bracketleft, bracketright", fontSize = 9.sp, color = Color.Gray, lineHeight = 14.sp)
+                        Text("Gunakan nama key xdotool: space, Return, Escape, Tab, a-z, 0-9, Shift_L, Control_L, F1-F12. Atau click_1 (klik kiri), click_3 (klik kanan), click_4 (scroll up), click_5 (scroll down)", fontSize = 9.sp, color = Color.Gray, lineHeight = 14.sp)
                     }
                 }
             },
@@ -640,16 +752,12 @@ private fun GestureField(label: String, value: String, onValueChange: (String) -
 
 @Composable
 private fun GestureOverlay(
-    gestureLeft: String,
-    gestureRight: String,
-    gestureUp: String,
-    gestureDown: String,
-    onTrigger: (key: String, dir: String) -> Unit
+    onTrigger: (dir: String) -> Unit
 ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput(gestureLeft, gestureRight, gestureUp, gestureDown) {
+            .pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) {
                         val down = awaitFirstDown()
@@ -673,12 +781,10 @@ private fun GestureOverlay(
                                 val adx = if (dx > 0) dx else -dx
                                 val ady = if (dy > 0) dy else -dy
                                 if (elapsedMs < 500 && maxOf(adx, ady) > 80f) {
-                                    if (adx > ady) {
-                                        onTrigger(if (dx < 0) gestureLeft else gestureRight, if (dx < 0) "left" else "right")
-                                    } else {
-                                        onTrigger(if (dy < 0) gestureUp else gestureDown, if (dy < 0) "up" else "down")
+                                    if (adx > ady && dx < 0) {
+                                        onTrigger("left")
+                                        wasSwipe = true
                                     }
-                                    wasSwipe = true
                                 }
                                 break
                             }
