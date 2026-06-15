@@ -111,6 +111,7 @@ class OverlayService : Service() {
     private val autoScreenCommentInterval = 120_000L
     private var lastGameTouchTime = 0L
     private var detecting = false
+    private var voiceServiceStarted = false
     private var nonGameCount = 0
 
 
@@ -234,11 +235,14 @@ class OverlayService : Service() {
             e.printStackTrace()
         }
 
-        try {
-            val intent = Intent(this, VoiceForegroundService::class.java)
-            startForegroundService(intent)
-        } catch (e: Exception) {
-            e.printStackTrace()
+        if (!voiceServiceStarted) {
+            try {
+                val intent = Intent(this, VoiceForegroundService::class.java)
+                startForegroundService(intent)
+                voiceServiceStarted = true
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
 
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
@@ -355,23 +359,7 @@ class OverlayService : Service() {
             }
         }
 
-        VoiceManager.onErrorCallback = { error ->
-            if (!(automationEngine.isPending() && error == 5)) {
-                val msg = when (error) {
-                    7 -> "Hmph, aku nggak denger apa-apa..." // NO_MATCH
-                    6 -> "Kok diem aja? Capek ya?" // SPEECH_TIMEOUT
-                    5 -> "Duh, sistem suaranya lagi sibuk, coba bentar lagi ya~" // CLIENT
-                    1, 2 -> "Aduh, koneksinya lagi ampas nih..." // NETWORK
-                    else -> "Ada error dikit ($error), coba lagi nanti ya~"
-                }
-                showBubble(msg)
-                CommentDebugger.record(CommentDebugEntry(
-                    appName = "VoiceSystem", contextHint = "Audio Input",
-                    promptSent = "Error code: $error", response = null,
-                    tier = DebugTier.ERROR, durationMs = 0,
-                    errorMessage = msg, provider = "Android System"))
-            }
-        }
+        VoiceManager.onErrorCallback = null
 
         WaifuStateManager.currentState = WaifuState.RELAX
 
@@ -434,6 +422,24 @@ class OverlayService : Service() {
                 }
             }
         )
+
+        VoiceManager.onErrorCallback = { error ->
+            if (!(automationEngine.isPending() && error == 5)) {
+                val msg = when (error) {
+                    7 -> "Hmph, aku nggak denger apa-apa..." // NO_MATCH
+                    6 -> "Kok diem aja? Capek ya?" // SPEECH_TIMEOUT
+                    5 -> "Duh, sistem suaranya lagi sibuk, coba bentar lagi ya~" // CLIENT
+                    1, 2 -> "Aduh, koneksinya lagi ampas nih..." // NETWORK
+                    else -> "Ada error dikit ($error), coba lagi nanti ya~"
+                }
+                showBubble(msg)
+                CommentDebugger.record(CommentDebugEntry(
+                    appName = "VoiceSystem", contextHint = "Audio Input",
+                    promptSent = "Error code: $error", response = null,
+                    tier = DebugTier.ERROR, durationMs = 0,
+                    errorMessage = msg, provider = "Android System"))
+            }
+        }
 
         OverlayEventBus.screenCaptureCallback = {
             automationEngine.handleScreenInfo()
@@ -1093,7 +1099,9 @@ class OverlayService : Service() {
         popPlayer?.release()
         popPlayer = null
 
-        windowManager.removeView(overlayView)
+        if (overlayView.windowToken != null) {
+            windowManager.removeView(overlayView)
+        }
     }
 
     private fun playVoiceForText(text: String) {

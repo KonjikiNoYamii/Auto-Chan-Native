@@ -23,7 +23,7 @@ class VoiceForegroundService : Service() {
             } else {
                 startForeground(1, createNotification())
             }
-        } catch (_: SecurityException) {
+        } catch (_: Exception) {
             // Android 13+ requires POST_NOTIFICATIONS; fallback silently
         }
     }

@@ -25,6 +25,7 @@ class SilicaAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         lastEventTime = System.currentTimeMillis()
+        rootNode?.recycle()
         rootNode = rootInActiveWindow
     }
 

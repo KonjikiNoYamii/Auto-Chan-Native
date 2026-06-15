@@ -55,7 +55,7 @@ object SshManager {
                         monitorCallback?.invoke(line!!)
                     }
                 } catch (_: Exception) { }
-            }.apply { start() }
+            }.apply { isDaemon = true; start() }
             true
         } catch (_: Exception) { false }
     }
@@ -141,7 +141,11 @@ object SshManager {
             val output = ByteArrayOutputStream()
             channel.outputStream = output
             channel.connect()
-            while (!channel.isClosed) { Thread.sleep(100) }
+            var waited = 0
+            while (!channel.isClosed && waited < 50) {
+                Thread.sleep(100)
+                waited++
+            }
             channel.disconnect()
             output.toString().trim()
         } catch (e: Exception) {

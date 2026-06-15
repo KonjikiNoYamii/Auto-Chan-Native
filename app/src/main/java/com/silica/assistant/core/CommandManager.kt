@@ -21,8 +21,9 @@ import com.silica.assistant.core.system.AppLauncher
 import com.silica.assistant.core.system.BrightnessController
 import com.silica.assistant.overlay.GameModeManager
 import com.silica.assistant.service.OverlayService
-import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 import com.silica.assistant.core.llm.MoodManager
@@ -31,9 +32,9 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
 object CommandManager : KoinComponent {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val moodManager: MoodManager by inject()
 
-    @OptIn(DelicateCoroutinesApi::class)
     private fun keywordVariants(keyword: String): List<String> {
         val base = keyword.lowercase().trim()
         val variants = mutableListOf<String>()
@@ -66,7 +67,7 @@ object CommandManager : KoinComponent {
         if (lowerInput.startsWith("kasih hadiah ") || lowerInput.startsWith("give gift ")) {
             val item = lowerInput.removePrefix("kasih hadiah ").removePrefix("give gift ").trim()
             if (item.isNotEmpty()) {
-                GlobalScope.launch {
+                scope.launch {
                     val (success, response) = moodManager.giveGift(item)
                     OverlayEventBus.onBubble?.invoke(response)
                 }
@@ -86,7 +87,7 @@ object CommandManager : KoinComponent {
                 }
                 val cleanTask = task.replace(Regex("[\\[\\(](hard|easy|medium)[\\]\\)]"), "").trim()
                 
-                GlobalScope.launch {
+                scope.launch {
                     val finalDiff = explicitDifficulty ?: LlmClient.classifyQuestDifficulty(cleanTask) ?: "MEDIUM"
                     moodManager.addQuest(cleanTask, finalDiff)
                     OverlayEventBus.onBubble?.invoke("Oke, aku sudah catat tugas: '$cleanTask' [$finalDiff]. Semangat kerjanya ya")
@@ -98,7 +99,7 @@ object CommandManager : KoinComponent {
         if (lowerInput.startsWith("selesai quest ") || lowerInput.startsWith("done quest ")) {
             val task = lowerInput.removePrefix("selesai quest ").removePrefix("done quest ").trim()
             if (task.isNotEmpty()) {
-                GlobalScope.launch {
+                scope.launch {
                     val result = moodManager.completeQuest(task)
                     SoundManager.playQuestComplete()
                     OverlayEventBus.onBubble?.invoke(result)
@@ -229,7 +230,7 @@ object CommandManager : KoinComponent {
                     }
                     OverlayEventBus.onBubble?.invoke(reply)
                 } else {
-                    GlobalScope.launch {
+                    scope.launch {
                         val reply = LlmClient.generateScreenComment("Chat", "User bilang: \"$query\". Beri respon SANGAT PENDEK MAKSIMAL 1 KALIMAT. ${LlmConfig.personalityPrompt} Langsung respon.")
                         OverlayEventBus.onBubble?.invoke(reply ?: "...")
                     }
