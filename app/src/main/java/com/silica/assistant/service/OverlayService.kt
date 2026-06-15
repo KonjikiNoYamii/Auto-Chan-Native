@@ -282,6 +282,7 @@ class OverlayService : Service() {
         confirmLayout.visibility = View.GONE
 
         handler.post(expressionUpdater)
+        controller.startFloating()
 
         OverlayEventBus.onBubble = { text -> showBubble(text) }
 
