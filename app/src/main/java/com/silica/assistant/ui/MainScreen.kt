@@ -477,11 +477,7 @@ fun MainScreen(initialScreen: com.silica.assistant.ui.state.Screen = com.silica.
 
                             Spacer(modifier = Modifier.height(16.dp))
 
-                            StatusBar()
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            CommandInputSection(
+                            DashboardSection(
                                 commandText = uiState.commandText,
                                 onCommandChange = { viewModel.updateCommandText(it) },
                                 onExecute = {
@@ -494,30 +490,13 @@ fun MainScreen(initialScreen: com.silica.assistant.ui.state.Screen = com.silica.
                                         )
                                         viewModel.clearCommand()
                                     }
+                                },
+                                onNavigate = { dest ->
+                                    when (dest) {
+                                        "debug" -> currentScreen = Screen.Debug
+                                    }
                                 }
                             )
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            QuestSection(
-                                activeQuests = viewModel.activeQuests,
-                                onAddQuest = { title, diff -> viewModel.addQuest(title, diff) },
-                                onCompleteQuest = { title -> viewModel.completeQuest(title) },
-                                onDeleteQuest = { quest -> viewModel.deleteQuest(quest) },
-                                onClassify = { title -> viewModel.classifyQuest(title) }
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            CommandHistorySection()
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            DebugOutputSection()
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            OverlayControlSection()
 
                             Spacer(modifier = Modifier.height(48.dp))
                         }
