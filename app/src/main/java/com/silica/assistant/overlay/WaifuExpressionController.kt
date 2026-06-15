@@ -1,9 +1,7 @@
 package com.silica.assistant.overlay
 
-import android.animation.Animator
 import android.animation.ObjectAnimator
 import android.content.Context
-import android.view.View
 import android.view.animation.CycleInterpolator
 import android.view.animation.TranslateAnimation
 import android.widget.ImageView
@@ -20,11 +18,10 @@ class WaifuExpressionController(
 
     fun startFloating() {
         floatingAnim?.cancel()
-        floatingAnim = ObjectAnimator.ofFloat(imageView, "translationY", 0f, -8f, 0f).apply {
+        floatingAnim = ObjectAnimator.ofFloat(imageView, "translationY", 0f, -8f).apply {
             duration = 2500
             repeatCount = ObjectAnimator.INFINITE
-            repeatMode = ObjectAnimator.RESTART
-            interpolator = CycleInterpolator(1f)
+            repeatMode = ObjectAnimator.REVERSE
             start()
         }
     }
