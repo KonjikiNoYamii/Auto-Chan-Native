@@ -8,7 +8,10 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.net.Uri
+import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.View
+import kotlin.math.abs
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -34,6 +37,7 @@ import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,6 +49,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import coil.compose.AsyncImage
+import com.silica.assistant.core.ssh.ServerDiscovery
 import com.silica.assistant.core.ssh.SshManager
 import com.yalantis.ucrop.UCrop
 import java.io.File
@@ -368,6 +373,14 @@ fun GamepadScreen(onBack: () -> Unit) {
     var layouts by remember { mutableStateOf(loadLayouts(context)) }
     var showAddKeyDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    val wirelessMode by WirelessModeManager.isActive.collectAsState()
+    val wirelessStatus by WirelessModeManager.status.collectAsState()
+    var showIpDialog by remember { mutableStateOf(false) }
+    var ipAddress by remember { mutableStateOf(gamepadPrefs.getString("wireless_ip", "") ?: "") }
+    val discovery = remember { ServerDiscovery(scope) }
+    val discoveredServers by discovery.servers.collectAsState()
+    var isScanning by remember { mutableStateOf(false) }
+
     var mouseSensitivity by remember { mutableFloatStateOf(gamepadPrefs.getFloat("mouse_sensitivity", 8f)) }
     var lookSensitivity by remember { mutableFloatStateOf(gamepadPrefs.getFloat("look_sensitivity", 12f)) }
 
@@ -495,6 +508,27 @@ fun GamepadScreen(onBack: () -> Unit) {
                     }) {
                         Icon(if (isEditMode) Icons.Default.Save else Icons.Default.Edit, contentDescription = "Edit Mode", tint = Color.White)
                     }
+                    IconButton(onClick = {
+                        if (wirelessMode) {
+                            WirelessModeManager.stop()
+                        } else {
+                            val savedIp = gamepadPrefs.getString("wireless_ip", "")
+                            if (savedIp.isNullOrBlank()) {
+                                isScanning = true
+                                discovery.start()
+                                showIpDialog = true
+                            } else {
+                                WirelessModeManager.host = savedIp
+                                WirelessModeManager.start(scope)
+                            }
+                        }
+                    }) {
+                        Icon(
+                            if (wirelessMode) Icons.Default.CastConnected else Icons.Default.Cast,
+                            contentDescription = "Wireless Mode",
+                            tint = if (wirelessMode) Color.Cyan else Color.White
+                        )
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black.copy(alpha = 0.7f))
             )
@@ -517,136 +551,144 @@ fun GamepadScreen(onBack: () -> Unit) {
             }
 
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-                GestureOverlay(
-                    onTrigger = { dir ->
-                        hapticClick(context)
-                        if (isRecording) {
-                            recordStep(scope) { step ->
-                                val now = System.currentTimeMillis()
-                                val adjusted = if (recordStepCount > 0) step.copy(delayMs = (now - lastRecordTime).coerceAtMost(5000)) else step
-                                macroSteps = macroSteps + adjusted
-                                recordStepCount++
-                                lastRecordTime = now
-                                gestureToast = "📌 Step $recordStepCount: (${step.x}, ${step.y})"
-                                Toast.makeText(context, "Step $recordStepCount recorded: (${step.x}, ${step.y})", Toast.LENGTH_SHORT).show()
-                            }
-                        } else if (dir == "left" && macroSteps.isNotEmpty()) {
-                            playMacro(macroSteps, scope)
-                            gestureToast = "▶ MACRO (${macroSteps.size} steps)"
-                        } else if (dir == "left") {
-                            gestureToast = "← CLICK"
-                        }
-                    }
-                )
-
-                layouts.forEachIndexed { index, layout ->
-                    DraggableComponent(
-                        layout = layout,
-                        isEditMode = isEditMode,
-                        onPositionChange = { newOffset ->
-                            val newList = layouts.toMutableList()
-                            newList[index] = layout.copy(x = newOffset.x, y = newOffset.y)
-                            layouts = newList
-                        },
-                        onDelete = {
-                            val newList = layouts.toMutableList()
-                            newList.removeAt(index)
-                            layouts = newList
-                        }
-                    ) {
-                        when (layout.type) {
-                            "joystick" -> Joystick(
-                                size = componentSizes.joystick,
-                                mode = JoystickMode.WASD,
-                                onMove = { x, y -> handleJoystickMove(x, y, scope) }
-                            )
-                            "joystick_right" -> Joystick(
-                                size = componentSizes.joystick,
-                                mode = JoystickMode.MOUSE,
-                                onMove = { x, y ->
-                                    val dz = 0.15f
-                                    if (abs(x) > dz) batchDx += x * lookSensitivity
-                                    if (abs(y) > dz) batchDy += y * lookSensitivity
+                if (wirelessMode) {
+                    WirelessOverlay(
+                        status = wirelessStatus,
+                        onStop = { WirelessModeManager.stop() },
+                        onRetry = { WirelessModeManager.retry(scope) }
+                    )
+                } else {
+                    GestureOverlay(
+                        onTrigger = { dir ->
+                            hapticClick(context)
+                            if (isRecording) {
+                                recordStep(scope) { step ->
+                                    val now = System.currentTimeMillis()
+                                    val adjusted = if (recordStepCount > 0) step.copy(delayMs = (now - lastRecordTime).coerceAtMost(5000)) else step
+                                    macroSteps = macroSteps + adjusted
+                                    recordStepCount++
+                                    lastRecordTime = now
+                                    gestureToast = "📌 Step $recordStepCount: (${step.x}, ${step.y})"
+                                    Toast.makeText(context, "Step $recordStepCount recorded: (${step.x}, ${step.y})", Toast.LENGTH_SHORT).show()
                                 }
-                            )
-                            "touchpad" -> ModernTouchpad(
-                                widthDp = componentSizes.touchpadW,
-                                heightDp = componentSizes.touchpadH,
-                                onMove = { dx, dy -> batchDx += dx * mouseSensitivity; batchDy += dy * mouseSensitivity },
-                                onClick = {
-                                    if (isRecording) {
-                                        recordStep(scope) { step ->
-                                            val now = System.currentTimeMillis()
-                                            val adjusted = if (recordStepCount > 0) step.copy(delayMs = (now - lastRecordTime).coerceAtMost(5000)) else step
-                                            macroSteps = macroSteps + adjusted
-                                            recordStepCount++
-                                            lastRecordTime = now
-                                            gestureToast = "📌 Step $recordStepCount: (${step.x}, ${step.y})"
-                                        }
-                                    } else {
-                                        handleMouseClick(scope)
+                            } else if (dir == "left" && macroSteps.isNotEmpty()) {
+                                playMacro(macroSteps, scope)
+                                gestureToast = "▶ MACRO (${macroSteps.size} steps)"
+                            } else if (dir == "left") {
+                                gestureToast = "← CLICK"
+                            }
+                        }
+                    )
+
+                    layouts.forEachIndexed { index, layout ->
+                        DraggableComponent(
+                            layout = layout,
+                            isEditMode = isEditMode,
+                            onPositionChange = { newOffset ->
+                                val newList = layouts.toMutableList()
+                                newList[index] = layout.copy(x = newOffset.x, y = newOffset.y)
+                                layouts = newList
+                            },
+                            onDelete = {
+                                val newList = layouts.toMutableList()
+                                newList.removeAt(index)
+                                layouts = newList
+                            }
+                        ) {
+                            when (layout.type) {
+                                "joystick" -> Joystick(
+                                    size = componentSizes.joystick,
+                                    mode = JoystickMode.WASD,
+                                    onMove = { x, y -> handleJoystickMove(x, y, scope) }
+                                )
+                                "joystick_right" -> Joystick(
+                                    size = componentSizes.joystick,
+                                    mode = JoystickMode.MOUSE,
+                                    onMove = { x, y ->
+                                        val dz = 0.15f
+                                        if (abs(x) > dz) batchDx += x * lookSensitivity
+                                        if (abs(y) > dz) batchDy += y * lookSensitivity
                                     }
-                                },
-                                onRightClick = { handleMouseRightClick(scope) },
-                                onScroll = { delta -> handleScroll(delta, scope) }
-                            )
-                            "dpad" -> DPad(
-                                size = componentSizes.dpad,
-                                context = context,
-                                scope = scope
-                            )
-                            "trigger" -> TriggerButton(
-                                label = layout.label,
-                                key = layout.value,
-                                widthDp = componentSizes.triggerW,
-                                heightDp = componentSizes.triggerH,
-                                context = context,
-                                scope = scope
-                            )
-                            "key" -> GamepadKey(
-                                label = layout.label,
-                                xKey = layout.value,
-                                context = context,
-                                scope = scope
-                            )
+                                )
+                                "touchpad" -> ModernTouchpad(
+                                    widthDp = componentSizes.touchpadW,
+                                    heightDp = componentSizes.touchpadH,
+                                    onMove = { dx, dy -> batchDx += dx * mouseSensitivity; batchDy += dy * mouseSensitivity },
+                                    onClick = {
+                                        if (isRecording) {
+                                            recordStep(scope) { step ->
+                                                val now = System.currentTimeMillis()
+                                                val adjusted = if (recordStepCount > 0) step.copy(delayMs = (now - lastRecordTime).coerceAtMost(5000)) else step
+                                                macroSteps = macroSteps + adjusted
+                                                recordStepCount++
+                                                lastRecordTime = now
+                                                gestureToast = "📌 Step $recordStepCount: (${step.x}, ${step.y})"
+                                            }
+                                        } else {
+                                            handleMouseClick(scope)
+                                        }
+                                    },
+                                    onRightClick = { handleMouseRightClick(scope) },
+                                    onScroll = { delta -> handleScroll(delta, scope) }
+                                )
+                                "dpad" -> DPad(
+                                    size = componentSizes.dpad,
+                                    context = context,
+                                    scope = scope
+                                )
+                                "trigger" -> TriggerButton(
+                                    label = layout.label,
+                                    key = layout.value,
+                                    widthDp = componentSizes.triggerW,
+                                    heightDp = componentSizes.triggerH,
+                                    context = context,
+                                    scope = scope
+                                )
+                                "key" -> GamepadKey(
+                                    label = layout.label,
+                                    xKey = layout.value,
+                                    context = context,
+                                    scope = scope
+                                )
+                            }
                         }
                     }
-                }
 
-                if (isEditMode) {
-                    Text(
-                        "EDIT MODE: Drag to reposition",
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp)
-                            .background(Color.Black.copy(0.6f), RoundedCornerShape(4.dp)).padding(6.dp),
-                        color = Color.Yellow, fontSize = 10.sp
-                    )
-                }
-
-                if (gestureToast.isNotEmpty()) {
-                    Text(
-                        gestureToast,
-                        modifier = Modifier.align(Alignment.Center).background(Color.Black.copy(0.7f), RoundedCornerShape(8.dp)).padding(horizontal = 20.dp, vertical = 10.dp),
-                        color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold
-                    )
-                }
-
-                if (isRecording) {
-                    Box(
-                        modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp)
-                            .background(Color.Red.copy(0.8f), RoundedCornerShape(20.dp)).padding(horizontal = 14.dp, vertical = 6.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(modifier = Modifier.size(10.dp).background(Color.White, CircleShape))
-                            Spacer(Modifier.width(6.dp))
-                            Text("REC ${recordStepCount}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
+                    if (isEditMode) {
+                        Text(
+                            "EDIT MODE: Drag to reposition",
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp)
+                                .background(Color.Black.copy(0.6f), RoundedCornerShape(4.dp)).padding(6.dp),
+                            color = Color.Yellow, fontSize = 10.sp
+                        )
                     }
-                    Text(
-                        "Tap touchpad or swipe ← to record step",
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp)
-                            .background(Color.Red.copy(0.6f), RoundedCornerShape(4.dp)).padding(6.dp),
-                        color = Color.White, fontSize = 10.sp
-                    )
+
+                    if (gestureToast.isNotEmpty()) {
+                        Text(
+                            gestureToast,
+                            modifier = Modifier.align(Alignment.Center).background(Color.Black.copy(0.7f), RoundedCornerShape(8.dp)).padding(horizontal = 20.dp, vertical = 10.dp),
+                            color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    if (isRecording) {
+                        Box(
+                            modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp)
+                                .background(Color.Red.copy(0.8f), RoundedCornerShape(20.dp)).padding(horizontal = 14.dp, vertical = 6.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(modifier = Modifier.size(10.dp).background(Color.White, CircleShape))
+                                Spacer(Modifier.width(6.dp))
+                                Text("REC ${recordStepCount}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Text(
+                            "Tap touchpad or swipe ← to record step",
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp)
+                                .background(Color.Red.copy(0.6f), RoundedCornerShape(4.dp)).padding(6.dp),
+                            color = Color.White, fontSize = 10.sp
+                        )
+                    }
                 }
             }
         }
@@ -658,6 +700,90 @@ fun GamepadScreen(onBack: () -> Unit) {
             onAdd = { label, key, x, y ->
                 layouts = layouts + GamepadLayout("key", label, key, x, y)
                 showAddKeyDialog = false
+            }
+        )
+    }
+
+    if (showIpDialog) {
+        LaunchedEffect(showIpDialog) {
+            if (!showIpDialog) discovery.stop()
+        }
+        AlertDialog(
+            onDismissRequest = {
+                showIpDialog = false
+                isScanning = false
+                discovery.stop()
+                ipAddress = gamepadPrefs.getString("wireless_ip", "") ?: ""
+            },
+            title = { Text("Connect to Laptop", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    if (isScanning) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text("Scanning for laptop...", fontSize = 12.sp, color = Color.Gray)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    if (discoveredServers.isNotEmpty()) {
+                        Text("Found:", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.height(4.dp))
+                        discoveredServers.forEach { server ->
+                            OutlinedButton(
+                                onClick = {
+                                    ipAddress = server.ip
+                                    gamepadPrefs.edit().putString("wireless_ip", server.ip).apply()
+                                    WirelessModeManager.host = server.ip
+                                    showIpDialog = false
+                                    discovery.stop()
+                                    WirelessModeManager.start(scope)
+                                },
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                            ) {
+                                Icon(Icons.Default.Computer, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(server.ip, fontSize = 14.sp)
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Text("atau masukkan IP manual:", fontSize = 11.sp, color = Color.Gray)
+                        Spacer(Modifier.height(4.dp))
+                    } else if (!isScanning) {
+                        Text("Tidak menemukan laptop. Masukkan IP manual:", fontSize = 12.sp, color = Color.Gray)
+                        Spacer(Modifier.height(4.dp))
+                    }
+                    OutlinedTextField(
+                        value = ipAddress,
+                        onValueChange = { ipAddress = it },
+                        label = { Text("IP Address") },
+                        placeholder = { Text("192.168.1.100") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (ipAddress.isNotBlank()) {
+                        gamepadPrefs.edit().putString("wireless_ip", ipAddress).apply()
+                        WirelessModeManager.host = ipAddress
+                        showIpDialog = false
+                        discovery.stop()
+                        WirelessModeManager.start(scope)
+                    }
+                }) { Text("Connect") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showIpDialog = false
+                    isScanning = false
+                    discovery.stop()
+                    ipAddress = gamepadPrefs.getString("wireless_ip", "") ?: ""
+                }) { Text("Cancel") }
             }
         )
     }
@@ -1274,4 +1400,107 @@ private fun AddKeyDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+}
+
+@Composable
+private fun WirelessOverlay(
+    status: WirelessStatus,
+    onStop: () -> Unit,
+    onRetry: () -> Unit
+) {
+    val kbdConnected by WirelessModeManager.kbdDetected.collectAsState()
+    val mouseConnected by WirelessModeManager.mouseDetected.collectAsState()
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xCC0A0A0A)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                imageVector = Icons.Default.CastConnected,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = Color.Cyan.copy(alpha = 0.8f)
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "Wireless Mode",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            Spacer(Modifier.height(8.dp))
+
+            when (status) {
+                WirelessStatus.Connecting -> {
+                    Text(
+                        "Connecting...",
+                        fontSize = 14.sp,
+                        color = Color.Gray
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(32.dp),
+                        color = Color.Cyan,
+                        strokeWidth = 3.dp
+                    )
+                }
+                WirelessStatus.Connected -> {
+                    Text(
+                        "Connected",
+                        fontSize = 14.sp,
+                        color = Color.Green
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Keyboard, null, tint = if (kbdConnected) Color.Green else Color.Gray, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (kbdConnected) "Keyboard detected" else "Waiting for keyboard...", fontSize = 12.sp, color = if (kbdConnected) Color.Green else Color.Gray)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Mouse, null, tint = if (mouseConnected) Color.Green else Color.Gray, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (mouseConnected) "Mouse detected" else "Waiting for mouse...", fontSize = 12.sp, color = if (mouseConnected) Color.Green else Color.Gray)
+                    }
+                    Spacer(Modifier.height(20.dp))
+                    Text(
+                        "Keyboard & mouse input is being forwarded\nto your laptop via TCP",
+                        fontSize = 11.sp,
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 18.sp
+                    )
+                }
+                WirelessStatus.Error -> {
+                    Text(
+                        "Connection Failed",
+                        fontSize = 14.sp,
+                        color = Color.Red
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Make sure silica-server.py is running on laptop",
+                        fontSize = 11.sp,
+                        color = Color.Gray
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Button(
+                        onClick = onRetry,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Cyan)
+                    ) {
+                        Text("Retry", color = Color.Black)
+                    }
+                }
+                WirelessStatus.Disconnected -> {}
+            }
+
+            Spacer(Modifier.height(24.dp))
+            TextButton(onClick = onStop) {
+                Text("Disconnect", color = Color.Red.copy(alpha = 0.7f), fontSize = 13.sp)
+            }
+        }
+    }
 }

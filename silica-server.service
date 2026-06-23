@@ -1,0 +1,13 @@
+[Unit]
+Description=Silica Assistant wireless input server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/goldendarkness/Documents/SilicaAssistant/silica-server.py
+Restart=on-failure
+RestartSec=5
+User=goldendarkness
+
+[Install]
+WantedBy=multi-user.target
