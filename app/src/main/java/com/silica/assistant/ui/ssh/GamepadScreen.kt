@@ -519,7 +519,7 @@ fun GamepadScreen(onBack: () -> Unit) {
                                 showIpDialog = true
                             } else {
                                 WirelessModeManager.host = savedIp
-                                WirelessModeManager.start(scope)
+                                WirelessModeManager.start(context, scope)
                             }
                         }
                     }) {
@@ -555,7 +555,7 @@ fun GamepadScreen(onBack: () -> Unit) {
                     WirelessOverlay(
                         status = wirelessStatus,
                         onStop = { WirelessModeManager.stop() },
-                        onRetry = { WirelessModeManager.retry(scope) }
+                        onRetry = { WirelessModeManager.retry(context, scope) }
                     )
                 } else {
                     GestureOverlay(
@@ -740,7 +740,7 @@ fun GamepadScreen(onBack: () -> Unit) {
                                     WirelessModeManager.host = server.ip
                                     showIpDialog = false
                                     discovery.stop()
-                                    WirelessModeManager.start(scope)
+                                    WirelessModeManager.start(context, scope)
                                 },
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
                             ) {
@@ -773,7 +773,7 @@ fun GamepadScreen(onBack: () -> Unit) {
                         WirelessModeManager.host = ipAddress
                         showIpDialog = false
                         discovery.stop()
-                        WirelessModeManager.start(scope)
+                        WirelessModeManager.start(context, scope)
                     }
                 }) { Text("Connect") }
             },

@@ -91,12 +91,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 MotionEvent.ACTION_BUTTON_PRESS -> {
-                    val btn = when {
-                        event.buttonState and MotionEvent.BUTTON_SECONDARY != 0 -> 3
-                        event.buttonState and MotionEvent.BUTTON_TERTIARY != 0 -> 2
-                        else -> 1
-                    }
-                    WirelessModeManager.onMouseClick(btn)
+                    WirelessModeManager.onMouseClick(event.actionButton)
                 }
             }
             true
@@ -162,14 +157,8 @@ class MainActivity : ComponentActivity() {
                     }
                     lastMouseX = x
                     lastMouseY = y
-                    if (event.actionMasked == MotionEvent.ACTION_BUTTON_PRESS || event.actionMasked == MotionEvent.ACTION_DOWN) {
-                        val state = event.buttonState
-                        var btn = 1
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            if (state and MotionEvent.BUTTON_SECONDARY != 0) btn = 3
-                            else if (state and MotionEvent.BUTTON_TERTIARY != 0) btn = 2
-                        }
-                        WirelessModeManager.onMouseClick(btn)
+                    if (event.actionMasked == MotionEvent.ACTION_BUTTON_PRESS) {
+                        WirelessModeManager.onMouseClick(event.actionButton)
                     }
                 }
             }

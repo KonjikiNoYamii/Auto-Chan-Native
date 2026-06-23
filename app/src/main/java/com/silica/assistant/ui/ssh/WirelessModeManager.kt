@@ -1,5 +1,7 @@
 package com.silica.assistant.ui.ssh
 
+import android.content.Context
+import android.os.PowerManager
 import android.view.InputDevice
 import android.view.KeyEvent
 import com.silica.assistant.core.ssh.WirelessTcpClient
@@ -21,6 +23,7 @@ object WirelessModeManager {
     private var healthJob: Job? = null
     private var sendJob: Job? = null
     private var scope: CoroutineScope? = null
+    private var wakeLock: PowerManager.WakeLock? = null
 
     var host: String = ""
 
@@ -55,6 +58,20 @@ object WirelessModeManager {
         }
     }
 
+    private fun acquireWakeLock(context: Context) {
+        if (wakeLock != null) return
+        val pm = context.applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Silica:WirelessInput")
+        wakeLock?.acquire()
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            wakeLock?.release()
+        } catch (_: Exception) {}
+        wakeLock = null
+    }
+
     private fun sendCmd(cmd: String) {
         val c = client ?: return
         sendJob = scope?.launch(Dispatchers.IO) {
@@ -68,7 +85,7 @@ object WirelessModeManager {
         held.forEach { sendCmd("xdotool keyup $it") }
     }
 
-    fun start(coroutineScope: CoroutineScope) {
+    fun start(context: Context, coroutineScope: CoroutineScope) {
         if (_isActive.value) return
         if (host.isBlank()) {
             _status.value = WirelessStatus.Error
@@ -80,6 +97,7 @@ object WirelessModeManager {
         checkConnectedDevices()
         _status.value = WirelessStatus.Connecting
         scope = coroutineScope
+        acquireWakeLock(context)
 
         coroutineScope.launch(Dispatchers.IO) {
             val c = WirelessTcpClient(host)
@@ -91,12 +109,13 @@ object WirelessModeManager {
             }.onFailure {
                 _status.value = WirelessStatus.Error
                 _isActive.value = false
+                releaseWakeLock()
                 c.close()
             }
         }
     }
 
-    fun retry(coroutineScope: CoroutineScope) {
+    fun retry(context: Context, coroutineScope: CoroutineScope) {
         if (_status.value != WirelessStatus.Error) return
         healthJob?.cancel()
         healthJob = null
@@ -109,6 +128,7 @@ object WirelessModeManager {
         checkConnectedDevices()
         _status.value = WirelessStatus.Connecting
         scope = coroutineScope
+        acquireWakeLock(context)
 
         coroutineScope.launch(Dispatchers.IO) {
             val c = WirelessTcpClient(host)
@@ -120,6 +140,7 @@ object WirelessModeManager {
             }.onFailure {
                 _status.value = WirelessStatus.Error
                 _isActive.value = false
+                releaseWakeLock()
                 c.close()
             }
         }
@@ -133,6 +154,7 @@ object WirelessModeManager {
         releaseAllKeys()
         client?.disconnect()
         client = null
+        releaseWakeLock()
         _kbdDetected.value = false
         _mouseDetected.value = false
         _isActive.value = false
