@@ -1,5 +1,6 @@
 package com.silica.assistant.ui.ssh
 
+import android.view.InputDevice
 import android.view.KeyEvent
 import com.silica.assistant.core.ssh.WirelessTcpClient
 import kotlinx.coroutines.CoroutineScope
@@ -39,6 +40,21 @@ object WirelessModeManager {
 
     fun isTcpConnected(): Boolean = client?.isConnected() == true
 
+    fun checkConnectedDevices() {
+        _kbdDetected.value = false
+        _mouseDetected.value = false
+        val ids = InputDevice.getDeviceIds()
+        for (id in ids) {
+            val dev = InputDevice.getDevice(id) ?: continue
+            if (dev.sources and InputDevice.SOURCE_KEYBOARD != 0) {
+                _kbdDetected.value = true
+            }
+            if (dev.sources and InputDevice.SOURCE_MOUSE != 0) {
+                _mouseDetected.value = true
+            }
+        }
+    }
+
     private fun sendCmd(cmd: String) {
         val c = client ?: return
         sendJob = scope?.launch(Dispatchers.IO) {
@@ -61,6 +77,7 @@ object WirelessModeManager {
         _isActive.value = true
         _kbdDetected.value = false
         _mouseDetected.value = false
+        checkConnectedDevices()
         _status.value = WirelessStatus.Connecting
         scope = coroutineScope
 
@@ -89,6 +106,7 @@ object WirelessModeManager {
         _isActive.value = true
         _kbdDetected.value = false
         _mouseDetected.value = false
+        checkConnectedDevices()
         _status.value = WirelessStatus.Connecting
         scope = coroutineScope
 
