@@ -8,6 +8,8 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 import com.silica.assistant.core.llm.db.SilicaDatabase
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import org.koin.android.ext.koin.androidContext
 import org.koin.dsl.module
 import com.silica.assistant.core.llm.LlmRepository
@@ -16,13 +18,19 @@ import com.silica.assistant.core.llm.MoodManager
 import com.silica.assistant.core.auth.AuthRepository
 import com.silica.assistant.core.ActivityDetector
 
+private val MIGRATION_12_13 = object : Migration(12, 13) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // No schema changes — hanya reset versi agar migrasi proper bisa dipakai ke depannya
+    }
+}
+
 val appModule = module {
     single {
         Room.databaseBuilder(
             androidContext(),
             SilicaDatabase::class.java,
             "silica_database"
-        ).fallbackToDestructiveMigration().build()
+        ).addMigrations(MIGRATION_12_13).build()
     }
     
     single { get<SilicaDatabase>().chatDao() }

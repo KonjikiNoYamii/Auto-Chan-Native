@@ -111,7 +111,6 @@ class OverlayService : Service() {
     private val autoScreenCommentInterval = 120_000L
     private var lastGameTouchTime = 0L
     private var detecting = false
-    private var voiceServiceStarted = false
     private var nonGameCount = 0
 
 
@@ -233,16 +232,6 @@ class OverlayService : Service() {
             }
         } catch (e: Exception) {
             e.printStackTrace()
-        }
-
-        if (!voiceServiceStarted) {
-            try {
-                val intent = Intent(this, VoiceForegroundService::class.java)
-                startForegroundService(intent)
-                voiceServiceStarted = true
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
         }
 
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
@@ -1140,18 +1129,18 @@ class OverlayService : Service() {
     }
 
     private fun createNotification(): Notification {
-        val channelId = "overlay_channel"
+        val channelId = "silica_channel"
         val channel = NotificationChannel(
             channelId,
-            "Silica Overlay",
+            "Silica Assistant",
             NotificationManager.IMPORTANCE_LOW
         )
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(channel)
 
         return NotificationCompat.Builder(this, channelId)
-            .setContentTitle("Silica is Active")
-            .setContentText("Waifu is watching over you~")
+            .setContentTitle("Silica Assistant Aktif")
+            .setContentText("Tekan overlay untuk voice command")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setOngoing(true)
             .build()

@@ -32,6 +32,25 @@
 -dontwarn org.slf4j.**
 -keep class org.slf4j.** { *; }
 
+# Firebase
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }
+
+# Ktor engine (OkHttp)
+-keep class io.ktor.client.engine.okhttp.** { *; }
+-keep class okhttp3.** { *; }
+-keep interface okhttp3.** { *; }
+-dontwarn okhttp3.**
+-dontwarn okio.**
+
+# Kotlin Coroutines
+-keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
+-keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
+-keepclassmembers class kotlinx.coroutines.** { volatile <fields>; }
+
+# Keep enum classes (used in serialization)
+-keepclassmembers enum * { *; }
+
 # General optimization
 -optimizationpasses 5
 -allowaccessmodification

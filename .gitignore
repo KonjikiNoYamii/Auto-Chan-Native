@@ -25,5 +25,19 @@ linkrepo
 session_terakhir_opencode
 error.txt
 
+# Ignore Gradle configuration cache & reports
+build/reports/
+.gradle/configuration-cache/
+
+# Editor/IDE files
+.aider*
+linkrepo
+session_terakhir_opencode
+error.txt
+
 # Internal docs
 docs/
+
+# Project-specific files (not part of source)
+hasil-adb-logcat
+struktur-folder

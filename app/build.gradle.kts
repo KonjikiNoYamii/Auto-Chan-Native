@@ -80,6 +80,7 @@ dependencies {
     implementation(libs.jsch)
     implementation(libs.ucrop)
     implementation(libs.coil.compose)
+    implementation(libs.androidx.appcompat)
     
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

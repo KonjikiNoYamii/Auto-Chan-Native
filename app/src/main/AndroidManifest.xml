@@ -77,11 +77,6 @@
             android:foregroundServiceType="microphone|mediaProjection" />
     
         <service
-            android:name=".service.VoiceForegroundService"
-            android:exported="false"
-            android:foregroundServiceType="microphone|mediaProjection" />
-
-        <service
             android:name=".service.SilicaAccessibilityService"
             android:exported="true"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">

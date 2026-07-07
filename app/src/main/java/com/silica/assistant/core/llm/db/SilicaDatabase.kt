@@ -10,7 +10,7 @@ import com.silica.assistant.core.llm.model.AchievementEntity
 import com.silica.assistant.core.llm.model.FriendEntity
 import com.silica.assistant.core.llm.model.SocialMessageEntity
 
-@Database(entities = [ChatMessageEntity::class, UserFactEntity::class, UserProfileEntity::class, QuestEntity::class, AchievementEntity::class, FriendEntity::class, SocialMessageEntity::class], version = 12, exportSchema = false)
+@Database(entities = [ChatMessageEntity::class, UserFactEntity::class, UserProfileEntity::class, QuestEntity::class, AchievementEntity::class, FriendEntity::class, SocialMessageEntity::class], version = 13, exportSchema = false)
 abstract class SilicaDatabase : RoomDatabase() {
     abstract fun chatDao(): ChatDao
     abstract fun userFactDao(): UserFactDao
