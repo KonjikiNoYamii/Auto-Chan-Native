@@ -13,6 +13,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStreamReader
+import java.io.OutputStream
 
 object SshManager {
     private var session: Session? = null
@@ -301,6 +302,29 @@ object SshManager {
         } finally {
             try { channel.disconnect() } catch (_: Exception) {}
         }
+    }
+
+    class InputSession(private val channel: ChannelExec) : AutoCloseable {
+        private val inputStream: OutputStream = channel.outputStream
+
+        fun send(data: String) {
+            try {
+                inputStream.write((data + "\n").toByteArray())
+                inputStream.flush()
+            } catch (_: Exception) {}
+        }
+
+        override fun close() {
+            try { channel.disconnect() } catch (_: Exception) {}
+        }
+    }
+
+    fun openInputSession(command: String): Result<InputSession> = runCatching {
+        val s = session ?: throw Exception("Not connected")
+        val channel = s.openChannel("exec") as ChannelExec
+        channel.setCommand(command)
+        channel.connect()
+        InputSession(channel)
     }
 
     fun clearKnownHost(context: Context, host: String, portNum: Int) {
