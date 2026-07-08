@@ -7,6 +7,7 @@ import com.silica.assistant.core.llm.db.QuestDao
 import com.silica.assistant.core.llm.model.UserProfileEntity
 import com.silica.assistant.core.llm.model.QuestEntity
 import com.silica.assistant.core.llm.LlmConfig
+import com.silica.assistant.core.overlay.OverlayEventBus
 import com.silica.assistant.core.system.SoundManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -518,20 +519,49 @@ class MoodManager(
 
     private var lastAffinityTime = 0L
 
+    private val affinityThresholds = listOf(100, 250, 600, 1100, 1700, 2500, 3500, 5000)
+    private val affinityTierNames = listOf("Stranger", "Acquaintance", "Friendly", "Close", "Trusted", "Dear", "Special", "Intimate", "Soulmate")
+
+    private fun getAffinityTier(points: Int): Int {
+        for ((index, threshold) in affinityThresholds.withIndex()) {
+            if (points < threshold) return index
+        }
+        return affinityThresholds.size
+    }
+
+    private suspend fun notifyAffinityLevelUp(tier: Int) {
+        val tierName = affinityTierNames.getOrElse(tier) { "Soulmate" }
+        val prompt = "User baru mencapai level kedekatan '$tierName' denganmu (Yami). Beri reaksi singkat 1 kalimat natural sesuai kepribadianmu, ekspresif dengan kaomoji. ${LlmConfig.personalityPrompt}"
+        val result = withContext(Dispatchers.IO) {
+            LlmClient.chat(listOf(ChatMessage("user", prompt))).getOrNull()?.content
+        }
+        if (!result.isNullOrBlank()) {
+            OverlayEventBus.send(safeContent(result, 160))
+        }
+    }
+
     fun addAffinityPoints(points: Int) {
         scope.launch {
             val profile = getProfile()
+            val oldTier = getAffinityTier(profile.affinityPoints)
+            val newPoints = profile.affinityPoints + points
+
             userProfileDao.updateProfile(profile.copy(
-                affinityPoints = profile.affinityPoints + points
+                affinityPoints = newPoints
             ))
             triggerAutoSync()
+
+            val newTier = getAffinityTier(newPoints)
+            if (newTier > oldTier) {
+                notifyAffinityLevelUp(newTier)
+            }
         }
     }
 
     fun addAffinity(points: Int) {
         val now = System.currentTimeMillis()
-        if (now - lastAffinityTime < 3000L) return
-        lastAffinityTime = now
+        if (points == 1 && now - lastAffinityTime < 3000L) return
+        if (points == 1) lastAffinityTime = now
         addAffinityPoints(points)
         addXp(points * 10)
     }
