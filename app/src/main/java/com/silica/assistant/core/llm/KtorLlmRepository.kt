@@ -38,7 +38,6 @@ class KtorLlmRepository(
         private const val CONFIDENCE_THRESHOLD = 2
         private const val MAX_HISTORY_CONTEXT = 10
         private const val SYSTEM_RULES = "Tugasmu: Bantu user dengan perintah SSH, Mode Game, dan chat. Gunakan Bahasa Indonesia. Hindari bahasa kaku seperti robot; bicaralah seperti partner yang nyata. WAJIB gunakan text emotes (kaomoji) secara natural untuk menunjukkan emosi. DILARANG KERAS menggunakan emoji grafis/berwarna. Jika dalam Mode Game, respon WAJIB SANGAT SINGKAT (maks 10 kata). PENTING: respon maksimal 1-3 kalimat pendek saja. Langsung ke inti, tidak perlu basa-basi."
-        private const val DEFAULT_PERSONALITY = "Kamu adalah Yami, alien assassin yang tenang dan sopan. Kamu bicara dengan gaya elegan, sedikit stoik, namun natural. Gunakan variasi kata, jeda seperti 'Hmm...', atau 'Ah,' sesekali agar tidak terasa seperti template. Jangan selalu menjawab dengan pola yang sama. Gunakan kaomoji yang bervariasi dari yang ekspresif sampai yang stoik/cool seperti ( -_ -), (¬_¬), atau (─‿─). Kamu suka Taiyaki. Kamu tidak suka hal yang tidak sopan (Harenchi). PENTING: Jawab maksimal 1-3 kalimat pendek, langsung ke inti."
     }
 
     override suspend fun startPeriodicHealthCheck() {
@@ -176,7 +175,7 @@ class KtorLlmRepository(
         return try {
             val moodSnippet = moodManager.getMoodPromptSnippet()
             val dynamicName = moodManager.getDynamicName()
-            val customPersonality = userFactDao.getFact("custom_personality")?.value ?: DEFAULT_PERSONALITY
+            val customPersonality = userFactDao.getFact("custom_personality")?.value ?: LlmConfig.personalityPrompt
 
             val dbContext = loadDbContext()
             val mergedContext = listOfNotNull(
@@ -497,7 +496,7 @@ class KtorLlmRepository(
     private suspend fun buildChatRequest(messages: List<ChatMessage>, memoryContext: String, stream: Boolean): ChatRequest {
         val moodSnippet = moodManager.getMoodPromptSnippet()
         val dynamicName = moodManager.getDynamicName()
-        val customPersonality = userFactDao.getFact("custom_personality")?.value ?: DEFAULT_PERSONALITY
+        val customPersonality = userFactDao.getFact("custom_personality")?.value ?: LlmConfig.personalityPrompt
 
         val dbContext = loadDbContext()
         val mergedContext = listOfNotNull(
@@ -616,7 +615,7 @@ class KtorLlmRepository(
     private suspend fun visionChatGemini(history: List<ChatMessage>, memoryContext: String, currentMessages: List<ChatMessage>): Result<ChatMessage> {
         return try {
             val moodSnippet = moodManager.getMoodPromptSnippet()
-            val customPersonality = userFactDao.getFact("custom_personality")?.value ?: DEFAULT_PERSONALITY
+            val customPersonality = userFactDao.getFact("custom_personality")?.value ?: LlmConfig.personalityPrompt
 
             val systemPrompt = """
                 $SYSTEM_RULES
@@ -676,7 +675,7 @@ class KtorLlmRepository(
 
     private suspend fun buildVisionRequest(messages: List<ChatMessage>, base64Images: List<String>, memoryContext: String = ""): ChatRequest {
         val moodSnippet = moodManager.getMoodPromptSnippet()
-        val customPersonality = userFactDao.getFact("custom_personality")?.value ?: DEFAULT_PERSONALITY
+        val customPersonality = userFactDao.getFact("custom_personality")?.value ?: LlmConfig.personalityPrompt
 
         val systemContent = buildString {
             append("$SYSTEM_RULES\n$customPersonality\n$moodSnippet\n")
