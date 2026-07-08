@@ -259,6 +259,9 @@ class MoodManager(
             SoundManager.playLevelUp()
         }
 
+        val oldAffinity = profile.affinityPoints
+        val affinityBonus = xpBonus / 40
+
         userProfileDao.updateProfile(profile.copy(
             xp = currentXp,
             level = currentLevel,
@@ -266,13 +269,14 @@ class MoodManager(
             longestStreak = newLongest,
             lastQuestCompletionDate = today,
             inventory = newInventoryString,
-            affinityPoints = profile.affinityPoints + (xpBonus / 40),
+            affinityPoints = oldAffinity + affinityBonus,
             mood = (profile.mood + 0.1f).coerceIn(0.5f, 1.5f),
             stamina = (profile.stamina + 0.1f).coerceIn(0.0f, 1.0f),
             totalQuestCount = profile.totalQuestCount + 1,
             verifiedQuestCount = profile.verifiedQuestCount + if (eligible) 1 else 0
         ))
         triggerAutoSync()
+        checkAffinityLevelUp(oldAffinity, oldAffinity + affinityBonus)
         
         val newProfile = getProfile()
         val allCompleted = questDao.getCompletedQuests().first()
@@ -372,8 +376,17 @@ class MoodManager(
             finalLevel++
         }
         
-        userProfileDao.updateProfile(newProfile.copy(xp = finalXp, level = finalLevel))
+        val oldAffinity = profile.affinityPoints
+        val affinityBonus = xpBonus / 40
+        val newAffinity = oldAffinity + affinityBonus
+
+        userProfileDao.updateProfile(newProfile.copy(
+            xp = finalXp,
+            level = finalLevel,
+            affinityPoints = newAffinity
+        ))
         triggerAutoSync()
+        checkAffinityLevelUp(oldAffinity, newAffinity)
         
         val finalProfile = getProfile()
         val allCompleted = questDao.getCompletedQuests().first()
@@ -540,21 +553,25 @@ class MoodManager(
         }
     }
 
+    private suspend fun checkAffinityLevelUp(oldPoints: Int, newPoints: Int) {
+        val oldTier = getAffinityTier(oldPoints)
+        val newTier = getAffinityTier(newPoints)
+        if (newTier > oldTier) {
+            notifyAffinityLevelUp(newTier)
+        }
+    }
+
     fun addAffinityPoints(points: Int) {
         scope.launch {
             val profile = getProfile()
-            val oldTier = getAffinityTier(profile.affinityPoints)
-            val newPoints = profile.affinityPoints + points
+            val oldPoints = profile.affinityPoints
+            val newPoints = oldPoints + points
 
             userProfileDao.updateProfile(profile.copy(
                 affinityPoints = newPoints
             ))
             triggerAutoSync()
-
-            val newTier = getAffinityTier(newPoints)
-            if (newTier > oldTier) {
-                notifyAffinityLevelUp(newTier)
-            }
+            checkAffinityLevelUp(oldPoints, newPoints)
         }
     }
 
