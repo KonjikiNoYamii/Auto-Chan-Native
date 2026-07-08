@@ -37,7 +37,7 @@ class KtorLlmRepository(
     companion object {
         private const val CONFIDENCE_THRESHOLD = 2
         private const val MAX_HISTORY_CONTEXT = 10
-        private const val SYSTEM_RULES = "Tugasmu: Bantu user dengan perintah SSH, Mode Game, dan chat. Gunakan Bahasa Indonesia. Format respon: elegan, santai, namun tetap sopan. Hindari bahasa kaku seperti robot; bicaralah seperti partner yang nyata. WAJIB gunakan text emotes (kaomoji) secara natural untuk menunjukkan emosi. DILARANG KERAS menggunakan emoji grafis/berwarna. Jika dalam Mode Game, respon WAJIB SANGAT SINGKAT (maks 10 kata). PENTING: respon maksimal 1-3 kalimat pendek saja. Langsung ke inti, tidak perlu basa-basi."
+        private const val SYSTEM_RULES = "Tugasmu: Bantu user dengan perintah SSH, Mode Game, dan chat. Gunakan Bahasa Indonesia. Hindari bahasa kaku seperti robot; bicaralah seperti partner yang nyata. WAJIB gunakan text emotes (kaomoji) secara natural untuk menunjukkan emosi. DILARANG KERAS menggunakan emoji grafis/berwarna. Jika dalam Mode Game, respon WAJIB SANGAT SINGKAT (maks 10 kata). PENTING: respon maksimal 1-3 kalimat pendek saja. Langsung ke inti, tidak perlu basa-basi."
         private const val DEFAULT_PERSONALITY = "Kamu adalah Yami, alien assassin yang tenang dan sopan. Kamu bicara dengan gaya elegan, sedikit stoik, namun natural. Gunakan variasi kata, jeda seperti 'Hmm...', atau 'Ah,' sesekali agar tidak terasa seperti template. Jangan selalu menjawab dengan pola yang sama. Gunakan kaomoji yang bervariasi dari yang ekspresif sampai yang stoik/cool seperti ( -_ -), (¬_¬), atau (─‿─). Kamu suka Taiyaki. Kamu tidak suka hal yang tidak sopan (Harenchi). PENTING: Jawab maksimal 1-3 kalimat pendek, langsung ke inti."
     }
 
@@ -128,8 +128,15 @@ class KtorLlmRepository(
                 ChatMessage(role = it.role, content = it.content)
             }
 
+            // 3. Auto-load memory + game facts from DB
+            val dbContext = loadDbContext()
+            val mergedContext = listOfNotNull(
+                dbContext.ifBlank { null },
+                memoryContext.ifBlank { null }
+            ).joinToString("\n\n")
+
             val personalityContext = moodManager.getMoodPromptSnippet()
-            val fullMemoryContext = "$personalityContext $memoryContext"
+            val fullMemoryContext = "$personalityContext $mergedContext"
 
             val result = when (activeProvider) {
                 "LocalGemini" -> {
@@ -171,7 +178,13 @@ class KtorLlmRepository(
             val dynamicName = moodManager.getDynamicName()
             val customPersonality = userFactDao.getFact("custom_personality")?.value ?: DEFAULT_PERSONALITY
 
-            val gameContext = buildGameContext(history, memoryContext)
+            val dbContext = loadDbContext()
+            val mergedContext = listOfNotNull(
+                dbContext.ifBlank { null },
+                memoryContext.ifBlank { null }
+            ).joinToString("\n\n")
+
+            val gameContext = buildGameContext(history, mergedContext)
             val systemPrompt = """
                 $SYSTEM_RULES
                 $customPersonality
@@ -180,7 +193,7 @@ class KtorLlmRepository(
                 PASTIKAN setiap kalimat selesai dan tidak terpotong. 
                 Jika User dalam Mode Game, respon WAJIB SANGAT SINGKAT (maks 10 kata).
                 Memori relevan:
-                $memoryContext
+                $mergedContext
                 $gameContext
             """.trimIndent()
 
@@ -466,12 +479,33 @@ class KtorLlmRepository(
         }
     }
 
+    private suspend fun loadDbContext(): String {
+        val userFacts = userFactDao.getFactsByPrefix("user_memory_%")
+        val gameFacts = userFactDao.getFactsByPrefix("game_%")
+        return buildString {
+            if (userFacts.isNotEmpty()) {
+                appendLine("Tentang user:")
+                userFacts.forEach { appendLine("- ${it.value}") }
+            }
+            if (gameFacts.isNotEmpty()) {
+                appendLine("\nPengetahuan game:")
+                gameFacts.forEach { appendLine("- ${it.value}") }
+            }
+        }
+    }
+
     private suspend fun buildChatRequest(messages: List<ChatMessage>, memoryContext: String, stream: Boolean): ChatRequest {
         val moodSnippet = moodManager.getMoodPromptSnippet()
         val dynamicName = moodManager.getDynamicName()
         val customPersonality = userFactDao.getFact("custom_personality")?.value ?: DEFAULT_PERSONALITY
 
-        val gameContext = buildGameContext(messages, memoryContext)
+        val dbContext = loadDbContext()
+        val mergedContext = listOfNotNull(
+            dbContext.ifBlank { null },
+            memoryContext.ifBlank { null }
+        ).joinToString("\n\n")
+
+        val gameContext = buildGameContext(messages, mergedContext)
         
         val systemMsg = ChatMessage(
             role = "system",
@@ -486,8 +520,8 @@ class KtorLlmRepository(
             """.trimIndent()
         )
         val fullMessages = mutableListOf(systemMsg)
-        if (memoryContext.isNotBlank()) {
-            fullMessages.add(ChatMessage("system", "Memori relevan:\n$memoryContext"))
+        if (mergedContext.isNotBlank()) {
+            fullMessages.add(ChatMessage("system", "Memori relevan:\n$mergedContext"))
         }
         fullMessages.addAll(messages)
         
@@ -661,24 +695,12 @@ class KtorLlmRepository(
         return ChatRequest(model = LlmConfig.model, messages = fullMessages, images = base64Images, temperature = 0.7f, topP = 0.95f)
     }
 
-    private fun safeContent(text: String, maxChars: Int = Int.MAX_VALUE): String {
-        val lower = text.lowercase()
-        val safetyPhrases = listOf("safety", "violence", "harmful", "inappropriate", "blocked", "cannot comment", "tidak bisa", "tidak pantas", "tidak sesuai")
-        if (safetyPhrases.count { lower.contains(it) } >= 2 && text.length < 150) return "Hmm, nggak bisa komentar soal itu~"
-        val truncated = if (maxChars < Int.MAX_VALUE) limitSentence(text, maxChars) else text
-        return truncated
-    }
+    internal fun safeContent(text: String, maxChars: Int = Int.MAX_VALUE): String =
+        com.silica.assistant.core.llm.safeContent(text, maxChars)
 
-    private fun limitSentence(text: String, maxChars: Int = 160): String {
-        if (text.length <= maxChars) return text.trim()
-        val cut = text.take(maxChars)
-        val end = cut.lastIndexOfAny(charArrayOf('.', '!', '?', '\n'))
-        return (if (end >= maxChars / 3) cut.substring(0, end + 1) else cut).trim()
-    }
- 
-    private fun codepointAwareTake(text: String, max: Int): String {
-        if (text.length <= max) return text
-        val truncated = text.take(max)
-        return if (truncated.isNotEmpty() && truncated.last().isHighSurrogate()) text.take(max + 1) else truncated
-    }
+    internal fun limitSentence(text: String, maxChars: Int = 160): String =
+        com.silica.assistant.core.llm.limitSentence(text, maxChars)
+
+    private fun codepointAwareTake(text: String, max: Int): String =
+        com.silica.assistant.core.llm.codepointAwareTake(text, max)
 }
