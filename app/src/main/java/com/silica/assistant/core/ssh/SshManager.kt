@@ -1,6 +1,8 @@
 package com.silica.assistant.core.ssh
 
 import android.content.Context
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKeys
 import com.jcraft.jsch.ChannelExec
 import com.jcraft.jsch.ChannelSftp
 import com.jcraft.jsch.ChannelShell
@@ -340,13 +342,38 @@ object SshManager {
     fun getConnectionId(): String = connectionId
 
     // =========================
-    // SAVED CONNECTION
+    // SAVED CONNECTION (EncryptedSharedPreferences)
     // =========================
-    private fun getConnPrefs(context: Context) =
-        context.getSharedPreferences("ssh_saved_connection", Context.MODE_PRIVATE)
+    private fun getConnPrefs(context: Context) = runCatching {
+        val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+        EncryptedSharedPreferences.create(
+            "ssh_saved_connection_secure",
+            masterKeyAlias,
+            context,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+    }.getOrNull()
+
+    private fun migrateFromOldPrefs(context: Context) {
+        val oldPrefs = context.getSharedPreferences("ssh_saved_connection", Context.MODE_PRIVATE)
+        if (!oldPrefs.contains("host")) return
+        try {
+            val newPrefs = getConnPrefs(context) ?: return
+            newPrefs.edit().apply {
+                putString("host", oldPrefs.getString("host", ""))
+                putInt("port", oldPrefs.getInt("port", 22))
+                putString("username", oldPrefs.getString("username", ""))
+                putString("password", oldPrefs.getString("password", ""))
+                apply()
+            }
+            oldPrefs.edit().clear().apply()
+        } catch (_: Exception) {}
+    }
 
     fun saveConnection(context: Context, conn: SshConnection, savePassword: Boolean = false) {
-        getConnPrefs(context).edit().apply {
+        migrateFromOldPrefs(context)
+        getConnPrefs(context)?.edit()?.apply {
             putString("host", conn.host)
             putInt("port", conn.port)
             putString("username", conn.username)
@@ -360,7 +387,8 @@ object SshManager {
     }
 
     fun loadSavedConnection(context: Context): SshConnection? {
-        val prefs = getConnPrefs(context)
+        migrateFromOldPrefs(context)
+        val prefs = getConnPrefs(context) ?: return null
         val host = prefs.getString("host", null) ?: return null
         val port = prefs.getInt("port", 22)
         val username = prefs.getString("username", "") ?: ""
@@ -375,10 +403,12 @@ object SshManager {
     }
 
     fun hasSavedConnection(context: Context): Boolean {
-        return getConnPrefs(context).contains("host")
+        migrateFromOldPrefs(context)
+        return getConnPrefs(context)?.contains("host") ?: false
     }
 
     fun clearSavedConnection(context: Context) {
-        getConnPrefs(context).edit().clear().apply()
+        migrateFromOldPrefs(context)
+        getConnPrefs(context)?.edit()?.clear()?.apply()
     }
 }

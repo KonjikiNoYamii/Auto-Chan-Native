@@ -8,6 +8,10 @@
 # Keep uCrop
 -keep class com.yalantis.ucrop.** { *; }
 
+# Security Crypto (EncryptedSharedPreferences)
+-keep class androidx.security.crypto.** { *; }
+-dontwarn androidx.security.crypto.**
+
 # Keep your app models and entities (Room/Serialization need these)
 -keep class com.silica.assistant.core.llm.model.** { *; }
 -keep class com.silica.assistant.model.** { *; }
