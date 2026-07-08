@@ -49,7 +49,7 @@ object LlmClient : KoinComponent {
 
     suspend fun generateScreenComment(appName: String, uiText: String, contextHint: String? = null, onToken: ((String) -> Unit)? = null): String? {
         val hint = if (contextHint != null) " User: \"$contextHint\"." else ""
-        val prompt = "${LlmConfig.personalityPrompt}\n\nUser lagi di $appName. Layar: $uiText$hint. Reaksi natural sebagai Yami yang ngintip — bisa penasaran, geli, atau heran."
+        val prompt = "${LlmConfig.personalityPrompt}\n\nUser lagi di $appName. Layar: $uiText$hint\nAnalisis situasi dan beri pendapatmu. Kalau ini game, analisis kondisi dan rekomendasi strategi. Kamu punya pengalaman — bicaralah dengan yakin. Cukup 1-2 kalimat."
         return repository.chat(listOf(ChatMessage("user", prompt))).getOrNull()?.content
     }
 

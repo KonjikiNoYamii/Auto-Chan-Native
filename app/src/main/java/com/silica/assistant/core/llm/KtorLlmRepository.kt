@@ -266,9 +266,9 @@ class KtorLlmRepository(
     override suspend fun generateActivityComment(appName: String, isGame: Boolean, contextHint: String?): String? {
         val userReq = if (contextHint != null) ". User baru saja bilang: \"$contextHint\"" else ""
         val prompt = if (isGame) {
-            "${LlmConfig.personalityPrompt}\n\nUser sedang main $appName$userReq. Kamu lagi nontonin dia main dari balik bahu. Reaksi alami — ledekin dikit kalau ada yang lucu, atau komentarin momen yang menarik. Jangan lebay, cukup kayak teman yang ngeliatin sambil senyum."
+            "${LlmConfig.personalityPrompt}\n\nUser sedang main $appName$userReq. Kamu nontonin dari balik bahu. Analisis gameplay-nya dan beri komentar pedas atau rekomendasi taktis — kamu jago game ini. Cukup 1-2 kalimat, kayak temen yang ngasih saran."
         } else {
-            "${LlmConfig.personalityPrompt}\n\nUser lagi buka $appName$userReq. Komentari seperlunya — bisa penasaran, bisa ledekan ringan, bisa observasi random. Yang penting natural dan singkat."
+            "${LlmConfig.personalityPrompt}\n\nUser lagi buka $appName$userReq. Komentari seperlunya — observasi random, ledekan ringan, atau pendapatmu. Yang penting natural dan singkat."
         }
         val msg = listOf(ChatMessage("user", prompt))
         return chat(msg).getOrNull()?.content?.let { if (isGame) limitSentence(it) else it.take(300) }
@@ -278,7 +278,7 @@ class KtorLlmRepository(
         quickHealthCheck()
         val textHint = if (uiText.isBlank()) "" else "\nTeks di layar: \"${uiText.take(200)}\""
         val focus = if (contextHint != null) "\nUser bilang: \"$contextHint\"." else ""
-        val prompt = "${LlmConfig.personalityPrompt}\n\nKamu lihat layar $appName.$textHint$focus\nApa yang menarik? Komentari detail spesifik yang kamu lihat — bukan deskripsi teknis, tapi reaksi alamimu sebagai Yami yang jeli. Misal: timingnya, ekspresi karakter, UI yang aneh, loading lama, atau momen lucu. Cukup 1-2 kalimat, kayak bisikan ke teman."
+        val prompt = "${LlmConfig.personalityPrompt}\n\nKamu lihat layar $appName.$textHint$focus\nAnalisis situasi dan beri pendapatmu dengan yakin. Kalau ini game, analisis kondisi tim/musuh dan rekomendasi strategi. Kamu punya pengalaman sendiri — bicaralah seperti ahlinya, bukan deskripsi hambar. Cukup 1-2 kalimat."
 
         if (activeProvider == "LocalGemini" && screenshotJpeg != null) {
             try {
