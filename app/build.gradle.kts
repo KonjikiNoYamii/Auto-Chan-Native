@@ -129,6 +129,9 @@ dependencies {
     implementation(libs.firebase.auth)
     implementation(libs.firebase.database)
 
+    // Security
+    implementation(libs.androidx.security.crypto)
+
     // Testing
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
