@@ -412,6 +412,7 @@ class KtorLlmRepository(
         """.trimIndent()
         
         val response = chat(listOf(ChatMessage("user", prompt))).getOrNull()?.content?.trim() ?: "NONE"
+        chatDao.markLastMessagesAsInternal(2)
         if (response.equals("NONE", ignoreCase = true)) return emptyList()
         
         return response.split("\n")

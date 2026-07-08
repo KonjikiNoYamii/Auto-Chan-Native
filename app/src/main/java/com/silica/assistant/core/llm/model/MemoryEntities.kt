@@ -11,7 +11,8 @@ data class ChatMessageEntity(
     val role: String = "",
     val content: String = "",
     val timestamp: Long = System.currentTimeMillis(),
-    val emotion: String? = null
+    val emotion: String? = null,
+    val type: String = "conversation" // "conversation" or "internal"
 )
 
 @Entity(tableName = "user_facts")

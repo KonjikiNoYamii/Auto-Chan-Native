@@ -24,13 +24,19 @@ private val MIGRATION_12_13 = object : Migration(12, 13) {
     }
 }
 
+private val MIGRATION_13_14 = object : Migration(13, 14) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE chat_messages ADD COLUMN type TEXT NOT NULL DEFAULT 'conversation'")
+    }
+}
+
 val appModule = module {
     single {
         Room.databaseBuilder(
             androidContext(),
             SilicaDatabase::class.java,
             "silica_database"
-        ).addMigrations(MIGRATION_12_13).build()
+        ).addMigrations(MIGRATION_12_13, MIGRATION_13_14).build()
     }
     
     single { get<SilicaDatabase>().chatDao() }
