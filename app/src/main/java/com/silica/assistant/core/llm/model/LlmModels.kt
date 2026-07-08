@@ -10,6 +10,7 @@ data class ChatRequest(
     val stream: Boolean = false,
     val temperature: Float? = null,
     val topP: Float? = null,
+    val maxTokens: Int? = null,
     val images: List<String>? = null
 )
 
