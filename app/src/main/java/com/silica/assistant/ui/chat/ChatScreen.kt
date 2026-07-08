@@ -61,7 +61,7 @@ fun ChatScreen(
     val error = viewModel.error
 
     LaunchedEffect(Unit) {
-        viewModel.loadMemories(context)
+        viewModel.loadMemories()
         viewModel.loadInventory()
         com.silica.assistant.core.llm.WaifuNotifier.cancelAllNotifications()
     }
@@ -508,7 +508,7 @@ private fun MemoriesDialog(
                             ) {
                                 Text(text = mem, fontSize = 13.sp, modifier = Modifier.weight(1f))
                                 IconButton(
-                                    onClick = { viewModel.deleteMemory(context, i) },
+                                    onClick = { viewModel.deleteMemory(i) },
                                     modifier = Modifier.size(28.dp)
                                 ) {
                                     Icon(Icons.Filled.Close, contentDescription = "Hapus", modifier = Modifier.size(16.dp))

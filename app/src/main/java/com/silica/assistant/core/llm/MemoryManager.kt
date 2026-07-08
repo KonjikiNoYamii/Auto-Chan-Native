@@ -1,6 +1,5 @@
 package com.silica.assistant.core.llm
 
-import android.content.Context
 import com.silica.assistant.core.llm.db.UserFactDao
 import com.silica.assistant.core.llm.model.UserFactEntity
 import kotlinx.coroutines.*
@@ -10,19 +9,19 @@ import org.koin.core.component.inject
 object MemoryManager : KoinComponent {
     private val userFactDao: UserFactDao by inject()
 
-    suspend fun getMemories(context: Context? = null): List<String> {
+    suspend fun getMemories(): List<String> {
         val facts = userFactDao.getFactsByPrefix("user_memory_%")
         return facts.map { it.value }
     }
 
-    suspend fun aiAutoExtract(context: Context? = null, userInput: String) {
+    suspend fun aiAutoExtract(userInput: String) {
         val facts = LlmClient.extractUserFacts(userInput)
         for (fact in facts) {
             addMemory(fact)
         }
     }
 
-    suspend fun addMemory(fact: String, context: Context? = null) {
+    suspend fun addMemory(fact: String) {
         val existing = userFactDao.getFactsByPrefix("user_memory_%")
         if (existing.none { it.value.equals(fact, ignoreCase = true) }) {
             val key = "user_memory_${System.currentTimeMillis()}_${existing.size}"
@@ -43,27 +42,27 @@ object MemoryManager : KoinComponent {
         }
     }
 
-    suspend fun removeMemory(keyword: String, context: Context? = null) {
+    suspend fun removeMemory(keyword: String) {
         val facts = userFactDao.getFactsByPrefix("user_memory_%")
         for (fact in facts) {
             if (fact.value.contains(keyword, ignoreCase = true)) {
-                userFactDao.insertFact(UserFactEntity(key = fact.key, value = ""))
+                userFactDao.deleteFactByKey(fact.key)
             }
         }
     }
 
-    suspend fun removeMemoryAt(index: Int, context: Context? = null) {
+    suspend fun removeMemoryAt(index: Int) {
         val facts = userFactDao.getFactsByPrefix("user_memory_%")
         if (index in facts.indices) {
-            userFactDao.insertFact(UserFactEntity(key = facts[index].key, value = ""))
+            userFactDao.deleteFactByKey(facts[index].key)
         }
     }
 
-    suspend fun clearAll(context: Context? = null) {
+    suspend fun clearAll() {
         userFactDao.deleteFactsByPrefix("user_memory_%")
     }
 
-    suspend fun buildContext(context: Context? = null): String {
+    suspend fun buildContext(): String {
         val mems = getMemories()
         if (mems.isEmpty()) return ""
         return mems.joinToString("\n") { "- $it" }

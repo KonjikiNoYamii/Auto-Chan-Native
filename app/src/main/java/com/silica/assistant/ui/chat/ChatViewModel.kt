@@ -235,13 +235,13 @@ class ChatViewModel(
         return parts.take(4)
     }
 
-    fun loadMemories(context: Context) {
+    fun loadMemories() {
         viewModelScope.launch {
             memories = MemoryManager.getMemories()
         }
     }
 
-    fun deleteMemory(context: Context, index: Int) {
+    fun deleteMemory(index: Int) {
         viewModelScope.launch {
             MemoryManager.removeMemoryAt(index)
             memories = MemoryManager.getMemories()
