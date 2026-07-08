@@ -23,6 +23,7 @@ import com.silica.assistant.core.llm.model.FriendEntity
 import com.silica.assistant.core.llm.model.SocialMessageEntity
 import com.silica.assistant.ui.theme.DeepRose
 import com.silica.assistant.ui.theme.Espresso
+import com.silica.assistant.core.llm.markdownToAnnotated
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import java.text.SimpleDateFormat
@@ -119,7 +120,7 @@ fun SocialChatBubble(message: SocialMessageEntity, friendId: String) {
                     .background(if (isMe) DeepRose else Espresso.copy(alpha = 0.1f))
                     .padding(12.dp)
             ) {
-                Text(message.content, color = if (isMe) Color.White else Espresso, fontSize = 14.sp)
+                Text(markdownToAnnotated(message.content), color = if (isMe) Color.White else Espresso, fontSize = 14.sp)
             }
             Text(
                 timeFormat.format(Date(message.timestamp)),
