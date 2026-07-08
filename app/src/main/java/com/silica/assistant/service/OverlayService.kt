@@ -972,6 +972,11 @@ class OverlayService : Service() {
     }
 
     fun showBubble(text: String, persistent: Boolean = false) {
+        val displayText = if (!GameModeManager.isGameMode && text.length > 240) {
+            val cut = text.take(240)
+            val end = cut.lastIndexOfAny(charArrayOf('.', '!', '?', '\n'))
+            if (end >= 60) cut.substring(0, end + 1) else cut
+        } else text
 
         handler.post {
 
@@ -999,7 +1004,7 @@ class OverlayService : Service() {
             lastGameTouchTime = System.currentTimeMillis()
 
             // Shake effect for emotional reactions
-            val lowerText = text.lowercase()
+            val lowerText = displayText.lowercase()
             val emotionalKeywords = listOf("!", "wah", "aduh", "ah", "gagal", "menang", "kalah", "hebat")
             if (emotionalKeywords.any { lowerText.contains(it) } && ::controller.isInitialized) {
                 controller.shake()
@@ -1007,30 +1012,30 @@ class OverlayService : Service() {
 
             val density = resources.displayMetrics.density
             val onRightSide = params.x > displayWidth / 2
-            val availableRight = (displayWidth - params.x - (8 * density).toInt()).coerceAtLeast((120 * density).toInt())
-            val baseMaxW = if (GameModeManager.isGameMode) 180 else 240
+            val availableRight = (displayWidth - params.x - (8 * density).toInt()).coerceAtLeast((160 * density).toInt())
+            val baseMaxW = if (GameModeManager.isGameMode) 200 else 300
             val maxW = availableRight.coerceAtMost((baseMaxW * density).toInt())
             bubbleText.maxWidth = maxW
             bubbleText.gravity = if (onRightSide) Gravity.END else Gravity.START
 
             playPopSound()
-            playVoiceForText(text)
+            playVoiceForText(displayText)
 
             // Typing effect
             var charIndex = 0
             bubbleTypingRunnable = object : Runnable {
                 override fun run() {
-                    if (charIndex <= text.length) {
-                        bubbleText.text = text.substring(0, charIndex)
+                    if (charIndex <= displayText.length) {
+                        bubbleText.text = displayText.substring(0, charIndex)
                         charIndex++
                         val typingDelay = if (GameModeManager.isGameMode) 15L else 30L
-                        val delay = if (charIndex < text.length && text[charIndex-1] in listOf('.', '!', '?', ',')) {
+                        val delay = if (charIndex < displayText.length && displayText[charIndex-1] in listOf('.', '!', '?', ',')) {
                             if (GameModeManager.isGameMode) 100L else 200L
                         } else typingDelay
                         handler.postDelayed(this, delay)
                     } else {
-                        if (persistent && text.endsWith("...")) {
-                            val baseText = text.removeSuffix("...")
+                        if (persistent && displayText.endsWith("...")) {
+                            val baseText = displayText.removeSuffix("...")
                             var dots = 3
                             bubbleDotsRunnable = object : Runnable {
                                 override fun run() {
@@ -1042,9 +1047,9 @@ class OverlayService : Service() {
                             handler.postDelayed(bubbleDotsRunnable!!, 500)
                         } else {
                             val duration = if (GameModeManager.isGameMode) {
-                                (1500L + text.length * 20L).coerceAtMost(4000L)
+                                (1500L + displayText.length * 20L).coerceAtMost(4000L)
                             } else {
-                                (2000L + text.length * 30L).coerceAtMost(8000L)
+                                (2000L + displayText.length * 30L).coerceAtMost(8000L)
                             }
                             bubbleHideRunnable = Runnable {
                                 bubbleText.animate()

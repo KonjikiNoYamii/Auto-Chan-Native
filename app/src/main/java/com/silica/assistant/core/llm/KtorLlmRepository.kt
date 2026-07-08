@@ -37,8 +37,8 @@ class KtorLlmRepository(
     companion object {
         private const val CONFIDENCE_THRESHOLD = 2
         private const val MAX_HISTORY_CONTEXT = 10
-        private const val SYSTEM_RULES = "Tugasmu: Bantu user dengan perintah SSH, Mode Game, dan chat. Gunakan Bahasa Indonesia. Format respon: elegan, santai, namun tetap sopan. Hindari bahasa kaku seperti robot; bicaralah seperti partner yang nyata. WAJIB gunakan text emotes (kaomoji) secara natural untuk menunjukkan emosi. DILARANG KERAS menggunakan emoji grafis/berwarna. Jika dalam Mode Game, respon WAJIB SANGAT SINGKAT (maks 10 kata)."
-        private const val DEFAULT_PERSONALITY = "Kamu adalah Yami, alien assassin yang tenang dan sopan. Kamu bicara dengan gaya elegan, sedikit stoik, namun natural. Gunakan variasi kata, jeda seperti 'Hmm...', atau 'Ah,' sesekali agar tidak terasa seperti template. Jangan selalu menjawab dengan pola yang sama. Tunjukkan bahwa kamu benar-benar peduli pada partner kamu dengan cara yang halus. Gunakan kaomoji yang bervariasi dari yang ekspresif sampai yang stoik/cool seperti ( -_ -), (¬_¬), atau (─‿─). Kamu suka Taiyaki. Kamu tidak suka hal yang tidak sopan (Harenchi). Responlah dengan cara yang hidup dan bermakna."
+        private const val SYSTEM_RULES = "Tugasmu: Bantu user dengan perintah SSH, Mode Game, dan chat. Gunakan Bahasa Indonesia. Format respon: elegan, santai, namun tetap sopan. Hindari bahasa kaku seperti robot; bicaralah seperti partner yang nyata. WAJIB gunakan text emotes (kaomoji) secara natural untuk menunjukkan emosi. DILARANG KERAS menggunakan emoji grafis/berwarna. Jika dalam Mode Game, respon WAJIB SANGAT SINGKAT (maks 10 kata). PENTING: respon maksimal 1-3 kalimat pendek saja. Langsung ke inti, tidak perlu basa-basi."
+        private const val DEFAULT_PERSONALITY = "Kamu adalah Yami, alien assassin yang tenang dan sopan. Kamu bicara dengan gaya elegan, sedikit stoik, namun natural. Gunakan variasi kata, jeda seperti 'Hmm...', atau 'Ah,' sesekali agar tidak terasa seperti template. Jangan selalu menjawab dengan pola yang sama. Gunakan kaomoji yang bervariasi dari yang ekspresif sampai yang stoik/cool seperti ( -_ -), (¬_¬), atau (─‿─). Kamu suka Taiyaki. Kamu tidak suka hal yang tidak sopan (Harenchi). PENTING: Jawab maksimal 1-3 kalimat pendek, langsung ke inti."
     }
 
     override suspend fun startPeriodicHealthCheck() {
@@ -205,7 +205,7 @@ class KtorLlmRepository(
                 val text = geminiResp.candidates
                     ?.firstOrNull()?.content?.parts
                     ?.joinToString("") { it.text ?: "" } ?: ""
-                val safeContent = safeContent(text)
+                val safeContent = safeContent(text, 300)
                 chatDao.insertMessage(ChatMessageEntity(role = "assistant", content = safeContent))
                 Result.success(ChatMessage(role = "assistant", content = safeContent))
             } else {
@@ -231,7 +231,7 @@ class KtorLlmRepository(
             if (response.status.value in 200..299) {
                 val chatResponse = response.body<ChatResponse>()
                 val content = chatResponse.choices.firstOrNull()?.message?.content ?: ""
-                val safeContent = safeContent(content)
+                val safeContent = safeContent(content, 300)
                 chatDao.insertMessage(ChatMessageEntity(role = "assistant", content = safeContent))
                 Result.success(ChatMessage(role = "assistant", content = safeContent))
             } else {
@@ -611,20 +611,21 @@ class KtorLlmRepository(
         return ChatRequest(model = LlmConfig.model, messages = fullMessages, images = base64Images)
     }
 
-    private fun safeContent(text: String): String {
+    private fun safeContent(text: String, maxChars: Int = Int.MAX_VALUE): String {
         val lower = text.lowercase()
         val safetyPhrases = listOf("safety", "violence", "harmful", "inappropriate", "blocked", "cannot comment", "tidak bisa", "tidak pantas", "tidak sesuai")
         if (safetyPhrases.count { lower.contains(it) } >= 2 && text.length < 150) return "Hmm, nggak bisa komentar soal itu~"
-        return text
+        val truncated = if (maxChars < Int.MAX_VALUE) limitSentence(text, maxChars) else text
+        return truncated
     }
 
-    private fun limitSentence(text: String): String {
-        if (text.length <= 160) return text.trim()
-        val cut = text.take(160)
-        val end = cut.lastIndexOfAny(charArrayOf('.', '!', '?'))
-        return (if (end >= 60) cut.substring(0, end + 1) else cut).trim()
+    private fun limitSentence(text: String, maxChars: Int = 160): String {
+        if (text.length <= maxChars) return text.trim()
+        val cut = text.take(maxChars)
+        val end = cut.lastIndexOfAny(charArrayOf('.', '!', '?', '\n'))
+        return (if (end >= maxChars / 3) cut.substring(0, end + 1) else cut).trim()
     }
-
+ 
     private fun codepointAwareTake(text: String, max: Int): String {
         if (text.length <= max) return text
         val truncated = text.take(max)
