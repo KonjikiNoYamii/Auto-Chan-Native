@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import com.silica.assistant.core.llm.MoodManager
 import com.silica.assistant.ui.theme.DeepRose
 import com.silica.assistant.ui.theme.Espresso
+import com.silica.assistant.ui.components.QuestSection
 import com.silica.assistant.ui.viewmodel.AssistantViewModel
 import org.koin.compose.koinInject
 
@@ -215,6 +216,17 @@ fun ProfileScreen(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // Active Quests Section
+            QuestSection(
+                activeQuests = viewModel.activeQuests,
+                onAddQuest = { title, diff -> viewModel.addQuest(title, diff) },
+                onCompleteQuest = { title -> viewModel.completeQuest(title) },
+                onDeleteQuest = { quest -> viewModel.deleteQuest(quest) },
+                onClassify = { title -> viewModel.classifyQuest(title) }
+            )
 
             Spacer(modifier = Modifier.height(32.dp))
 
