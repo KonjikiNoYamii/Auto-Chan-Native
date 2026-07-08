@@ -35,6 +35,7 @@ import com.silica.assistant.core.llm.EmotionMapper
 import com.silica.assistant.core.llm.LlmClient
 import com.silica.assistant.core.llm.LlmConfig
 import com.silica.assistant.core.llm.MemoryManager
+import com.silica.assistant.core.llm.markdownToAnnotated
 import com.silica.assistant.ui.theme.DeepRose
 import java.text.SimpleDateFormat
 import java.util.*
@@ -520,8 +521,7 @@ private fun MemoriesDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                MemoryManager.clearAll(context)
-                viewModel.loadMemories(context)
+                viewModel.clearAllMemories()
             }) {
                 Text("Hapus Semua", color = MaterialTheme.colorScheme.error)
             }
@@ -626,7 +626,7 @@ private fun ChatBubble(message: ChatMessage, assistantName: String) {
             ) {
                 SelectionContainer {
                     Text(
-                        text = message.displayedContent,
+                        text = markdownToAnnotated(message.displayedContent),
                         fontSize = 14.sp,
                         color = if (isUser) Color.White
                         else MaterialTheme.colorScheme.onSurface
