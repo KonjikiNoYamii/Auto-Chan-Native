@@ -9,8 +9,6 @@ import com.silica.assistant.core.action.Action
 import com.silica.assistant.core.action.ActionExecutor
 import com.silica.assistant.core.action.ActionMapper
 import com.silica.assistant.core.config.AssistantConfig
-import com.silica.assistant.core.knowledge.KnowledgeEngine
-import com.silica.assistant.core.knowledge.KnowledgeParser
 import com.silica.assistant.core.media.MediaController
 import com.silica.assistant.core.overlay.OverlayEventBus
 import com.silica.assistant.core.llm.LlmClient
@@ -178,16 +176,6 @@ object CommandManager : KoinComponent {
         }
 
         val result = CommandNormalizer.normalize(effectiveInput)
-        val knowledgeQuery = KnowledgeParser.parse(effectiveInput)
-
-        if (knowledgeQuery != null) {
-
-            val answer = KnowledgeEngine.answer(knowledgeQuery)
-
-            OverlayEventBus.send(answer)
-
-            return
-        }
 
         if (result == null) {
             // Check if user is calling her name
