@@ -516,6 +516,8 @@ class MoodManager(
         return "$baseSnippet$nameMissingNote"
     }
 
+    private var lastAffinityTime = 0L
+
     fun addAffinityPoints(points: Int) {
         scope.launch {
             val profile = getProfile()
@@ -527,6 +529,9 @@ class MoodManager(
     }
 
     fun addAffinity(points: Int) {
+        val now = System.currentTimeMillis()
+        if (now - lastAffinityTime < 3000L) return
+        lastAffinityTime = now
         addAffinityPoints(points)
         addXp(points * 10)
     }
