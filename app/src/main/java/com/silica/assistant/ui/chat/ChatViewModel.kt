@@ -121,47 +121,56 @@ class ChatViewModel(
         // handle memory management commands
         val forgetCmd = MemoryManager.extractForgetCommand(text)
         if (forgetCmd != null) {
-            MemoryManager.removeMemory(context, forgetCmd)
-            memories = MemoryManager.getMemories(context)
             val uMsg = ChatMessage(role = "user", content = text)
             val aMsg = ChatMessage(role = "assistant", content = "...Baik, aku lupakan itu.")
             messages = messages + uMsg + aMsg
             saveMessage("user", text)
             saveMessage("assistant", aMsg.content)
+            viewModelScope.launch {
+                MemoryManager.removeMemory(forgetCmd)
+                memories = MemoryManager.getMemories()
+            }
             return
         }
 
         if (MemoryManager.isClearCommand(text)) {
-            MemoryManager.clearAll(context)
-            memories = emptyList()
             val uMsg = ChatMessage(role = "user", content = text)
             val aMsg = ChatMessage(role = "assistant", content = "...Semua ingatan dihapus.")
             messages = messages + uMsg + aMsg
             saveMessage("user", text)
             saveMessage("assistant", aMsg.content)
+            viewModelScope.launch {
+                MemoryManager.clearAll()
+            }
+            memories = emptyList()
             return
         }
 
         if (MemoryManager.isListCommand(text)) {
-            val mems = MemoryManager.getMemories(context)
-            val content = if (mems.isEmpty()) {
-                "...Aku belum tahu banyak tentangmu."
-            } else {
-                "Yang aku tahu:\n" + mems.mapIndexed { i, m -> "${i + 1}. $m" }.joinToString("\n")
+            viewModelScope.launch {
+                val mems = MemoryManager.getMemories()
+                val content = if (mems.isEmpty()) {
+                    "...Aku belum tahu banyak tentangmu."
+                } else {
+                    "Yang aku tahu:\n" + mems.mapIndexed { i, m -> "${i + 1}. $m" }.joinToString("\n")
+                }
+                val uMsg = ChatMessage(role = "user", content = text)
+                val aMsg = ChatMessage(role = "assistant", content = content)
+                messages = messages + uMsg + aMsg
+                saveMessage("user", text)
+                saveMessage("assistant", content)
             }
-            val uMsg = ChatMessage(role = "user", content = text)
-            val aMsg = ChatMessage(role = "assistant", content = content)
-            messages = messages + uMsg + aMsg
-            saveMessage("user", text)
-            saveMessage("assistant", content)
             return
         }
 
         // auto-store detected facts silently using AI
         viewModelScope.launch {
-            MemoryManager.aiAutoExtract(context, text)
-            memories = MemoryManager.getMemories(context)
+            MemoryManager.aiAutoExtract(userInput = text)
+            memories = MemoryManager.getMemories()
         }
+
+        // small affinity for each chat interaction
+        moodManager.addAffinity(1)
 
         // send to LLM with memory context
         val userMsg = ChatMessage(role = "user", content = text)
@@ -170,9 +179,9 @@ class ChatViewModel(
         
         isLoading = true
         error = null
-        val memoryCtx = MemoryManager.buildContext(context)
 
         viewModelScope.launch {
+            val memoryCtx = MemoryManager.buildContext()
             LlmClient.chat(messages, memoryContext = memoryCtx)
                 .onSuccess { reply ->
                     val bubbles = splitResponse(reply.content)
@@ -227,12 +236,23 @@ class ChatViewModel(
     }
 
     fun loadMemories(context: Context) {
-        memories = MemoryManager.getMemories(context)
+        viewModelScope.launch {
+            memories = MemoryManager.getMemories()
+        }
     }
 
     fun deleteMemory(context: Context, index: Int) {
-        runCatching { MemoryManager.removeMemoryAt(context, index) }
-        memories = MemoryManager.getMemories(context)
+        viewModelScope.launch {
+            MemoryManager.removeMemoryAt(index)
+            memories = MemoryManager.getMemories()
+        }
+    }
+
+    fun clearAllMemories() {
+        viewModelScope.launch {
+            MemoryManager.clearAll()
+            memories = MemoryManager.getMemories()
+        }
     }
 
     fun clearChat() {
