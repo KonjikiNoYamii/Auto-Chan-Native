@@ -8,6 +8,8 @@ data class ChatRequest(
     val model: String,
     val messages: List<ChatMessage>,
     val stream: Boolean = false,
+    val temperature: Float? = null,
+    val topP: Float? = null,
     val images: List<String>? = null
 )
 

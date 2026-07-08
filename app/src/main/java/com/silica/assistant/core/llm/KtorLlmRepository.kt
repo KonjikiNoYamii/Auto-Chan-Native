@@ -284,7 +284,7 @@ class KtorLlmRepository(
             try {
                 val b64 = android.util.Base64.encodeToString(screenshotJpeg, android.util.Base64.NO_WRAP)
                 val msg = ChatMessage(role = "user", content = prompt)
-                val payload = ChatRequest(model = LlmConfig.model, messages = listOf(msg), stream = false, images = listOf(b64))
+                val payload = ChatRequest(model = LlmConfig.model, messages = listOf(msg), stream = false, images = listOf(b64), temperature = 0.7f, topP = 0.95f)
                 val resp: HttpResponse = client.post(LlmConfig.localEndpoint) {
                     contentType(ContentType.Application.Json)
                     setBody(payload)
@@ -307,7 +307,7 @@ class KtorLlmRepository(
                     GeminiPart(text = prompt)
                 )
                 val contents = listOf(GeminiContent(role = "user", parts = parts))
-                val geminiReq = GeminiRequest(contents = contents)
+                val geminiReq = GeminiRequest(contents = contents, generationConfig = GeminiGenerationConfig(temperature = 0.7f, topK = 40, topP = 0.95f))
                 val url = "${LlmConfig.geminiEndpoint}${LlmConfig.geminiModel}:generateContent"
                 val resp: HttpResponse = client.post(url) {
                     contentType(ContentType.Application.Json)
@@ -442,7 +442,7 @@ class KtorLlmRepository(
         }
         fullMessages.addAll(messages)
         
-        return ChatRequest(model = LlmConfig.model, messages = fullMessages, stream = stream)
+        return ChatRequest(model = LlmConfig.model, messages = fullMessages, stream = stream, temperature = 0.7f, topP = 0.95f)
     }
 
     override suspend fun visionChat(messages: List<ChatMessage>, memoryContext: String): Result<ChatMessage> {
@@ -609,7 +609,7 @@ class KtorLlmRepository(
         val fullMessages = mutableListOf(systemMsg)
         fullMessages.addAll(messages)
 
-        return ChatRequest(model = LlmConfig.model, messages = fullMessages, images = base64Images)
+        return ChatRequest(model = LlmConfig.model, messages = fullMessages, images = base64Images, temperature = 0.7f, topP = 0.95f)
     }
 
     private fun safeContent(text: String, maxChars: Int = Int.MAX_VALUE): String {
