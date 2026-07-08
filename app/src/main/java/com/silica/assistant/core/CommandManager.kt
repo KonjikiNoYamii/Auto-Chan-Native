@@ -59,6 +59,8 @@ object CommandManager : KoinComponent {
         } else if (lowerInput.contains("bodoh") || lowerInput.contains("jelek") || lowerInput.contains("benci")) {
             moodManager.addAffinity(-10)
             moodManager.updateMood(-0.1f)
+        } else {
+            moodManager.addAffinity(1)
         }
 
         // Gifting Logic (with Daily Limits & Recovery)
