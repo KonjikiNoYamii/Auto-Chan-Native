@@ -118,6 +118,7 @@ class KtorLlmRepository(
             quickHealthCheck()
             
             // 1. Save user messages to DB
+            val userInput = messages.filter { it.role == "user" }.joinToString("\n") { it.content }
             messages.filter { it.role == "user" }.forEach { 
                 chatDao.insertMessage(ChatMessageEntity(role = it.role, content = it.content))
             }
@@ -130,33 +131,34 @@ class KtorLlmRepository(
             val personalityContext = moodManager.getMoodPromptSnippet()
             val fullMemoryContext = "$personalityContext $memoryContext"
 
-            when (activeProvider) {
+            val result = when (activeProvider) {
                 "LocalGemini" -> {
                     android.util.Log.d("SilicaAI", "Chat: using LocalGemini")
-                    val result = chatLocal(history, fullMemoryContext)
-                    if (result.isFailure) {
+                    val r = chatLocal(history, fullMemoryContext)
+                    if (r.isFailure) {
                         android.util.Log.w("SilicaAI", "LocalGemini failed, fallback to Gemini")
                         activeProvider = "Gemini"
                         chatGeminiFirebase(history, fullMemoryContext)
-                    } else {
-                        result
-                    }
+                    } else r
                 }
                 "Gemini" -> {
                     android.util.Log.d("SilicaAI", "Chat: using Gemini")
-                    val result = chatGeminiFirebase(history, fullMemoryContext)
-                    if (result.isFailure) {
+                    val r = chatGeminiFirebase(history, fullMemoryContext)
+                    if (r.isFailure) {
                         android.util.Log.w("SilicaAI", "Gemini also failed")
                         Result.failure(Exception("Gemini API tidak tersedia. Periksa koneksi atau API key."))
-                    } else {
-                        result
-                    }
+                    } else r
                 }
                 else -> {
                     android.util.Log.e("SilicaAI", "No AI provider available")
                     Result.failure(Exception("Tidak ada provider AI yang tersedia. Nyalakan laptop (local server) atau periksa API key Gemini."))
                 }
             }
+
+            if (result.isSuccess && userInput.isNotBlank()) {
+                extractGameKnowledge(userInput, result.getOrNull()?.content ?: "")
+            }
+            return result
         } catch (e: Exception) {
             android.util.Log.e("SilicaAI", "Chat error", e)
             Result.failure(e)
@@ -169,6 +171,7 @@ class KtorLlmRepository(
             val dynamicName = moodManager.getDynamicName()
             val customPersonality = userFactDao.getFact("custom_personality")?.value ?: DEFAULT_PERSONALITY
 
+            val gameContext = buildGameContext(history, memoryContext)
             val systemPrompt = """
                 $SYSTEM_RULES
                 $customPersonality
@@ -178,6 +181,7 @@ class KtorLlmRepository(
                 Jika User dalam Mode Game, respon WAJIB SANGAT SINGKAT (maks 10 kata).
                 Memori relevan:
                 $memoryContext
+                $gameContext
             """.trimIndent()
 
             val contents = mutableListOf<GeminiContent>()
@@ -420,10 +424,54 @@ class KtorLlmRepository(
             .filter { it.isNotBlank() && it.length > 5 }
     }
 
+    private val gameKeywords = setOf("ml", "mobile legends", "genshin", "valorant", "game", "hero", "tier", "meta", "counter", "build", "skill", "item", "rank", "match", "tim", "musuh", "komposisi", "team comp")
+
+    private suspend fun buildGameContext(messages: List<ChatMessage>, memoryContext: String): String {
+        val allText = (messages.map { it.content } + memoryContext).joinToString(" ").lowercase()
+        if (gameKeywords.none { allText.contains(it) }) return ""
+
+        val storedFacts = userFactDao.getGameFacts()
+        if (storedFacts.isEmpty()) return ""
+
+        val factsText = storedFacts.joinToString("\n") { "- ${it.value}" }
+        return "\n\nPengetahuan game yang kamu pelajari:\n$factsText"
+    }
+
+    private suspend fun extractGameKnowledge(userInput: String, aiResponse: String) {
+        val text = "$userInput\n$aiResponse"
+        if (gameKeywords.none { text.lowercase().contains(it) }) return
+
+        val prompt = """
+            Dari percakapan game berikut, ekstrak fakta pengetahuan game yang berguna:
+            User: "$userInput"
+            AI: "$aiResponse"
+            
+            Fakta harus berbentuk pernyataan singkat dan spesifik tentang game — misal: "Franco counter-nya Diggie", "Hero meta ML season ini adalah Nolan dan Ling".
+            Jika tidak ada fakta game baru yang bisa diekstrak, balas HANYA dengan "NONE".
+            Jika ada lebih dari satu, pisahkan dengan baris baru.
+            Awali setiap baris dengan kode game: [ML], [GENSHIN], [VALORANT], atau [UMUM].
+        """.trimIndent()
+        
+        val response = chat(listOf(ChatMessage("user", prompt))).getOrNull()?.content?.trim() ?: "NONE"
+        chatDao.markLastMessagesAsInternal(2)
+        if (response.equals("NONE", ignoreCase = true)) return
+
+        val facts = response.split("\n")
+            .map { it.trim() }
+            .filter { it.isNotBlank() && it.length > 8 && (it.startsWith("[") || !it.startsWith("NONE")) }
+
+        for (fact in facts) {
+            val key = "game_${fact.hashCode()}"
+            userFactDao.insertFact(UserFactEntity(key = key, value = fact))
+        }
+    }
+
     private suspend fun buildChatRequest(messages: List<ChatMessage>, memoryContext: String, stream: Boolean): ChatRequest {
         val moodSnippet = moodManager.getMoodPromptSnippet()
         val dynamicName = moodManager.getDynamicName()
         val customPersonality = userFactDao.getFact("custom_personality")?.value ?: DEFAULT_PERSONALITY
+
+        val gameContext = buildGameContext(messages, memoryContext)
         
         val systemMsg = ChatMessage(
             role = "system",
@@ -434,6 +482,7 @@ class KtorLlmRepository(
                 User saat ini adalah: $dynamicName
                 PASTIKAN setiap kalimat selesai dan tidak terpotong. 
                 Jika User dalam Mode Game, respon WAJIB SANGAT SINGKAT (maks 10 kata).
+                $gameContext
             """.trimIndent()
         )
         val fullMessages = mutableListOf(systemMsg)

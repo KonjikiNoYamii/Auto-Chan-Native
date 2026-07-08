@@ -15,6 +15,9 @@ interface UserFactDao {
     @Query("SELECT * FROM user_facts WHERE `key` = :key LIMIT 1")
     suspend fun getFact(key: String): UserFactEntity?
 
+    @Query("SELECT * FROM user_facts WHERE `key` LIKE 'game_%'")
+    suspend fun getGameFacts(): List<UserFactEntity>
+
     @Query("DELETE FROM user_facts")
     suspend fun deleteAllFacts()
 }
