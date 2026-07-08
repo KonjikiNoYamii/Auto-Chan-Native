@@ -18,6 +18,12 @@ interface UserFactDao {
     @Query("SELECT * FROM user_facts WHERE `key` LIKE 'game_%'")
     suspend fun getGameFacts(): List<UserFactEntity>
 
+    @Query("SELECT * FROM user_facts WHERE `key` LIKE :prefix")
+    suspend fun getFactsByPrefix(prefix: String): List<UserFactEntity>
+
+    @Query("DELETE FROM user_facts WHERE `key` LIKE :prefix")
+    suspend fun deleteFactsByPrefix(prefix: String)
+
     @Query("DELETE FROM user_facts")
     suspend fun deleteAllFacts()
 }
