@@ -5,6 +5,8 @@ import com.silica.assistant.core.llm.model.UserFactEntity
 import kotlinx.coroutines.*
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import java.text.SimpleDateFormat
+import java.util.*
 
 object MemoryManager : KoinComponent {
     private val userFactDao: UserFactDao by inject()
@@ -29,6 +31,31 @@ object MemoryManager : KoinComponent {
             triggerAutoSync()
         }
     }
+
+    // ── Shared Memory Log ──
+
+    suspend fun logSharedMemory(summary: String, category: String = "shared") {
+        val dateKey = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
+        val existing = userFactDao.getFactsByPrefix("memory_${dateKey}_${category}_%")
+        val key = "memory_${dateKey}_${category}_${existing.size}"
+        userFactDao.insertFact(UserFactEntity(key = key, value = summary, updatedAt = System.currentTimeMillis()))
+        triggerAutoSync()
+    }
+
+    suspend fun getRecentMemories(days: Int = 7): String {
+        val all = userFactDao.getFactsByPrefix("memory_%")
+        if (all.isEmpty()) return ""
+        val sorted = all.sortedByDescending { it.key }.take(days * 3)
+        return sorted.joinToString("\n") { it.value }
+    }
+
+    suspend fun getRandomMemory(): String? {
+        val all = userFactDao.getFactsByPrefix("memory_%")
+        if (all.isEmpty()) return null
+        return all.random().value
+    }
+
+    // ── Sync ──
 
     private fun triggerAutoSync() {
         val scope = CoroutineScope(Dispatchers.IO)
