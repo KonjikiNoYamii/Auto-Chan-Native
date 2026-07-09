@@ -141,8 +141,7 @@ com.silica.assistant/
 │   ├── viewmodel/              — AssistantViewModel
 │   └── state/                  — UiState models
 ├── service/
-│   ├── OverlayService.kt       — System overlay rendering
-│   └── VoiceForegroundService.kt
+│   └── OverlayService.kt       — System overlay rendering (includes voice foreground)
 ├── overlay/
 │   ├── WaifuStateManager       — Expression state machine
 │   ├── WaifuExpressionController
