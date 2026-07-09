@@ -37,6 +37,8 @@ class MoodManager(
         "olahraga" to listOf("com.google.android.apps.fitness", "com.strava", "com.fitbit.FitbitMobile")
     )
 
+    enum class AbsenceLevel { NONE, SHORT, MEDIUM, LONG }
+
     init {
         scope.launch {
             if (userProfileDao.getProfile() == null) {
@@ -149,6 +151,54 @@ class MoodManager(
 
     fun getXpThresholdPublic(level: Int): Int = getXpThreshold(level)
 
+    // ── Absence System ──
+
+    private fun calculateAbsenceLevel(lastSeen: Long): AbsenceLevel {
+        val hours = (System.currentTimeMillis() - lastSeen) / (1000 * 60 * 60)
+        return when {
+            hours < 24 -> AbsenceLevel.NONE
+            hours < 72 -> AbsenceLevel.SHORT
+            hours < 168 -> AbsenceLevel.MEDIUM
+            else -> AbsenceLevel.LONG
+        }
+    }
+
+    suspend fun getAbsenceContext(): String {
+        val profile = getProfile()
+        val absence = calculateAbsenceLevel(profile.lastInteractionTime)
+        if (absence == AbsenceLevel.NONE) return ""
+
+        val affinity = profile.affinityPoints
+        val tierIndex = getAffinityTier(affinity)
+        val tierName = affinityTierNames.getOrElse(tierIndex) { "Soulmate" }
+
+        val duration = when (absence) {
+            AbsenceLevel.SHORT -> "1-3 hari"
+            AbsenceLevel.MEDIUM -> "3-7 hari"
+            AbsenceLevel.LONG -> "lebih dari seminggu"
+            else -> ""
+        }
+
+        val emotion = when {
+            tierIndex <= 1 -> "tidak terlalu peduli — kenalan biasa"
+            tierIndex <= 2 -> "sedikit heran, tapi tidak terlalu memikirkannya"
+            tierIndex <= 3 -> "cukup terasa, tapi tidak akan mengungkapkannya secara langsung"
+            tierIndex <= 4 -> "agak khawatir, tapi topeng dinginmu masih terjaga"
+            tierIndex <= 5 -> "khawatir dan sedikit kesal, tapi kamu terlalu dingin untuk mengakuinya"
+            tierIndex <= 6 -> "cemas campur kesal — ingin marah tapi lebih khawatir"
+            tierIndex <= 7 -> "sangat cemas. topeng dinginmu mulai retak. kamu hampir tidak bisa menyembunyikannya"
+            else -> "sangat merindukannya. hatimu terasa kosong. ini pertama kalinya kamu merasa begini"
+        }
+
+        return "[Catatan: User tidak ada kabar selama $duration. Di level '$tierName', kamu merasa $emotion. Jangan berlebihan, ekspresikan secara alami sesuai kepribadianmu yang pendiam.]"
+    }
+
+    suspend fun markUserReachedOut() {
+        val profile = getProfile()
+        userProfileDao.updateProfile(profile.copy(lastInteractionTime = System.currentTimeMillis()))
+        triggerAutoSync()
+    }
+
     suspend fun getProfile(): UserProfileEntity {
         return userProfileDao.getProfile() ?: UserProfileEntity()
     }
@@ -258,6 +308,8 @@ class MoodManager(
         if (leveledUp) {
             SoundManager.playLevelUp()
         }
+
+        MemoryManager.logSharedMemory("Selesaikan quest '${updatedQuest.title}' (${updatedQuest.difficulty}) — dapat $xpBonus XP + $itemFound", "quest")
 
         val oldAffinity = profile.affinityPoints
         val affinityBonus = xpBonus / 40
@@ -376,6 +428,8 @@ class MoodManager(
             finalLevel++
         }
         
+        MemoryManager.logSharedMemory("Terima hadiah $itemName dari user ♪", "gift")
+
         val oldAffinity = profile.affinityPoints
         val affinityBonus = xpBonus / 40
         val newAffinity = oldAffinity + affinityBonus
@@ -527,7 +581,8 @@ class MoodManager(
             }
         }
         
-        return "$baseSnippet$nameMissingNote"
+        val absenceContext = getAbsenceContext()
+        return "$baseSnippet$nameMissingNote\n$absenceContext\n[Jika ada kenangan bersama (memory_*) di atas yang relevan, selipkan secara natural — seperti teman ingat momen lalu. JANGAN paksa ganti topik. Jika gak relevan, diem aja.]"
     }
 
     private var lastAffinityTime = 0L
@@ -544,6 +599,7 @@ class MoodManager(
 
     private suspend fun notifyAffinityLevelUp(tier: Int) {
         val tierName = affinityTierNames.getOrElse(tier) { "Soulmate" }
+        MemoryManager.logSharedMemory("Hubungan naik ke level '$tierName' ♪", "affinity")
         val prompt = "User baru mencapai level kedekatan '$tierName' denganmu (Yami). Beri reaksi singkat 1 kalimat natural sesuai kepribadianmu, ekspresif dengan kaomoji. ${LlmConfig.personalityPrompt}"
         val result = withContext(Dispatchers.IO) {
             LlmClient.chat(listOf(ChatMessage("user", prompt))).getOrNull()?.content
