@@ -118,6 +118,10 @@ class ChatViewModel(
     fun sendMessage(context: Context, text: String) {
         if (text.isBlank()) return
 
+        viewModelScope.launch {
+            moodManager.markUserReachedOut()
+        }
+
         // handle memory management commands
         val forgetCmd = MemoryManager.extractForgetCommand(text)
         if (forgetCmd != null) {
@@ -184,6 +188,11 @@ class ChatViewModel(
             val memoryCtx = MemoryManager.buildContext()
             LlmClient.chat(messages, memoryContext = memoryCtx)
                 .onSuccess { reply ->
+                    if (text.length > 50) {
+                        viewModelScope.launch {
+                            MemoryManager.logSharedMemory("Kita ngobrol: \"${text.take(80)}...\"", "chat")
+                        }
+                    }
                     val bubbles = splitResponse(reply.content)
                     for (i in bubbles.indices) {
                         val (cleanText, emotion) = EmotionMapper.parseEmotion(bubbles[i])
