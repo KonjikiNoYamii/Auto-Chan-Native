@@ -48,6 +48,8 @@ Silica sekarang memiliki sistem pencapaian yang luas untuk menemani perjalanan A
 - Drag → move overlay anywhere
 - Bubble text shows command results
 - Pop sound on every bubble
+- **Absence awareness**: Yami reacts differently based on how long you've been gone (1-3d, 3-7d, 7d+) — scaled by relationship tier
+- **Shared memories**: Yami logs quest completions, gifts, affinity milestones, and long chats — recalls them naturally in conversation
 
 ### 🔌 SSH Laptop Control
 - Connect via SSH password
@@ -114,17 +116,27 @@ com.silica.assistant/
 │   ├── media/MediaController   — Simulated media key events
 │   ├── overlay/OverlayEventBus — Event bus to overlay
 │   ├── parser/SearchCommandParser — Google search detection
-│   ├── knowledge/              — Game tier Q&A engine
+│   ├── llm/
+│   │   ├── MoodManager.kt     — Affinity, quests, absence system
+│   │   ├── MemoryManager.kt   — User facts + shared memory log
+│   │   ├── KtorLlmRepository  — AI provider (LocalGemini / Gemini)
+│   │   ├── LlmConfig.kt       — API keys, model, personality
+│   │   └── db/                — Room DAOs
 │   └── system/
 │       ├── AppLauncher.kt      — Search & launch any app
 │       ├── BrightnessController
 │       └── VolumeController
 ├── ui/
 │   ├── MainScreen.kt           — Home with chips, voice, history
+│   ├── chat/
+│   │   ├── ChatScreen.kt       — Chat with Yami (markdown, typewriter)
+│   │   ├── ChatViewModel.kt    — Send/receive, memory logging, absence
+│   │   └── SocialChatScreen.kt — Friend-to-friend messaging
 │   ├── ssh/
 │   │   ├── SshScreen.kt        — Connection form, Terminal, Files
 │   │   └── LaptopInfoScreen.kt — Real-time laptop monitor
 │   ├── guide/GuideScreen.kt    — Feature documentation
+│   ├── customize/CustomizeScreen.kt — Personality & character settings
 │   ├── components/             — Reusable composables
 │   ├── viewmodel/              — AssistantViewModel
 │   └── state/                  — UiState models
@@ -196,14 +208,13 @@ cerahkan layar / gelapkan layar / brightness maksimal
 ## Planned Features (Roadmap)
 
 - [ ] **ANSI escape parser** — terminal output dengan warna/bold nyata (QR code bisa tampil)
-- [ ] **Voice-to-terminal** — ucapkan command langsung ke SSH terminal
-- [ ] **SSH key auth** — koneksi pakai key (password opsional, sempat dihapus karena issue)
-- [ ] **Multiple SSH connections** — simpan & switch antar profile
-- [ ] **System theme** — toggle dark/light mode
-- [ ] **Command customization** — user-defined aliases
 - [ ] **Text-to-speech** — waifu baca balasan bubble
 - [ ] **Notification listener** — baca notifikasi via voice
-- [ ] **Web search from terminal** — buka URL dari hasil terminal output
+- [ ] **Proactive AI** — Yami initiate conversation based on time, mood, or random recall
+- [ ] **Voice-to-terminal** — ucapkan command langsung ke SSH terminal
+- [ ] **SSH key auth** — koneksi pakai key
+- [ ] **Game analysis** — AI analyze screenshot + state secara real-time
+- [ ] **Multiple SSH connections** — simpan & switch antar profile
 
 ## Notes
 - Speech recognition uses `id-ID` language (Indonesian). English commands also work.
