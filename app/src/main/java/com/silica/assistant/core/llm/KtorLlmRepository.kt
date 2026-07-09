@@ -111,6 +111,7 @@ class KtorLlmRepository(
     }
 
     private val moodManager: MoodManager by inject()
+    private val authRepository: com.silica.assistant.core.auth.AuthRepository by inject()
 
     override suspend fun chat(messages: List<ChatMessage>, memoryContext: String): Result<ChatMessage> {
         return try {
@@ -163,6 +164,10 @@ class KtorLlmRepository(
 
             if (result.isSuccess && userInput.isNotBlank()) {
                 extractGameKnowledge(userInput, result.getOrNull()?.content ?: "")
+                moodManager.markUserReachedOut()
+                if (authRepository.isLoggedIn()) {
+                    authRepository.syncPush()
+                }
             }
             return result
         } catch (e: Exception) {
@@ -481,6 +486,9 @@ class KtorLlmRepository(
     private suspend fun loadDbContext(): String {
         val userFacts = userFactDao.getFactsByPrefix("user_memory_%")
         val gameFacts = userFactDao.getFactsByPrefix("game_%")
+        val sharedMemories = userFactDao.getFactsByPrefix("memory_%")
+            .sortedByDescending { it.key }
+            .take(10)
         return buildString {
             if (userFacts.isNotEmpty()) {
                 appendLine("Tentang user:")
@@ -489,6 +497,10 @@ class KtorLlmRepository(
             if (gameFacts.isNotEmpty()) {
                 appendLine("\nPengetahuan game:")
                 gameFacts.forEach { appendLine("- ${it.value}") }
+            }
+            if (sharedMemories.isNotEmpty()) {
+                appendLine("\nKenangan bersama:")
+                sharedMemories.forEach { appendLine("- ${it.value}") }
             }
         }
     }
